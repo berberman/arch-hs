@@ -14,10 +14,11 @@ import ArchHs
 import Conduit
 import Control.DeepSeq (NFData)
 import Control.Exception
-import Control.Monad (filterM, when)
+import Control.Monad (when,guard)
+import Data.Char (toLower)
 import qualified Data.Conduit.Tar as Tar
 import qualified Data.Conduit.Zlib as Zlib
-import Data.List (groupBy)
+import Data.List (delete, groupBy, intercalate)
 import Data.List.Split (splitOn)
 import qualified Data.Map as Map
 import qualified Data.Set as S
@@ -41,11 +42,17 @@ data MyException
 data DependencyType
   = Exe
   | Lib
-  | TestAndBench
+  | Test
+  | Benchmark
+  | LibBuildTools
+  | TestBuildTools
+  | BenchmarkBuildTools
   deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass (NFData)
 
 type CollectedDependencies = [PackageName]
+
+type CommunityDB = S.Set String
 
 data SolvedDependency = SolvedDependency {_provided :: Bool, _depName :: PackageName, _depType :: [DependencyType]}
   deriving stock (Show, Eq, Generic)
@@ -60,24 +67,23 @@ makeLenses ''SolvedPackage
 
 h = do
   hackage <- defaultHackageDB
-  community <- fmap S.fromList $ runConduitRes  $ loadCommunity defaultCommunityPath .| sinkList
-  let target = mkPackageName "summoner"
-      deps = getDependencies hackage S.empty 0 False target
+  community <- fmap S.fromList $ runConduitRes $ loadCommunity defaultCommunityPath .| cookCommunity .| sinkList
+  let target = mkPackageName "gi-gio"
+      deps = getDependencies hackage S.empty 0 True target
   putStrLn $ "Build target: " ++ show target
+  guard.not $ isInCommunity community target
   putStrLn . prettyDeps $ G.reachable target $ G.skeleton deps
   let d = groupDeps $ deps
       v = S.toList $ S.fromList (d ^.. each . pkgName ++ d ^.. each . pkgDeps . each . depName)
-  providedList <- filterM (defaultIsInCommunity) v >>= return . (++ ghcLibList)
+      providedList = filter (isInCommunity community) v ++ ghcLibList
   let q = fmap (\x -> if (x ^. pkgName) `elem` providedList then ProvidedPackage (x ^. pkgName) else x) d
-      
+
       r = q <&> pkgDeps %~ each %~ (\y -> if y ^. depName `elem` providedList then y & provided .~ True else y)
   putStrLn . prettySolvedPkgs $ r
 
 main :: IO ()
 main = do
-  defaultIsInCommunity (mkPackageName "QuickCheck") >>= print
-  defaultIsInCommunity (mkPackageName "QuickCheck") >>= print
-
+  h
 
 groupDeps :: G.AdjacencyMap (S.Set DependencyType) PackageName -> [SolvedPackage]
 groupDeps =
@@ -114,14 +120,17 @@ ignoreList =
       "fail",
       "integer-simple",
       "bytestring-builder",
-      -- "nats",
+      "nats",
+      "old-time",
+      "old-locale",
       "integer",
       "unsupported-ghc-version",
       "base",
       "ghc-prim",
       "ghcjs-prim",
       "ghc-bignum",
-      "hans"
+      "hans",
+      "Win32"
     ]
 
 ghcLibList :: CollectedDependencies
@@ -132,7 +141,7 @@ ghcLibList =
       "base",
       "binary",
       "bytestring",
-      "cabal",
+      "Cabal",
       "containers",
       "deepseq",
       "directory",
@@ -189,16 +198,27 @@ getDependencies db resolved n buildExe name =
             else G.empty
         )
           `G.overlay` (current Lib)
-          `G.overlay` (current TestAndBench)
+          `G.overlay` (current Test)
+          `G.overlay` (current LibBuildTools)
+          `G.overlay` (current TestBuildTools)
           `G.overlay` G.overlays (next Lib)
+          `G.overlay` G.overlays (next LibBuildTools)
   where
     cabal = getLatestCabal db name
-    libDeps = collectLibDeps cabal
-    exeDeps = collectExeDeps cabal
-    testDeps = collectBenchmarkAndTestDeps cabal
+    libDeps = uniq . delete name $ collectLibDeps cabal
+    exeDeps = uniq . delete name $ collectExeDeps cabal
+    testDeps = uniq . delete name $ collectTestDeps cabal
+    benchDeps = uniq . delete name $ collectBenchmarkDeps cabal
+    libbDeps = uniq . delete name $ collectLibBuildToolsDeps cabal
+    testbDeps = uniq . delete name $ collectTestBuildToolsDeps cabal
+    benchbDeps = uniq . delete name $ collectBenchmarkBuildToolsDeps cabal
     cats Lib = libDeps
     cats Exe = exeDeps
-    cats TestAndBench = testDeps
+    cats Test = testDeps
+    cats Main.Benchmark = benchDeps
+    cats LibBuildTools = libbDeps
+    cats TestBuildTools = testbDeps
+    cats BenchmarkBuildTools = benchbDeps
     current x =
       G.edges
         ( zip3 (repeat $ S.singleton x) (repeat name) $
@@ -213,6 +233,7 @@ getDependencies db resolved n buildExe name =
       filter
         (\x -> not $ x `elem` ignoreList || x == name || x `elem` resolved)
     filterNot p = filter (not . p)
+    uniq = map head . groupBy (==)
 
 getLatestCabal :: DB.HackageDB -> PackageName -> PackageDescription
 getLatestCabal db name = case Map.lookup name db of
@@ -223,11 +244,18 @@ getLatestCabal db name = case Map.lookup name db of
 
 collectLibDeps :: PackageDescription -> CollectedDependencies
 collectLibDeps cabal = case library cabal of
-  Just lib -> libDeps lib <> toolDeps lib
+  Just lib -> libDeps lib 
   Nothing -> []
   where
     info lib = libBuildInfo lib
     libDeps lib = fmap depPkgName $ targetBuildDepends $ info lib
+
+collectLibBuildToolsDeps :: PackageDescription -> CollectedDependencies
+collectLibBuildToolsDeps cabal = case library cabal of
+  Just lib -> toolDeps lib
+  Nothing -> []
+  where
+    info lib = libBuildInfo lib
     toolDeps lib = fmap unExe $ buildToolDepends $ info lib
 
 collectExeDeps :: PackageDescription -> CollectedDependencies
@@ -237,15 +265,35 @@ collectExeDeps cabal = mconcat $ exeDeps <> toolDeps
     exeDeps = fmap (fmap depPkgName . targetBuildDepends) info
     toolDeps = fmap (fmap unExe . buildToolDepends) info
 
-collectBenchmarkAndTestDeps :: PackageDescription -> CollectedDependencies
-collectBenchmarkAndTestDeps cabal =
-  mconcat . mconcat $
-    fmap (\x -> exeDeps x ++ toolDeps x) [bInfo, tInfo]
+
+collectTestDeps :: PackageDescription -> CollectedDependencies
+collectTestDeps cabal =
+  mconcat . exeDeps $ tInfo
   where
-    bInfo = fmap benchmarkBuildInfo $ benchmarks cabal
     tInfo = fmap testBuildInfo $ testSuites cabal
     exeDeps = fmap $ fmap depPkgName . targetBuildDepends
+
+collectTestBuildToolsDeps :: PackageDescription -> CollectedDependencies
+collectTestBuildToolsDeps cabal =
+  mconcat . toolDeps $ tInfo
+  where
+    tInfo = fmap testBuildInfo $ testSuites cabal
     toolDeps = fmap $ fmap unExe . buildToolDepends
+
+collectBenchmarkDeps :: PackageDescription -> CollectedDependencies
+collectBenchmarkDeps cabal =
+  mconcat . exeDeps $ bInfo
+  where
+    bInfo = fmap benchmarkBuildInfo $ benchmarks cabal
+    exeDeps = fmap $ fmap depPkgName . targetBuildDepends
+
+collectBenchmarkBuildToolsDeps :: PackageDescription -> CollectedDependencies
+collectBenchmarkBuildToolsDeps cabal =
+  mconcat . toolDeps $ tInfo
+  where
+    tInfo = fmap benchmarkBuildInfo $ benchmarks cabal
+    toolDeps = fmap $ fmap unExe . buildToolDepends
+
 
 unExe :: ExeDependency -> PackageName
 unExe (ExeDependency name _ _) = name
@@ -259,9 +307,6 @@ defaultCommunityPath = "/var/lib/pacman/sync/community.db"
 defaultHackageDB :: IO DB.HackageDB
 defaultHackageDB = loadHackageDB defaultHackagePath
 
-defaultIsInCommunity :: PackageName -> IO Bool
-defaultIsInCommunity name = runConduitRes $ loadCommunity defaultCommunityPath .| isInCommunity name
-
 loadHackageDB :: FilePath -> IO DB.HackageDB
 loadHackageDB path = do
   putStrLn $ "Hackage index: " ++ path
@@ -270,20 +315,24 @@ loadHackageDB path = do
 loadCommunity ::
   (MonadResource m, PrimMonad m, MonadThrow m) =>
   FilePath ->
-  ConduitM i FilePath m ()
-loadCommunity path =
+  ConduitT i FilePath m ()
+loadCommunity path = do
+  liftIO . putStrLn $ "Community db: " ++ path
   sourceFileBS path .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
   where
-    action h =
-      when (Tar.headerFileType h == Tar.FTNormal) $
-        yield $ Tar.headerFilePath h
+    action header =
+      when (Tar.headerFileType header == Tar.FTNormal) $
+        yield $ Tar.headerFilePath header
 
-isInCommunity :: (Monad m) => PackageName -> ConduitT FilePath o m Bool
-isInCommunity name = anyC ((==) (unPackageName name) . choice . (splitOn "-"))
+cookCommunity :: (Monad m) => ConduitT FilePath FilePath m ()
+cookCommunity = mapC (go . (splitOn "-"))
   where
-    choice list = case length list of
+    go list = case length list of
       3 -> list !! 0
       s ->
         if list !! 0 == "haskell"
-          then mconcat . fst . splitAt (s - 3) . tail $ list
-          else mconcat . fst . splitAt (s - 2) $ list
+          then intercalate "-" . fst . splitAt (s - 3) . tail $ list
+          else intercalate "-" . fst . splitAt (s - 2) $ list
+
+isInCommunity :: CommunityDB -> PackageName -> Bool
+isInCommunity db name = (fmap toLower $ unPackageName name) `elem` db
