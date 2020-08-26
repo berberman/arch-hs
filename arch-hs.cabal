@@ -20,7 +20,10 @@ source-repository head
   type:                git
   location:            https://github.com/berberman/arch-hs.git
 common common-options
-  build-depends:       base ^>= 4.13.0.0
+  build-depends:       base ^>= 4.13.0.0, Cabal, req, hackage-db, conduit, containers, shake, deepseq, algebraic-graphs,
+                       megaparsec, directory, bytestring, tar-conduit, conduit-extra, split, neat-interpolation, text, microlens,
+                       microlens-th
+
   
   ghc-options:         -Wall
                        -Wcompat
@@ -44,6 +47,7 @@ library
   exposed-modules:     ArchHs
 executable arch-hs
   import:              common-options
+  other-modules:       PkgBuild
   hs-source-dirs:      app
   main-is:             Main.hs
   build-depends:       arch-hs
