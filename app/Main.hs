@@ -10,15 +10,14 @@ module Main (main) where
 
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
-import ArchHs
 import Conduit
 import Control.DeepSeq (NFData)
 import Control.Exception
-import Control.Monad (when,guard)
+import Control.Monad (guard, mapM, when)
 import Data.Char (toLower)
 import qualified Data.Conduit.Tar as Tar
 import qualified Data.Conduit.Zlib as Zlib
-import Data.List (delete, groupBy, intercalate)
+import Data.List (delete, groupBy, intercalate, isInfixOf)
 import Data.List.Split (splitOn)
 import qualified Data.Map as Map
 import qualified Data.Set as S
@@ -26,16 +25,28 @@ import qualified Debug.Trace as D
 import qualified Distribution.Hackage.DB as DB
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
+import Distribution.Types.CondTree
 import Distribution.Types.Dependency
 import Distribution.Types.ExeDependency
+import Distribution.Types.GenericPackageDescription
+import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName
+import Distribution.Types.Version
 import GHC.Generics (Generic)
 import Lens.Micro
 import Lens.Micro.TH (makeLenses)
+import PkgBuild
+import System.Environment
+
+{- For ghc 8.8.3, the following modules are included in
+  GenericPackageDescription.
+import Distribution.Types.ConfVar
+import Distribution.Types.Flag -}
 
 data MyException
   = PkgNotFound PackageName
   | VersionError
+  | UrlError PackageName
   deriving stock (Show, Eq)
   deriving anyclass (Exception)
 
@@ -65,26 +76,47 @@ data SolvedPackage = ProvidedPackage {_pkgName :: PackageName} | SolvedPackage {
 makeLenses ''SolvedDependency
 makeLenses ''SolvedPackage
 
+-----------------------------------------------------------------------------
 h = do
+  name <- head <$> getArgs
   hackage <- defaultHackageDB
   community <- fmap S.fromList $ runConduitRes $ loadCommunity defaultCommunityPath .| cookCommunity .| sinkList
-  let target = mkPackageName "gi-gio"
+  let target = mkPackageName name
       deps = getDependencies hackage S.empty 0 True target
   putStrLn $ "Build target: " ++ show target
-  guard.not $ isInCommunity community target
+  guard . not $ isInCommunity community target
   putStrLn . prettyDeps $ G.reachable target $ G.skeleton deps
   let d = groupDeps $ deps
       v = S.toList $ S.fromList (d ^.. each . pkgName ++ d ^.. each . pkgDeps . each . depName)
       providedList = filter (isInCommunity community) v ++ ghcLibList
-  let q = fmap (\x -> if (x ^. pkgName) `elem` providedList then ProvidedPackage (x ^. pkgName) else x) d
-
+  let q = d <&> (\x -> if (x ^. pkgName) `elem` providedList then ProvidedPackage (x ^. pkgName) else x)
       r = q <&> pkgDeps %~ each %~ (\y -> if y ^. depName `elem` providedList then y & provided .~ True else y)
+      s = r ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
   putStrLn . prettySolvedPkgs $ r
+
+  mapM (\solved -> writeFile ("/home/berberman/Desktop/test/" <> (solved ^. pkgName & unPackageName) <> ".PKGBUILD") . applyTemplate $ cabalToPkgBuild hackage solved) s
+  return ()
+
+-- data F
+--  = Version
+--    deriving Show
+
+-- opts :: [OptDescr F]
+-- opts =
+--  [ Option ['V','?'] ["version"] (NoArg Version)       "show version number"]
+
+-- compilerOpts :: [String] -> IO ([F], [String])
+-- compilerOpts argv =
+--    case getOpt Permute opts argv of
+--       (o,n,[]  ) -> return (o,n)
+--       (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header opts))
+--   where header = "Usage: stack exec -- [OPTION...] files..."
 
 main :: IO ()
 main = do
   h
 
+-----------------------------------------------------------------------------
 groupDeps :: G.AdjacencyMap (S.Set DependencyType) PackageName -> [SolvedPackage]
 groupDeps =
   fmap (\(name, deps) -> SolvedPackage name $ fmap (uncurry . flip $ SolvedDependency False) deps)
@@ -110,6 +142,7 @@ prettyDeps list =
       zip [1 ..] $
         reverse list
 
+-----------------------------------------------------------------------------
 ignoreList :: CollectedDependencies
 ignoreList =
   fmap
@@ -171,6 +204,7 @@ ghcLibList =
       "xhtml"
     ]
 
+-----------------------------------------------------------------------------
 const' _ b = b
 
 getDependencies ::
@@ -181,7 +215,7 @@ getDependencies ::
   PackageName ->
   G.AdjacencyMap (S.Set DependencyType) PackageName
 getDependencies db resolved n buildExe name =
-  D.traceShow
+  const'
     ( "At "
         ++ show n
         ++ ": Get dep for pkg ["
@@ -244,7 +278,7 @@ getLatestCabal db name = case Map.lookup name db of
 
 collectLibDeps :: PackageDescription -> CollectedDependencies
 collectLibDeps cabal = case library cabal of
-  Just lib -> libDeps lib 
+  Just lib -> libDeps lib
   Nothing -> []
   where
     info lib = libBuildInfo lib
@@ -264,7 +298,6 @@ collectExeDeps cabal = mconcat $ exeDeps <> toolDeps
     info = fmap buildInfo $ executables cabal
     exeDeps = fmap (fmap depPkgName . targetBuildDepends) info
     toolDeps = fmap (fmap unExe . buildToolDepends) info
-
 
 collectTestDeps :: PackageDescription -> CollectedDependencies
 collectTestDeps cabal =
@@ -294,10 +327,10 @@ collectBenchmarkBuildToolsDeps cabal =
     tInfo = fmap benchmarkBuildInfo $ benchmarks cabal
     toolDeps = fmap $ fmap unExe . buildToolDepends
 
-
 unExe :: ExeDependency -> PackageName
 unExe (ExeDependency name _ _) = name
 
+-----------------------------------------------------------------------------
 defaultHackagePath :: FilePath
 defaultHackagePath = "/home/berberman/.stack/pantry/hackage/00-index.tar"
 
@@ -335,4 +368,30 @@ cookCommunity = mapC (go . (splitOn "-"))
           else intercalate "-" . fst . splitAt (s - 2) $ list
 
 isInCommunity :: CommunityDB -> PackageName -> Bool
-isInCommunity db name = (fmap toLower $ unPackageName name) `elem` db
+isInCommunity db name = case splitOn "-" . unPackageName $ name of
+  ("haskell" : xs) -> intercalate "-" xs `elem` db
+  _ -> (fmap toLower $ unPackageName name) `elem` db
+
+-----------------------------------------------------------------------------
+
+cabalToPkgBuild :: DB.HackageDB -> SolvedPackage -> PkgBuild
+cabalToPkgBuild db pkg = PkgBuild {..}
+  where
+    cabal = getLatestCabal db $ pkg ^. pkgName
+    _hkgName = pkg ^. pkgName & unPackageName
+    _pkgName = fmap toLower _hkgName
+    _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
+    _pkgDesc = synopsis cabal
+    _url = if pkgUrl cabal /= "" then pkgUrl cabal else fromJust . repoLocation . head $ sourceRepos cabal
+    _license = show . license $ cabal
+    _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && selectDepType [Lib, Exe] x) & depsToString
+    _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && selectDepType [LibBuildTools, Test, TestBuildTools] x) & depsToString
+    depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
+    wrap s = '\'' : s ++ "\'"
+    fromJust (Just x) = x
+    fromJust _ = throw . UrlError $ pkg ^. pkgName
+    notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
+    selectDepType list x = (x ^. depType) `isInfixOf` list
+    fixName s = case splitOn "-" s of
+      ("haskell" : _) -> fmap toLower s
+      _ -> "haskell-" ++ fmap toLower s
