@@ -13,7 +13,6 @@ import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Conduit
 import Control.DeepSeq (NFData)
-import Control.Exception
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Char (toLower)
@@ -29,6 +28,7 @@ import Distribution.Compiler
 import qualified Distribution.Hackage.DB as DB
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
+import Distribution.SPDX
 import Distribution.System
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree
@@ -58,7 +58,6 @@ data MyException
   | UrlError PackageName
   | TargetExist PackageName
   deriving stock (Show, Eq)
-  deriving anyclass (Exception)
 
 data DependencyType
   = Exe UnqualComponentName
@@ -71,6 +70,38 @@ data DependencyType
   | BenchmarkBuildTools UnqualComponentName
   deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass (NFData)
+
+isExe :: DependencyType -> Bool
+isExe (Exe _) = True
+isExe _ = False
+
+isExeBuildTools :: DependencyType -> Bool
+isExeBuildTools (ExeBuildTools _) = True
+isExeBuildTools _ = False
+
+isLib :: DependencyType -> Bool
+isLib Lib = True
+isLib _ = False
+
+isTest :: DependencyType -> Bool
+isTest (Test _) = True
+isTest _ = False
+
+isBenchmark :: DependencyType -> Bool
+isBenchmark (Main.Benchmark _) = True
+isBenchmark _ = False
+
+isLibBuildTools :: DependencyType -> Bool
+isLibBuildTools LibBuildTools = True
+isLibBuildTools _ = False
+
+isTestBuildTools :: DependencyType -> Bool
+isTestBuildTools (TestBuildTools _) = True
+isTestBuildTools _ = False
+
+isBenchmarkBuildTools :: DependencyType -> Bool
+isBenchmarkBuildTools (BenchmarkBuildTools _) = True
+isBenchmarkBuildTools _ = False
 
 type PkgList = [PackageName]
 
@@ -123,15 +154,7 @@ h env = runHsM env $ do
       r = q <&> pkgDeps %~ each %~ (\y -> if y ^. depName `elem` providedList then y & provided .~ True else y)
       s = r ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
   liftIO $ putStrLn . prettySolvedPkgs $ r
-  return ()
-
-g :: MonadIO m => HsEnv -> m (Either MyException ())
-g env = runHsM env $ do
-  let target = mkPackageName "process"
-  cabal <- getLatestCabal target
-  let (Just lib) = cabal & condLibrary
-  result <- evalConditionTree lib
-  liftIO $ print result
+  mapM (\solved -> (liftIO . writeFile ("/home/berberman/Desktop/test/" <> (solved ^. pkgName & unPackageName) <> ".PKGBUILD") . applyTemplate) =<< cabalToPkgBuild solved) s
   return ()
 
 main = do
@@ -139,25 +162,6 @@ main = do
   h env >>= print
 
 -----------------------------------------------------------------------------
-
--- h = runHsM getHsEnv $ do
---
-
---   let
---       target = mkPackageName name
---       deps = getDependencies hackage S.empty 0 True target
---   putStrLn $ "Build target: " ++ show target
---   guard . not $ isInCommunity community target
---   putStrLn . prettyDeps $ G.reachable target $ G.skeleton deps
---   let d = groupDeps $ deps
---       v = S.toList $ S.fromList (d ^.. each . pkgName ++ d ^.. each . pkgDeps . each . depName)
---       providedList = filter (isInCommunity community) v ++ ghcLibList
-
---   putStrLn . prettySolvedPkgs $ r
-
---   mapM (\solved -> writeFile ("/home/berberman/Desktop/test/" <> (solved ^. pkgName & unPackageName) <> ".PKGBUILD") . applyTemplate $ cabalToPkgBuild hackage solved) s
---   return ()
-
 -- data F
 --  = Version
 --    deriving Show
@@ -172,18 +176,6 @@ main = do
 --       (o,n,[]  ) -> return (o,n)
 --       (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header opts))
 --   where header = "Usage: stack exec -- [OPTION...] files..."
-
--- main :: IO ()
--- main = do
---   hackage <- defaultHackageDB
---
---       cabal = getLatestCabal' hackage target
---   -- print $ cabal & packageDescription
---   -- print $ cabal & genPackageFlags
---   -- print $ cabal & fmap condTreeComponents.condLibrary
---   -- print $ cabal & fmap condTreeConstraints.condLibrary
---   -- print $ cabal & fmap condTreeData.condLibrary
---   print $ cabal & fmap (simplifyCondTree (\case OS x -> D.traceShow x Right True; x -> Left x)) . condLibrary
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Windows) = Right True
@@ -451,26 +443,27 @@ isInCommunity name = do
 
 -----------------------------------------------------------------------------
 
--- cabalToPkgBuild :: (Monad m) => SolvedPackage -> HsM m PkgBuild
--- cabalToPkgBuild pkg = do
---   cabal <- getLatestCabal $ pkg ^. pkgName
---   let _hkgName = pkg ^. pkgName & unPackageName
---       _pkgName = fmap toLower _hkgName
---       _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
---       _pkgDesc = synopsis cabal
---       _license = show . license $ cabal
---       _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && selectDepType [Lib, Exe] x) & depsToString
---       _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && selectDepType [LibBuildTools, Test, TestBuildTools] x) & depsToString
---       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
---       wrap s = '\'' : s ++ "\'"
---       fromJust (Just x) = return x
---       fromJust _ = throwError . UrlError $ pkg ^. pkgName
---       notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
---       selectDepType list x = (x ^. depType) `isInfixOf` list
---       fixName s = case splitOn "-" s of
---         ("haskell" : _) -> fmap toLower s
---         _ -> "haskell-" ++ fmap toLower s
---   _url <- case homepage cabal of
---     "" -> fromJust . repoLocation . head $ sourceRepos cabal
---     x -> return x
---   return PkgBuild {..}
+cabalToPkgBuild :: (Monad m) => SolvedPackage -> HsM m PkgBuild
+cabalToPkgBuild pkg = do
+  cabal <- packageDescription <$> (getLatestCabal $ pkg ^. pkgName)
+  let _hkgName = pkg ^. pkgName & unPackageName
+      _pkgName = fmap toLower _hkgName
+      _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
+      _pkgDesc = synopsis cabal
+      (License (ELicense (ELicenseId cabalLicense) _)) = license cabal
+      _license = show . mapLicense $ cabalLicense
+      _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && (selectDepType isLib x || selectDepType isExe x)) & depsToString
+      _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && (selectDepType isLibBuildTools x || selectDepType isTest x || selectDepType isTestBuildTools x)) & depsToString
+      depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
+      wrap s = '\'' : s ++ "\'"
+      fromJust (Just x) = return x
+      fromJust _ = throwError . UrlError $ pkg ^. pkgName
+      notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
+      selectDepType f x = any f (x ^. depType)
+      fixName s = case splitOn "-" s of
+        ("haskell" : _) -> fmap toLower s
+        _ -> "haskell-" ++ fmap toLower s
+  _url <- case homepage cabal of
+    "" -> fromJust . repoLocation . head $ sourceRepos cabal
+    x -> return x
+  return PkgBuild {..}

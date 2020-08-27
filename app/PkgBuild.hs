@@ -4,6 +4,7 @@
 module PkgBuild where
 
 import Data.Text
+import Distribution.SPDX.LicenseId
 import NeatInterpolation
 
 data PkgBuild = PkgBuild
@@ -18,23 +19,23 @@ data PkgBuild = PkgBuild
   }
 
 data ArchLicense
-  = AGPL
-  | AGPL3
-  | APACHE
+  = AGPL3
   | Apache
   | Artistic2_0
-  | Boost
-  | CCPL
-  | CDDL
+  | -- | Boost
+    -- | CC_BY
+    -- | CC_BY_NC
+    -- | CC_BY_NC_ND
+    -- | CC_BY_NC_SA
+    -- | CC_BY_ND
+    -- | CC_BY_SA
+    CDDL
   | CPL
   | EPL
-  | FD
   | FDL1_2
   | FDL1_3
-  | GP
   | GPL2
   | GPL3
-  | LGP
   | LGPL2_1
   | LGPL3
   | LPPL
@@ -47,9 +48,58 @@ data ArchLicense
   | Unlicense
   | W3C
   | ZPL
-  | Custom
+  | Custom String
 
--- mapLicense :: LicenseId ->
+instance Show ArchLicense where
+  show AGPL3 = "AGPL"
+  show Apache = "Apache"
+  show Artistic2_0 = "Artistic2.0"
+  show CDDL = "CDDL"
+  show CPL = "CPL"
+  show EPL = "EPL"
+  show FDL1_2 = "FDL1.2"
+  show FDL1_3 = "FDL1.3"
+  show GPL2 = "GPL2"
+  show GPL3 = "GPL3"
+  show LGPL2_1 = "LGPL2.1"
+  show LGPL3 = "LGPL3"
+  show LPPL = "LPPL"
+  show MPL = "MPL"
+  show MPL2 = "MPL2"
+  show PHP = "PHP"
+  show PSF = "PSF"
+  show PerlArtistic = "PerlArtistic"
+  show RUBY = "RUBY"
+  show PkgBuild.Unlicense = "Unlicense"
+  show PkgBuild.W3C = "W3C"
+  show ZPL = "ZPL"
+  show (Custom x) = "custom:" ++ x
+
+mapLicense :: LicenseId -> ArchLicense
+mapLicense AGPL_3_0_only = AGPL3
+mapLicense Apache_2_0 = Apache
+mapLicense Artistic_2_0 = Artistic2_0
+mapLicense CDDL_1_0 = CDDL
+mapLicense CPL_1_0 = CPL
+mapLicense EPL_1_0 = EPL
+mapLicense GFDL_1_2_only = FDL1_2
+mapLicense GFDL_1_3_only = FDL1_3
+mapLicense GPL_2_0_only = GPL2
+mapLicense GPL_3_0_only = GPL3
+mapLicense LGPL_2_1_only = LGPL2_1
+mapLicense LGPL_3_0_only = LGPL3
+mapLicense LPPL_1_3c = LPPL
+mapLicense MPL_1_0 = MPL
+mapLicense MPL_2_0 = MPL2
+mapLicense PHP_3_01 = PHP
+mapLicense Python_2_0 = PSF
+mapLicense Artistic_1_0_Perl = PerlArtistic
+mapLicense Ruby = RUBY
+mapLicense ZPL_2_1 = ZPL
+mapLicense Distribution.SPDX.LicenseId.Unlicense = PkgBuild.Unlicense
+mapLicense Distribution.SPDX.LicenseId.W3C = PkgBuild.W3C
+mapLicense BSD_3_Clause = Custom "BSD3"
+mapLicense x = Custom $ show x
 
 applyTemplate :: PkgBuild -> String
 applyTemplate PkgBuild {..} = unpack $ felixTemplate (pack _hkgName) (pack _pkgName) (pack _pkgVer) (pack _pkgDesc) (pack _url) (pack _license) (pack _depends) (pack _makeDepends)
