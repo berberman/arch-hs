@@ -24,17 +24,20 @@ import Data.List.Split (splitOn)
 import qualified Data.Map as Map
 import qualified Data.Set as S
 import qualified Debug.Trace as D
+import qualified Distribution.Compat.Lens as L
 import Distribution.Compiler
 import qualified Distribution.Hackage.DB as DB
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.System
+import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree
 import Distribution.Types.Dependency
 import Distribution.Types.ExeDependency
 import Distribution.Types.GenericPackageDescription
 import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName
+import Distribution.Types.UnqualComponentName
 import Distribution.Types.Version
 import Distribution.Types.VersionRange
 import GHC.Generics (Generic)
@@ -58,17 +61,20 @@ data MyException
   deriving anyclass (Exception)
 
 data DependencyType
-  = Exe
+  = Exe UnqualComponentName
+  | ExeBuildTools UnqualComponentName
   | Lib
-  | Test
-  | Benchmark
+  | Test UnqualComponentName
+  | Benchmark UnqualComponentName
   | LibBuildTools
-  | TestBuildTools
-  | BenchmarkBuildTools
+  | TestBuildTools UnqualComponentName
+  | BenchmarkBuildTools UnqualComponentName
   deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass (NFData)
 
-type CollectedDependencies = [PackageName]
+type PkgList = [PackageName]
+
+type ComponentPkgList = [(UnqualComponentName, PkgList)]
 
 type CommunityDB = S.Set String
 
@@ -104,7 +110,7 @@ h :: MonadIO m => HsEnv -> m (Either MyException ())
 h env = runHsM env $ do
   name <- liftIO $ head <$> getArgs
   let target = mkPackageName name
-  deps <- getDependencies S.empty 0 True target
+  deps <- getDependencies S.empty 0 target
   liftIO $ putStrLn $ "Build target: " ++ show target
   exist <- isInCommunity target
   when exist $ throwError $ TargetExist target
@@ -117,6 +123,15 @@ h env = runHsM env $ do
       r = q <&> pkgDeps %~ each %~ (\y -> if y ^. depName `elem` providedList then y & provided .~ True else y)
       s = r ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
   liftIO $ putStrLn . prettySolvedPkgs $ r
+  return ()
+
+g :: MonadIO m => HsEnv -> m (Either MyException ())
+g env = runHsM env $ do
+  let target = mkPackageName "process"
+  cabal <- getLatestCabal target
+  let (Just lib) = cabal & condLibrary
+  result <- evalConditionTree lib
+  liftIO $ print result
   return ()
 
 main = do
@@ -161,7 +176,7 @@ main = do
 -- main :: IO ()
 -- main = do
 --   hackage <- defaultHackageDB
---   let target = mkPackageName "process"
+--
 --       cabal = getLatestCabal' hackage target
 --   -- print $ cabal & packageDescription
 --   -- print $ cabal & genPackageFlags
@@ -171,7 +186,7 @@ main = do
 --   print $ cabal & fmap (simplifyCondTree (\case OS x -> D.traceShow x Right True; x -> Left x)) . condLibrary
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
-archEnv _ (OS Linux) = Right True
+archEnv _ (OS Windows) = Right True
 archEnv _ (OS _) = Right False
 archEnv _ (Arch X86_64) = Right True
 archEnv _ (Arch _) = Right False
@@ -182,17 +197,10 @@ archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
     go _ (Just r) = Right r
     go x Nothing = Left x
 
-evalConditionTree :: (Semigroup k, Monad m) => CondTree ConfVar [Dependency] k -> HsM m ([Dependency], k)
+evalConditionTree :: (Semigroup k, L.HasBuildInfo k, Monad m) => CondTree ConfVar [Dependency] k -> HsM m BuildInfo
 evalConditionTree cond = do
   flg <- view flags
-  return $ simplifyCondTree (archEnv flg) cond
-
-getLatestCabal' :: DB.HackageDB -> PackageName -> GenericPackageDescription
-getLatestCabal' db name = case Map.lookup name db of
-  (Just m) -> case Map.lookupMax m of
-    Just (_, vdata) -> vdata & DB.cabalFile
-    Nothing -> throw VersionError
-  Nothing -> throw $ PkgNotFound name
+  return $ (L.^. L.buildInfo) . snd $ simplifyCondTree (archEnv flg) cond
 
 -----------------------------------------------------------------------------
 groupDeps :: G.AdjacencyMap (S.Set DependencyType) PackageName -> [SolvedPackage]
@@ -221,7 +229,7 @@ prettyDeps list =
         reverse list
 
 -----------------------------------------------------------------------------
-ignoreList :: CollectedDependencies
+ignoreList :: PkgList
 ignoreList =
   fmap
     mkPackageName
@@ -244,7 +252,7 @@ ignoreList =
       "Win32"
     ]
 
-ghcLibList :: CollectedDependencies
+ghcLibList :: PkgList
 ghcLibList =
   fmap
     mkPackageName
@@ -300,117 +308,102 @@ getDependencies ::
   (Monad m) =>
   S.Set PackageName ->
   Int ->
-  Bool ->
   PackageName ->
   HsM m (G.AdjacencyMap (S.Set DependencyType) PackageName)
-getDependencies resolved n buildExe name = do
+getDependencies resolved n name = do
   cabal <- getLatestCabal name
-  let libDeps = uniq . delete name $ collectLibDeps cabal
-      exeDeps = uniq . delete name $ collectExeDeps cabal
-      testDeps = uniq . delete name $ collectTestDeps cabal
-      benchDeps = uniq . delete name $ collectBenchmarkDeps cabal
-      libbDeps = uniq . delete name $ collectLibBuildToolsDeps cabal
-      testbDeps = uniq . delete name $ collectTestBuildToolsDeps cabal
-      benchbDeps = uniq . delete name $ collectBenchmarkBuildToolsDeps cabal
-      cats Lib = libDeps
-      cats Exe = exeDeps
-      cats Test = testDeps
-      cats Main.Benchmark = benchDeps
-      cats LibBuildTools = libbDeps
-      cats TestBuildTools = testbDeps
-      cats BenchmarkBuildTools = benchbDeps
-      current x =
-        G.edges
-          ( zip3 (repeat $ S.singleton x) (repeat name) $
-              filterNot (`elem` ignoreList) $
-                cats x
-          )
-      next x = mapM (getDependencies (S.insert name (resolved)) (n + 1) buildExe) $ ignored (cats x)
+  (libDeps, libToolsDeps) <- collectLibDeps cabal
+  (exeDeps, exeToolsDeps) <- collectExeDeps cabal
+  (testDeps, testToolsDeps) <- collectTestDeps cabal
+  (benchDeps, benchToolsDeps) <- collectBenchMarkDeps cabal
+  let uname :: (UnqualComponentName -> DependencyType) -> ComponentPkgList -> [(DependencyType, PkgList)]
+      uname cons list = zip (fmap (cons . fst) list) (fmap snd list)
+
+      flatten :: [(DependencyType, PkgList)] -> [(DependencyType, PackageName)]
+      flatten list = mconcat $ fmap (\(t, pkgs) -> zip (repeat t) pkgs) list
+
+      withThisName :: [(DependencyType, PackageName)] -> [(DependencyType, PackageName, PackageName)]
+      withThisName = fmap (\(t, pkg) -> (t, name, pkg))
+
       ignored = filter (\x -> not $ x `elem` ignoreList || x == name || x `elem` resolved)
+      -- ignoredSnd = filter (\(_, x) -> not $ x `elem` ignoreList || x == name || x `elem` resolved)
       filterNot p = filter (not . p)
-      uniq = map head . groupBy (==)
 
-  nextLibs <- next Lib
-  nextLibAndBuildTools <- next Lib
-  nextExe <- next Exe
+      currentLib = G.edges $ zip3 (repeat $ S.singleton Lib) (repeat name) $ filterNot (`elem` ignoreList) libDeps
+      currentLibDeps = G.edges $ zip3 (repeat $ S.singleton LibBuildTools) (repeat name) $ filterNot (`elem` ignoreList) libToolsDeps
+
+      runnableEdges k l = G.edges $ fmap (\(x, y, z) -> (S.singleton x, y, z)) . withThisName . filterNot (\(_, x) -> x `elem` ignoreList) . flatten . uname k $ l
+
+      currentExe = runnableEdges Exe exeDeps
+      currentExeTools = runnableEdges ExeBuildTools exeToolsDeps
+      currentTest = runnableEdges Test testDeps
+      currentTestTools = runnableEdges TestBuildTools testToolsDeps
+      currentBench = runnableEdges Main.Benchmark benchDeps
+      currentBenchTools = runnableEdges BenchmarkBuildTools benchToolsDeps
+
+      -- mapMSnd f list = uncurry (zipWithM (\a b -> do b' <- f b; return (a, b'))) (unzip list)
+      (<+>) = G.overlay
+  -- Only solve lib & exe deps recursively.
+  nextLib <- mapM (getDependencies (S.insert name (resolved)) (n + 1)) $ ignored (libDeps)
+  -- nextExe <- mapMSnd(getDependencies (S.insert name (resolved)) (n + 1)) $ ignoredSnd .flatten. uname Exe $ exeDeps
+  nextExe <- mapM (getDependencies (S.insert name (resolved)) (n + 1)) $ ignored . fmap snd . flatten . uname Exe $ exeDeps
   return $
-    if name `elem` ignoreList
-      then G.empty
-      else
-        ( if buildExe
-            then (current Exe) `G.overlay` G.overlays (nextExe)
-            else G.empty
-        )
-          `G.overlay` (current Lib)
-          `G.overlay` (current Test)
-          `G.overlay` (current LibBuildTools)
-          `G.overlay` (current TestBuildTools)
-          `G.overlay` G.overlays (nextLibs)
-          `G.overlay` G.overlays (nextLibAndBuildTools)
-  where
+    currentLib
+      <+> currentLibDeps
+      <+> currentExe
+      <+> currentExeTools
+      <+> currentTest
+      <+> currentTestTools
+      <+> currentBench
+      <+> currentBenchTools
+      <+> (G.overlays nextLib)
+      <+> (G.overlays nextExe)
 
-getLatestCabal :: (Monad m) => PackageName -> HsM m PackageDescription
+getLatestCabal :: (Monad m) => PackageName -> HsM m GenericPackageDescription
 getLatestCabal name = do
   db <- view hackage
   case Map.lookup name db of
     (Just m) -> case Map.lookupMax m of
-      Just (_, vdata) -> return $ flattenPackageDescription $ vdata & DB.cabalFile
+      Just (_, vdata) -> return $ vdata & DB.cabalFile
       Nothing -> throwError VersionError
     Nothing -> throwError $ PkgNotFound name
 
-collectLibDeps :: PackageDescription -> CollectedDependencies
-collectLibDeps cabal = case library cabal of
-  Just lib -> libDeps lib
-  Nothing -> []
-  where
-    info lib = libBuildInfo lib
-    libDeps lib = fmap depPkgName $ targetBuildDepends $ info lib
+collectLibDeps :: (Monad m) => GenericPackageDescription -> HsM m (PkgList, PkgList)
+collectLibDeps cabal = do
+  case cabal & condLibrary of
+    Just lib -> do
+      info <- evalConditionTree lib
+      let libDeps = fmap depPkgName $ targetBuildDepends info
+          toolDeps = fmap unExe $ buildToolDepends info
+      return (libDeps, toolDeps)
+    Nothing -> return ([], [])
 
-collectLibBuildToolsDeps :: PackageDescription -> CollectedDependencies
-collectLibBuildToolsDeps cabal = case library cabal of
-  Just lib -> toolDeps lib
-  Nothing -> []
-  where
-    info lib = libBuildInfo lib
-    toolDeps lib = fmap unExe $ buildToolDepends $ info lib
+collectRunnableDeps ::
+  (Monad m, Semigroup k, L.HasBuildInfo k) =>
+  (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
+  GenericPackageDescription ->
+  HsM m (ComponentPkgList, ComponentPkgList)
+collectRunnableDeps f cabal = do
+  let exes = cabal & f
+  info <- zip (fmap fst exes) <$> mapM (evalConditionTree . snd) exes
+  let runnableDeps = fmap (mapSnd $ fmap depPkgName . targetBuildDepends) info
+      toolDeps = fmap (mapSnd $ fmap unExe . buildToolDepends) info
+  return (runnableDeps, toolDeps)
 
-collectExeDeps :: PackageDescription -> CollectedDependencies
-collectExeDeps cabal = mconcat $ exeDeps <> toolDeps
-  where
-    info = fmap buildInfo $ executables cabal
-    exeDeps = fmap (fmap depPkgName . targetBuildDepends) info
-    toolDeps = fmap (fmap unExe . buildToolDepends) info
+collectExeDeps :: (Monad m) => GenericPackageDescription -> HsM m (ComponentPkgList, ComponentPkgList)
+collectExeDeps = collectRunnableDeps condExecutables
 
-collectTestDeps :: PackageDescription -> CollectedDependencies
-collectTestDeps cabal =
-  mconcat . exeDeps $ tInfo
-  where
-    tInfo = fmap testBuildInfo $ testSuites cabal
-    exeDeps = fmap $ fmap depPkgName . targetBuildDepends
+collectTestDeps :: (Monad m) => GenericPackageDescription -> HsM m (ComponentPkgList, ComponentPkgList)
+collectTestDeps = collectRunnableDeps condTestSuites
 
-collectTestBuildToolsDeps :: PackageDescription -> CollectedDependencies
-collectTestBuildToolsDeps cabal =
-  mconcat . toolDeps $ tInfo
-  where
-    tInfo = fmap testBuildInfo $ testSuites cabal
-    toolDeps = fmap $ fmap unExe . buildToolDepends
-
-collectBenchmarkDeps :: PackageDescription -> CollectedDependencies
-collectBenchmarkDeps cabal =
-  mconcat . exeDeps $ bInfo
-  where
-    bInfo = fmap benchmarkBuildInfo $ benchmarks cabal
-    exeDeps = fmap $ fmap depPkgName . targetBuildDepends
-
-collectBenchmarkBuildToolsDeps :: PackageDescription -> CollectedDependencies
-collectBenchmarkBuildToolsDeps cabal =
-  mconcat . toolDeps $ tInfo
-  where
-    tInfo = fmap benchmarkBuildInfo $ benchmarks cabal
-    toolDeps = fmap $ fmap unExe . buildToolDepends
+collectBenchMarkDeps :: (Monad m) => GenericPackageDescription -> HsM m (ComponentPkgList, ComponentPkgList)
+collectBenchMarkDeps = collectRunnableDeps condBenchmarks
 
 unExe :: ExeDependency -> PackageName
 unExe (ExeDependency name _ _) = name
+
+mapSnd :: (b -> c) -> (a, b) -> (a, c)
+mapSnd f (a, b) = (a, f b)
 
 -----------------------------------------------------------------------------
 defaultHackagePath :: FilePath
@@ -458,26 +451,26 @@ isInCommunity name = do
 
 -----------------------------------------------------------------------------
 
-cabalToPkgBuild :: (Monad m) => SolvedPackage -> HsM m PkgBuild
-cabalToPkgBuild pkg = do
-  cabal <- getLatestCabal $ pkg ^. pkgName
-  let _hkgName = pkg ^. pkgName & unPackageName
-      _pkgName = fmap toLower _hkgName
-      _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
-      _pkgDesc = synopsis cabal
-      _license = show . license $ cabal
-      _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && selectDepType [Lib, Exe] x) & depsToString
-      _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && selectDepType [LibBuildTools, Test, TestBuildTools] x) & depsToString
-      depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
-      wrap s = '\'' : s ++ "\'"
-      fromJust (Just x) = return x
-      fromJust _ = throwError . UrlError $ pkg ^. pkgName
-      notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
-      selectDepType list x = (x ^. depType) `isInfixOf` list
-      fixName s = case splitOn "-" s of
-        ("haskell" : _) -> fmap toLower s
-        _ -> "haskell-" ++ fmap toLower s
-  _url <- case homepage cabal of
-    "" -> fromJust . repoLocation . head $ sourceRepos cabal
-    x -> return x
-  return PkgBuild {..}
+-- cabalToPkgBuild :: (Monad m) => SolvedPackage -> HsM m PkgBuild
+-- cabalToPkgBuild pkg = do
+--   cabal <- getLatestCabal $ pkg ^. pkgName
+--   let _hkgName = pkg ^. pkgName & unPackageName
+--       _pkgName = fmap toLower _hkgName
+--       _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
+--       _pkgDesc = synopsis cabal
+--       _license = show . license $ cabal
+--       _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && selectDepType [Lib, Exe] x) & depsToString
+--       _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && selectDepType [LibBuildTools, Test, TestBuildTools] x) & depsToString
+--       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
+--       wrap s = '\'' : s ++ "\'"
+--       fromJust (Just x) = return x
+--       fromJust _ = throwError . UrlError $ pkg ^. pkgName
+--       notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
+--       selectDepType list x = (x ^. depType) `isInfixOf` list
+--       fixName s = case splitOn "-" s of
+--         ("haskell" : _) -> fmap toLower s
+--         _ -> "haskell-" ++ fmap toLower s
+--   _url <- case homepage cabal of
+--     "" -> fromJust . repoLocation . head $ sourceRepos cabal
+--     x -> return x
+--   return PkgBuild {..}
