@@ -20,9 +20,9 @@ source-repository head
   type:                git
   location:            https://github.com/berberman/arch-hs.git
 common common-options
-  build-depends:       base ^>= 4.13.0.0, Cabal, req, hackage-db, conduit, containers, shake, deepseq, algebraic-graphs,
+  build-depends:       base ^>= 4.13.0.0, Cabal, req, hackage-db, conduit, containers, deepseq, algebraic-graphs,
                        megaparsec, directory, bytestring, tar-conduit, conduit-extra, split, neat-interpolation, text, microlens,
-                       microlens-th
+                       microlens-th, mtl, microlens-mtl
 
   
   ghc-options:         -Wall
