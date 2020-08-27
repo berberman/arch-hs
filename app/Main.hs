@@ -59,6 +59,8 @@ data MyException
   | TargetExist PackageName
   deriving stock (Show, Eq)
 
+-----------------------------------------------------------------------------
+
 data DependencyType
   = Exe UnqualComponentName
   | ExeBuildTools UnqualComponentName
@@ -102,6 +104,8 @@ isTestBuildTools _ = False
 isBenchmarkBuildTools :: DependencyType -> Bool
 isBenchmarkBuildTools (BenchmarkBuildTools _) = True
 isBenchmarkBuildTools _ = False
+
+-----------------------------------------------------------------------------
 
 type PkgList = [PackageName]
 
@@ -237,6 +241,7 @@ ignoreList =
       "integer",
       "unsupported-ghc-version",
       "base",
+      "ghc",
       "ghc-prim",
       "ghcjs-prim",
       "ghc-bignum",
@@ -318,7 +323,6 @@ getDependencies resolved n name = do
       withThisName = fmap (\(t, pkg) -> (t, name, pkg))
 
       ignored = filter (\x -> not $ x `elem` ignoreList || x == name || x `elem` resolved)
-      -- ignoredSnd = filter (\(_, x) -> not $ x `elem` ignoreList || x == name || x `elem` resolved)
       filterNot p = filter (not . p)
 
       currentLib = G.edges $ zip3 (repeat $ S.singleton Lib) (repeat name) $ filterNot (`elem` ignoreList) libDeps
@@ -333,11 +337,9 @@ getDependencies resolved n name = do
       currentBench = runnableEdges Main.Benchmark benchDeps
       currentBenchTools = runnableEdges BenchmarkBuildTools benchToolsDeps
 
-      -- mapMSnd f list = uncurry (zipWithM (\a b -> do b' <- f b; return (a, b'))) (unzip list)
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
   nextLib <- mapM (getDependencies (S.insert name (resolved)) (n + 1)) $ ignored (libDeps)
-  -- nextExe <- mapMSnd(getDependencies (S.insert name (resolved)) (n + 1)) $ ignoredSnd .flatten. uname Exe $ exeDeps
   nextExe <- mapM (getDependencies (S.insert name (resolved)) (n + 1)) $ ignored . fmap snd . flatten . uname Exe $ exeDeps
   return $
     currentLib
@@ -450,7 +452,7 @@ cabalToPkgBuild pkg = do
       _pkgName = fmap toLower _hkgName
       _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
       _pkgDesc = synopsis cabal
-      (License (ELicense (ELicenseId cabalLicense) _)) = license cabal
+      (License (ELicense (ELicenseId cabalLicense) _)) = license cabal --  TODO unexhausted
       _license = show . mapLicense $ cabalLicense
       _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && (selectDepType isLib x || selectDepType isExe x)) & depsToString
       _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && (selectDepType isLibBuildTools x || selectDepType isTest x || selectDepType isTestBuildTools x)) & depsToString
@@ -464,6 +466,6 @@ cabalToPkgBuild pkg = do
         ("haskell" : _) -> fmap toLower s
         _ -> "haskell-" ++ fmap toLower s
   _url <- case homepage cabal of
-    "" -> fromJust . repoLocation . head $ sourceRepos cabal
+    "" -> fromJust . repoLocation . head $ sourceRepos cabal -- TODO partial head
     x -> return x
   return PkgBuild {..}
