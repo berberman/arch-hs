@@ -3,12 +3,31 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Types where
+module Types
+  ( PkgList,
+    ComponentPkgList,
+    CommunityDB,
+    MyException (..),
+    DependencyType (..),
+    HsEnv (..),
+    HsM,
+    SolvedPackage (..),
+    SolvedDependency (..),
+    hackage,
+    community,
+    flags,
+    provided,
+    pkgName,
+    pkgDeps,
+    depName,
+    depType,
+  )
+where
 
 import Control.DeepSeq (NFData)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Reader (ReaderT)
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Distribution.Hackage.DB as DB
 import Distribution.PackageDescription (FlagAssignment)

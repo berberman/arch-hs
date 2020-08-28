@@ -63,7 +63,7 @@ common common-options
 library
   import:              common-options
   hs-source-dirs:      src
-  exposed-modules:     ArchHs, Community, Core, Hackage, Local, PkgBuild, Types, Utils
+  exposed-modules:     PkgDesc, Community, Core, Hackage, Local, PkgBuild, Types, Utils
 executable arch-hs
   import:              common-options
   hs-source-dirs:      app
