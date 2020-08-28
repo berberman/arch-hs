@@ -57,6 +57,7 @@ data MyException
   | VersionError
   | UrlError PackageName
   | TargetExist PackageName
+  | LicenseError PackageName
   deriving stock (Show, Eq)
 
 -----------------------------------------------------------------------------
@@ -121,7 +122,7 @@ data SolvedPackage = ProvidedPackage {_pkgName :: PackageName} | SolvedPackage {
   deriving stock (Show, Eq, Generic)
   deriving anyclass (NFData)
 
-data HsEnv = HsEnv {_hackage :: DB.HackageDB, _community :: CommunityDB, _flags :: FlagAssignment}
+data HsEnv = HsEnv {_hackage :: DB.HackageDB, _community :: CommunityDB, _flags :: Map.Map PackageName FlagAssignment}
 
 type HsM m = ExceptT MyException (ReaderT HsEnv m)
 
@@ -138,7 +139,7 @@ getHsEnv :: IO HsEnv
 getHsEnv = do
   _hackage <- defaultHackageDB
   _community <- fmap S.fromList $ runConduitRes $ loadCommunity defaultCommunityPath .| cookCommunity .| sinkList
-  let _flags = mkFlagAssignment []
+  let _flags = Map.empty
   return HsEnv {..}
 
 h :: MonadIO m => HsEnv -> m (Either MyException ())
@@ -193,10 +194,18 @@ archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
     go _ (Just r) = Right r
     go x Nothing = Left x
 
-evalConditionTree :: (Semigroup k, L.HasBuildInfo k, Monad m) => CondTree ConfVar [Dependency] k -> HsM m BuildInfo
-evalConditionTree cond = do
+evalConditionTree :: (Semigroup k, L.HasBuildInfo k, Monad m) => PackageName-> CondTree ConfVar [Dependency] k -> HsM m BuildInfo
+evalConditionTree name cond = do
   flg <- view flags
-  return $ (L.^. L.buildInfo) . snd $ simplifyCondTree (archEnv flg) cond
+  let thisFlag = case Map.lookup name flg of
+        Just f -> f
+        Nothing -> mkFlagAssignment []
+  return $ (L.^. L.buildInfo) . snd $ simplifyCondTree (archEnv thisFlag) cond
+
+getPackageFlag :: (Monad m) => PackageName -> HsM m [Flag]
+getPackageFlag name = do
+  cabal <- getLatestCabal name
+  return $ cabal & genPackageFlags
 
 -----------------------------------------------------------------------------
 groupDeps :: G.AdjacencyMap (S.Set DependencyType) PackageName -> [SolvedPackage]
@@ -362,11 +371,14 @@ getLatestCabal name = do
       Nothing -> throwError VersionError
     Nothing -> throwError $ PkgNotFound name
 
+getPkgName :: GenericPackageDescription -> PackageName
+getPkgName = I.pkgName.package.packageDescription
+
 collectLibDeps :: (Monad m) => GenericPackageDescription -> HsM m (PkgList, PkgList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
-      info <- evalConditionTree lib
+      info <- evalConditionTree (getPkgName cabal) lib
       let libDeps = fmap depPkgName $ targetBuildDepends info
           toolDeps = fmap unExe $ buildToolDepends info
       return (libDeps, toolDeps)
@@ -379,7 +391,7 @@ collectRunnableDeps ::
   HsM m (ComponentPkgList, ComponentPkgList)
 collectRunnableDeps f cabal = do
   let exes = cabal & f
-  info <- zip (fmap fst exes) <$> mapM (evalConditionTree . snd) exes
+  info <- zip (fmap fst exes) <$> mapM (evalConditionTree (getPkgName cabal). snd) exes
   let runnableDeps = fmap (mapSnd $ fmap depPkgName . targetBuildDepends) info
       toolDeps = fmap (mapSnd $ fmap unExe . buildToolDepends) info
   return (runnableDeps, toolDeps)
@@ -401,7 +413,7 @@ mapSnd f (a, b) = (a, f b)
 
 -----------------------------------------------------------------------------
 defaultHackagePath :: FilePath
-defaultHackagePath = "/home/berberman/.stack/pantry/hackage/00-index.tar"
+defaultHackagePath = "/home/berberman/.cabal/packages/mirrors.tuna.tsinghua.edu.cn/00-index.tar"
 
 defaultCommunityPath :: FilePath
 defaultCommunityPath = "/var/lib/pacman/sync/community.db"
@@ -447,25 +459,30 @@ isInCommunity name = do
 
 cabalToPkgBuild :: (Monad m) => SolvedPackage -> HsM m PkgBuild
 cabalToPkgBuild pkg = do
-  cabal <- packageDescription <$> (getLatestCabal $ pkg ^. pkgName)
-  let _hkgName = pkg ^. pkgName & unPackageName
+  let name = pkg ^. pkgName
+  cabal <- packageDescription <$> (getLatestCabal name )
+  let 
+      _hkgName = pkg ^. pkgName & unPackageName
       _pkgName = fmap toLower _hkgName
       _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
       _pkgDesc = synopsis cabal
       (License (ELicense (ELicenseId cabalLicense) _)) = license cabal --  TODO unexhausted
       _license = show . mapLicense $ cabalLicense
-      _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && (selectDepType isLib x || selectDepType isExe x)) & depsToString
-      _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notInGHCLib x && (selectDepType isLibBuildTools x || selectDepType isTest x || selectDepType isTestBuildTools x)) & depsToString
+      _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepType isLib x || selectDepType isExe x)) & depsToString
+      _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepType isLibBuildTools x || selectDepType isTest x || selectDepType isTestBuildTools x)) & depsToString
       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
       wrap s = '\'' : s ++ "\'"
       fromJust (Just x) = return x
-      fromJust _ = throwError . UrlError $ pkg ^. pkgName
+      fromJust _ = throwError $ UrlError name
+      head' (x:_) = return x
+      head' [] = throwError $ UrlError name
       notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
+      notMyself x = x ^. depName /= name
       selectDepType f x = any f (x ^. depType)
       fixName s = case splitOn "-" s of
         ("haskell" : _) -> fmap toLower s
         _ -> "haskell-" ++ fmap toLower s
   _url <- case homepage cabal of
-    "" -> fromJust . repoLocation . head $ sourceRepos cabal -- TODO partial head
+    "" -> fromJust . repoLocation <=< head' $ sourceRepos cabal
     x -> return x
   return PkgBuild {..}
