@@ -1,7 +1,13 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module PkgBuild where
+module PkgBuild
+  ( PkgBuild (..),
+    ArchLicense,
+    mapLicense,
+    applyTemplate,
+  )
+where
 
 import Data.Text
 import Distribution.SPDX.LicenseId
