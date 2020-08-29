@@ -38,7 +38,7 @@ import qualified Data.Set as S
 import qualified Distribution.Hackage.DB as DB
 import Distribution.PackageDescription (FlagAssignment)
 import Distribution.Types.PackageName (PackageName)
-import Distribution.Types.UnqualComponentName (UnqualComponentName)
+import Distribution.Types.UnqualComponentName (UnqualComponentName, unUnqualComponentName)
 import GHC.Generics (Generic)
 import Lens.Micro.TH (makeLenses)
 import Polysemy
@@ -76,12 +76,26 @@ data DependencyType
   | LibBuildTools
   | TestBuildTools UnqualComponentName
   | BenchmarkBuildTools UnqualComponentName
-  deriving stock (Show, Eq, Ord, Generic)
+  deriving stock (Eq, Ord, Generic)
   deriving anyclass (NFData)
 
+instance Show DependencyType where
+  show (Exe x) = unUnqualComponentName x ++ " ← Exe"
+  show (ExeBuildTools x) = unUnqualComponentName x ++ " ← ExeBuildTools"
+  show (Test x) = unUnqualComponentName x ++ " ← Test"
+  show (Benchmark x) = unUnqualComponentName x ++ " ← Benchmark"
+  show (TestBuildTools x) = unUnqualComponentName x ++ " ← TestBuildTools"
+  show (BenchmarkBuildTools x) = unUnqualComponentName x ++ " ← BenchmarkBuildTools"
+  show Lib = "Lib"
+  show LibBuildTools = "LibBuildTools"
+
 data DependencyProvider = ByCommunity | ByAur
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Generic)
   deriving anyclass (NFData)
+
+instance Show DependencyProvider where
+  show ByCommunity = "community"
+  show ByAur = "aur"
 
 data SolvedDependency = SolvedDependency {_depProvider :: Maybe DependencyProvider, _depName :: PackageName, _depType :: [DependencyType]}
   deriving stock (Show, Eq, Generic)

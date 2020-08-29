@@ -1,46 +1,15 @@
-sudo: true
-language: haskell
+sudo: false
 
-git:
-  depth: 5
-
-cabal: "3.0.1.0"
-
+# Caching so the next build will be fast too.
 cache:
   directories:
-  - "$HOME/.cabal/store"
-  - "$HOME/.stack"
-  - "$TRAVIS_BUILD_DIR/.stack-work"
+  - $HOME/.stack
 
-matrix:
-  include:
-  - ghc: 8.8.3
-  
-  - ghc: 8.8.3
-    env: STACK_YAML="$TRAVIS_BUILD_DIR/stack.yaml"
-  
-
-install:
-  # HLint check
-  - curl -sSL https://raw.github.com/ndmitchell/neil/master/misc/travis.sh | sh -s -- hlint .
-
-  - |
-    if [ -z "$STACK_YAML" ]; then
-      cabal v2-update
-      cabal v2-build --enable-tests --enable-benchmarks
-    else
-      curl -sSL https://get.haskellstack.org/ | sh
-      stack --version
-      stack build --system-ghc --test --bench --no-run-tests --no-run-benchmarks --ghc-options=-Werror
-    fi
+before_install:
+# Download and unpack the stack executable
+- mkdir -p ~/.local/bin
+- export PATH=$HOME/.local/bin:$PATH
+- travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
 
 script:
-  - |
-    if [ -z "$STACK_YAML" ]; then
-      echo 'No tests'
-    else
-      stack test --system-ghc
-    fi
-
-notifications:
-  email: false
+- stack --no-terminal --install-ghc build

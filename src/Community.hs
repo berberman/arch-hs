@@ -22,10 +22,11 @@ import Data.List (intercalate)
 import Data.List.Split (splitOn)
 import qualified Data.Set as S
 import Distribution.Types.PackageName (PackageName, unPackageName)
+import System.FilePath
 import Types
 
 defaultCommunityPath :: FilePath
-defaultCommunityPath = "/var/lib/pacman/sync/community.db"
+defaultCommunityPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "community.db"
 
 loadCommunity ::
   (MonadResource m, PrimMonad m, MonadThrow m) =>

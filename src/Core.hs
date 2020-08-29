@@ -14,7 +14,7 @@ import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Control.Monad ((<=<))
 import Data.List (intercalate)
 import Data.List.Split (splitOn)
-import qualified Data.Map.Strict as Map
+import qualified Data.Map as Map
 import qualified Data.Set as S
 import qualified Distribution.Compat.Lens as L
 import Distribution.Compiler

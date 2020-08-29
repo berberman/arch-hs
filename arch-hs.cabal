@@ -38,7 +38,9 @@ common common-options
                        text, 
                        microlens,
                        microlens-th,
-                       polysemy
+                       polysemy,
+                       filepath,
+                       colourista
 
   
   ghc-options:         -Wall

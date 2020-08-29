@@ -1,9 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main (main) where
 
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
+import qualified Colourista as C
 import Community
 import Conduit
 import Control.Monad (filterM, when)
@@ -11,6 +13,7 @@ import Core
 import Data.List (groupBy)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as S
+import qualified Data.Text as T
 import Distribution.Hackage.DB (HackageDB)
 import Distribution.Types.PackageName
 import Hackage
@@ -26,7 +29,6 @@ h name = do
   deps <- getDependencies S.empty 0 target
   exist <- isInCommunity target
   when exist $ throw $ TargetExist target
-  liftIO $ putStrLn . prettyDeps $ G.reachable target $ G.skeleton deps
 
   let d = groupDeps $ deps
       v = S.toList $ S.fromList (d ^.. each . pkgName ++ d ^.. each . pkgDeps . each . depName)
@@ -34,8 +36,11 @@ h name = do
   let q = d <&> (\x -> if (x ^. pkgName) `elem` providedList then ProvidedPackage (x ^. pkgName) ByCommunity else x)
       r = q <&> pkgDeps %~ each %~ (\y -> if y ^. depName `elem` providedList then y & depProvider .~ (Just ByCommunity) else y)
       s = r ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
+  liftIO $ C.infoMessage "Solved target:"
   liftIO $ putStrLn . prettySolvedPkgs $ r
-  _ <- mapM (\solved -> (liftIO . writeFile ("/home/berberman/Desktop/test/" <> (solved ^. pkgName & unPackageName) <> ".PKGBUILD") . applyTemplate) =<< cabalToPkgBuild solved) s
+  liftIO $ C.infoMessage "Topological sort:"
+  liftIO $ putStrLn . prettyDeps . filter (`elem` (s ^.. each . pkgName)) $ G.reachable target $ G.skeleton deps
+  -- _ <- mapM (\solved -> (liftIO . writeFile ("/home/berberman/Desktop/test/" <> (solved ^. pkgName & unPackageName) <> ".PKGBUILD") . applyTemplate) =<< cabalToPkgBuild solved) s
   return ()
 
 runH ::
@@ -56,7 +61,9 @@ main = do
   name <- head <$> getArgs
   hackage <- defaultHackageDB
   community <- defaultCommunity
-  runH hackage community (h name) >>= print
+  runH hackage community (h name) >>= \case
+    Left x -> C.errorMessage $ "End up with exception: " <> (T.pack . show $ x)
+    _ -> C.successMessage "Success!"
 
 groupDeps :: G.AdjacencyMap (S.Set DependencyType) PackageName -> [SolvedPackage]
 groupDeps =
@@ -73,19 +80,23 @@ prettySolvedPkgs =
     . fmap
       ( \case
           SolvedPackage {..} ->
-            "⊢ " ++ show _pkgName ++ "\n"
+            "⊢ " ++ pkgNameStr _pkgName ++ "\n"
               ++ mconcat
                 ( fmap
-                    ( \SolvedDependency {..} -> "    ⊢ " ++ show _depName ++ " " ++ show _depType ++ (case _depProvider of (Just x) -> " ✔ " ++ show x; _ -> "") ++ "\n"
+                    ( \SolvedDependency {..} -> case _depProvider of
+                        (Just x) -> (C.formatWith [C.green] $ "    ⊢ " ++ pkgNameStr _depName ++ " " ++ show _depType) ++ " ✔ " ++ (C.formatWith [C.cyan] "[" ++ show x ++ "]\n")
+                        _ -> C.formatWith [C.bold, C.yellow] $ "    ⊢ " ++ pkgNameStr _depName ++ " " ++ show _depType ++ "\n"
                     )
                     _pkgDeps
                 )
-          ProvidedPackage {..} -> "⊢ " ++ show _pkgName ++ " ✔ " ++ show _pkgProvider ++ "\n"
+          ProvidedPackage {..} -> C.formatWith [C.cyan] $ "⊢ " ++ pkgNameStr _pkgName ++ " ✔ " ++ (C.formatWith [C.cyan] "[" ++ show _pkgProvider ++ "]\n")
       )
 
 prettyDeps :: [PackageName] -> String
 prettyDeps list =
   mconcat $
-    fmap (\(i, n) -> show @Int i ++ ". " ++ show n ++ "\n") $
+    fmap (\(i, n) -> show @Int i ++ ". " ++ pkgNameStr n ++ "\n") $
       zip [1 ..] $
         reverse list
+
+pkgNameStr = show . unPackageName

@@ -12,13 +12,21 @@ import Distribution.Hackage.DB (HackageDB, cabalFile, readTarball)
 import Distribution.Types.GenericPackageDescription
 import Distribution.Types.PackageName (PackageName)
 import Lens.Micro
+import System.Directory
+import System.FilePath
 import Types
 
-defaultHackagePath :: FilePath
-defaultHackagePath = "/home/berberman/.cabal/packages/mirrors.tuna.tsinghua.edu.cn/00-index.tar"
+defaultHackagePath :: IO FilePath
+defaultHackagePath = do
+  home <- (\d -> d </> ".cabal" </> "packages") <$> getHomeDirectory
+  subs <- fmap (home </>) <$> listDirectory home
+  target <- findFile subs "00-index.tar"
+  case target of
+    Just x -> return x
+    Nothing -> fail $ "Unable to find hackage index [00-index.tar] from " ++ show subs
 
 defaultHackageDB :: IO HackageDB
-defaultHackageDB = loadHackageDB defaultHackagePath
+defaultHackageDB = defaultHackagePath >>= loadHackageDB
 
 loadHackageDB :: FilePath -> IO HackageDB
 loadHackageDB path = do
