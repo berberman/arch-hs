@@ -20,9 +20,6 @@ import PkgBuild
 import System.Environment
 import Types
 
--- runProgram :: Members [CommunityEnv,HackageEnv,WithMyErr] r => CommunityDB -> HackageDB -> Sem r a -> Either MyException a
--- runProgram community hackage = runReader @HackageDB hackage. runReader @CommunityDB community
-
 h :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, WithMyErr] r => String -> Sem r ()
 h name = do
   let target = mkPackageName name
