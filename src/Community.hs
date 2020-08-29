@@ -1,8 +1,14 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeApplications #-}
+
 module Community
   ( defaultCommunityPath,
     loadCommunity,
     cookCommunity,
-    collectDefaultCommunity,
+    defaultCommunity,
     isInCommunity,
   )
 where
@@ -16,7 +22,6 @@ import Data.List (intercalate)
 import Data.List.Split (splitOn)
 import qualified Data.Set as S
 import Distribution.Types.PackageName (PackageName, unPackageName)
-import Lens.Micro.Mtl
 import Types
 
 defaultCommunityPath :: FilePath
@@ -27,7 +32,6 @@ loadCommunity ::
   FilePath ->
   ConduitT i FilePath m ()
 loadCommunity path = do
-  liftIO . putStrLn $ "Community db: " ++ path
   sourceFileBS path .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
   where
     action header =
@@ -44,12 +48,12 @@ cookCommunity = mapC (go . (splitOn "-"))
           then intercalate "-" . fst . splitAt (s - 3) . tail $ list
           else intercalate "-" . fst . splitAt (s - 2) $ list
 
-collectDefaultCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => m CommunityDB
-collectDefaultCommunity = fmap S.fromList $ runConduitRes $ loadCommunity defaultCommunityPath .| cookCommunity .| sinkList
+defaultCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => m CommunityDB
+defaultCommunity = fmap S.fromList $ runConduitRes $ loadCommunity defaultCommunityPath .| cookCommunity .| sinkList
 
-isInCommunity :: (Monad m) => PackageName -> HsM m Bool
-isInCommunity name = do
-  db <- view community
-  return $ case splitOn "-" . unPackageName $ name of
-    ("haskell" : xs) -> intercalate "-" xs `elem` db
-    _ -> (fmap toLower $ unPackageName name) `elem` db
+isInCommunity :: Member CommunityEnv r => PackageName -> Sem r Bool
+isInCommunity name =
+  ask @CommunityDB >>= \db ->
+    return $ case splitOn "-" . unPackageName $ name of
+      ("haskell" : xs) -> intercalate "-" xs `elem` db
+      _ -> (fmap toLower $ unPackageName name) `elem` db

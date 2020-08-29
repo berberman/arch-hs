@@ -1,10 +1,17 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
-module Core where
+module Core
+  ( getDependencies,
+    cabalToPkgBuild,
+  )
+where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
-import Control.Monad.Except
+import Control.Monad ((<=<))
 import Data.List (intercalate)
 import Data.List.Split (splitOn)
 import qualified Data.Map.Strict as Map
@@ -12,10 +19,6 @@ import qualified Data.Set as S
 import qualified Distribution.Compat.Lens as L
 import Distribution.Compiler
 import Distribution.PackageDescription
-{- For ghc 8.8.3, the following modules are included in
-  GenericPackageDescription.
-import Distribution.Types.ConfVar
-import Distribution.Types.Flag -}
 import Distribution.SPDX
 import Distribution.System
 import qualified Distribution.Types.BuildInfo.Lens as L
@@ -28,11 +31,15 @@ import Distribution.Types.Version
 import Distribution.Types.VersionRange
 import Hackage
 import Lens.Micro
-import Lens.Micro.Mtl
 import Local
 import PkgBuild
 import Types
 import Utils
+
+{- For ghc 8.8.3, the following modules are included in
+  GenericPackageDescription.
+import Distribution.Types.ConfVar
+import Distribution.Types.Flag -}
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Windows) = Right True
@@ -46,9 +53,9 @@ archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
     go _ (Just r) = Right r
     go x Nothing = Left x
 
-evalConditionTree :: (Semigroup k, L.HasBuildInfo k, Monad m) => PackageName -> CondTree ConfVar [Dependency] k -> HsM m BuildInfo
+evalConditionTree :: (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentEnv r) => PackageName -> CondTree ConfVar [Dependency] k -> Sem r BuildInfo
 evalConditionTree name cond = do
-  flg <- view flags
+  flg <- ask
   let thisFlag = case Map.lookup name flg of
         Just f -> f
         Nothing -> mkFlagAssignment []
@@ -57,11 +64,11 @@ evalConditionTree name cond = do
 -----------------------------------------------------------------------------
 
 getDependencies ::
-  (Monad m) =>
+  Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r =>
   S.Set PackageName ->
   Int ->
   PackageName ->
-  HsM m (G.AdjacencyMap (S.Set DependencyType) PackageName)
+  Sem r (G.AdjacencyMap (S.Set DependencyType) PackageName)
 getDependencies resolved n name = do
   cabal <- getLatestCabal name
   (libDeps, libToolsDeps) <- collectLibDeps cabal
@@ -108,7 +115,7 @@ getDependencies resolved n name = do
       <+> (G.overlays nextLib)
       <+> (G.overlays nextExe)
 
-collectLibDeps :: (Monad m) => GenericPackageDescription -> HsM m (PkgList, PkgList)
+collectLibDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
@@ -119,10 +126,10 @@ collectLibDeps cabal = do
     Nothing -> return ([], [])
 
 collectRunnableDeps ::
-  (Monad m, Semigroup k, L.HasBuildInfo k) =>
+  (Semigroup k, L.HasBuildInfo k, Members [HackageEnv, FlagAssignmentEnv] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
-  HsM m (ComponentPkgList, ComponentPkgList)
+  Sem r (ComponentPkgList, ComponentPkgList)
 collectRunnableDeps f cabal = do
   let exes = cabal & f
   info <- zip (fmap fst exes) <$> mapM (evalConditionTree (getPkgName cabal) . snd) exes
@@ -130,18 +137,18 @@ collectRunnableDeps f cabal = do
       toolDeps = fmap (mapSnd $ fmap unExe . buildToolDepends) info
   return (runnableDeps, toolDeps)
 
-collectExeDeps :: (Monad m) => GenericPackageDescription -> HsM m (ComponentPkgList, ComponentPkgList)
+collectExeDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (ComponentPkgList, ComponentPkgList)
 collectExeDeps = collectRunnableDeps condExecutables
 
-collectTestDeps :: (Monad m) => GenericPackageDescription -> HsM m (ComponentPkgList, ComponentPkgList)
+collectTestDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (ComponentPkgList, ComponentPkgList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
-collectBenchMarkDeps :: (Monad m) => GenericPackageDescription -> HsM m (ComponentPkgList, ComponentPkgList)
+collectBenchMarkDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (ComponentPkgList, ComponentPkgList)
 collectBenchMarkDeps = collectRunnableDeps condBenchmarks
 
 -----------------------------------------------------------------------------
 
-cabalToPkgBuild :: (Monad m) => SolvedPackage -> HsM m PkgBuild
+cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r => SolvedPackage -> Sem r PkgBuild
 cabalToPkgBuild pkg = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> (getLatestCabal name)
@@ -156,9 +163,9 @@ cabalToPkgBuild pkg = do
       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
       wrap s = '\'' : s ++ "\'"
       fromJust (Just x) = return x
-      fromJust _ = throwError $ UrlError name
+      fromJust _ = throw $ UrlError name
       head' (x : _) = return x
-      head' [] = throwError $ UrlError name
+      head' [] = throw $ UrlError name
       notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
       notMyself x = x ^. depName /= name
       selectDepType f x = any f (x ^. depType)

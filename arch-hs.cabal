@@ -37,11 +37,8 @@ common common-options
                        neat-interpolation, 
                        text, 
                        microlens,
-                       microlens-th, 
-                       microlens-mtl,
-                       mtl, 
-                       co-log, 
-                       colourista
+                       microlens-th,
+                       polysemy
 
   
   ghc-options:         -Wall
@@ -49,6 +46,9 @@ common common-options
                        -Widentities
                        -Wincomplete-uni-patterns
                        -Wincomplete-record-updates
+                       -O2 
+                       -flate-specialise 
+                       -fspecialise-aggressively
   if impl(ghc >= 8.0)
     ghc-options:       -Wredundant-constraints
   if impl(ghc >= 8.2)
@@ -60,10 +60,20 @@ common common-options
     ghc-options:       -Wmissing-deriving-strategies
 
   default-language:    Haskell2010
+  default-extensions:  DataKinds
+                       FlexibleContexts
+                       GADTs
+                       LambdaCase
+                       PolyKinds
+                       RankNTypes
+                       ScopedTypeVariables
+                       TypeApplications
+                       TypeOperators
+                       TypeFamilies
 library
   import:              common-options
   hs-source-dirs:      src
-  exposed-modules:     PkgDesc, Community, Core, Hackage, Local, PkgBuild, Types, Utils
+  exposed-modules:     Aur, PkgDesc, Community, Core, Hackage, Local, PkgBuild, Types, Utils
 executable arch-hs
   import:              common-options
   hs-source-dirs:      app

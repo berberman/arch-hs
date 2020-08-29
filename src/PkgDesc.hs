@@ -61,7 +61,7 @@ descFieldsParser =
             sep
             field <- many (upperChar <|> digitChar)
             sep
-            newline
+            _ <- newline
             content <- manyTill line (lookAhead sep <|> () <$ eol <|> eof)
             return (field, content)
         )

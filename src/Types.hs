@@ -1,32 +1,38 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module Types
   ( PkgList,
     ComponentPkgList,
     CommunityDB,
+    HackageEnv,
+    CommunityEnv,
+    FlagAssignmentEnv,
+    WithMyErr,
     MyException (..),
     DependencyType (..),
-    HsEnv (..),
-    HsM,
+    DependencyProvider (..),
     SolvedPackage (..),
     SolvedDependency (..),
-    hackage,
-    community,
-    flags,
-    provided,
+    depProvider,
+    pkgProvider,
     pkgName,
     pkgDeps,
     depName,
     depType,
+    module Polysemy,
+    module Polysemy.Error,
+    module Polysemy.Reader,
   )
 where
 
 import Control.DeepSeq (NFData)
-import Control.Monad.Except (ExceptT)
-import Control.Monad.Reader (ReaderT)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Distribution.Hackage.DB as DB
@@ -35,12 +41,23 @@ import Distribution.Types.PackageName (PackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName)
 import GHC.Generics (Generic)
 import Lens.Micro.TH (makeLenses)
+import Polysemy
+import Polysemy.Error
+import Polysemy.Reader
 
 type PkgList = [PackageName]
 
 type ComponentPkgList = [(UnqualComponentName, PkgList)]
 
 type CommunityDB = S.Set String
+
+type HackageEnv = Reader DB.HackageDB
+
+type CommunityEnv = Reader CommunityDB
+
+type FlagAssignmentEnv = Reader (M.Map PackageName FlagAssignment)
+
+type WithMyErr = Error MyException
 
 data MyException
   = PkgNotFound PackageName
@@ -62,18 +79,17 @@ data DependencyType
   deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass (NFData)
 
-data HsEnv = HsEnv {_hackage :: DB.HackageDB, _community :: CommunityDB, _flags :: M.Map PackageName FlagAssignment}
+data DependencyProvider = ByCommunity | ByAur
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (NFData)
 
-type HsM m = ExceptT MyException (ReaderT HsEnv m)
-
-data SolvedDependency = SolvedDependency {_provided :: Bool, _depName :: PackageName, _depType :: [DependencyType]}
+data SolvedDependency = SolvedDependency {_depProvider :: Maybe DependencyProvider, _depName :: PackageName, _depType :: [DependencyType]}
   deriving stock (Show, Eq, Generic)
   deriving anyclass (NFData)
 
-data SolvedPackage = ProvidedPackage {_pkgName :: PackageName} | SolvedPackage {_pkgName :: PackageName, _pkgDeps :: [SolvedDependency]}
+data SolvedPackage = ProvidedPackage {_pkgName :: PackageName, _pkgProvider :: DependencyProvider} | SolvedPackage {_pkgName :: PackageName, _pkgDeps :: [SolvedDependency]}
   deriving stock (Show, Eq, Generic)
   deriving anyclass (NFData)
 
 makeLenses ''SolvedDependency
 makeLenses ''SolvedPackage
-makeLenses ''HsEnv

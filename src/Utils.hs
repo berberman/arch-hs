@@ -1,5 +1,5 @@
 module Utils
-  ( runHsM,
+  ( getPkgName,
     mapSnd,
     toLower',
     isExe,
@@ -14,18 +14,18 @@ module Utils
   )
 where
 
-import Control.Monad.Except
-import Control.Monad.Reader
 import Data.Char (toLower)
+import Distribution.PackageDescription (GenericPackageDescription, package, packageDescription)
 import Distribution.Types.ExeDependency (ExeDependency (..))
+import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName (PackageName)
 import Types
 
-runHsM :: r -> ExceptT e (ReaderT r m) a -> m (Either e a)
-runHsM = flip (runReaderT . runExceptT)
-
 unExe :: ExeDependency -> PackageName
 unExe (ExeDependency name _ _) = name
+
+getPkgName :: GenericPackageDescription -> PackageName
+getPkgName = I.pkgName . package . packageDescription
 
 mapSnd :: (b -> c) -> (a, b) -> (a, c)
 mapSnd f (a, b) = (a, f b)

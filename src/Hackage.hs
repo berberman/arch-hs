@@ -3,20 +3,15 @@ module Hackage
     defaultHackageDB,
     loadHackageDB,
     getLatestCabal,
-    getPkgName,
-    getPackageFlag
+    getPackageFlag,
   )
 where
 
-import Control.Monad.Except
 import qualified Data.Map as Map
 import Distribution.Hackage.DB (HackageDB, cabalFile, readTarball)
 import Distribution.Types.GenericPackageDescription
-import Distribution.Types.PackageDescription
-import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName (PackageName)
 import Lens.Micro
-import Lens.Micro.Mtl
 import Types
 
 defaultHackagePath :: FilePath
@@ -30,19 +25,16 @@ loadHackageDB path = do
   putStrLn $ "Hackage index: " ++ path
   readTarball Nothing path
 
-getLatestCabal :: (Monad m) => PackageName -> HsM m GenericPackageDescription
+getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
 getLatestCabal name = do
-  db <- view hackage
+  db <- ask @HackageDB
   case Map.lookup name db of
     (Just m) -> case Map.lookupMax m of
       Just (_, vdata) -> return $ vdata & cabalFile
-      Nothing -> throwError VersionError
-    Nothing -> throwError $ PkgNotFound name
+      Nothing -> throw VersionError
+    Nothing -> throw $ PkgNotFound name
 
-getPkgName :: GenericPackageDescription -> PackageName
-getPkgName = I.pkgName . package . packageDescription
-
-getPackageFlag :: (Monad m) => PackageName -> HsM m [Flag]
+getPackageFlag :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r [Flag]
 getPackageFlag name = do
   cabal <- getLatestCabal name
   return $ cabal & genPackageFlags
