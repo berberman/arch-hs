@@ -19,7 +19,7 @@ During the dependency calculation, all version constraints will be discarded due
 
 * Hackage database tarball, usually provided by cabal.
 
-This program is not released currently, stack is required to build and run this from source.
+This program is not released currently, thus stack is required to build and run this from source.
 
 ## Usage
 
@@ -72,3 +72,5 @@ file patches, loose of version constraints, etc. are need to be done manually, s
 * Aur support.
 
 * Logging system.
+
+* Switch *buildable* of a component in the beginning.
