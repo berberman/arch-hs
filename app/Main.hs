@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
@@ -11,22 +12,62 @@ import Community
 import Conduit
 import Control.Monad (filterM, when)
 import Core
-import Data.List (groupBy)
+import Data.List (groupBy, isInfixOf)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Distribution.Hackage.DB (HackageDB)
-import Distribution.PackageDescription (Flag, flagDefault, flagDescription, flagManual, flagName, mkFlagAssignment, unFlagName)
+import Distribution.PackageDescription (Flag, FlagAssignment, flagDefault, flagDescription, flagManual, flagName, insertFlagAssignment, mkFlagAssignment, mkFlagName, unFlagAssignment, unFlagName)
 import Distribution.Types.PackageName
 import Hackage
 import Lens.Micro
 import Local
+import Options.Applicative
 import PkgBuild
-import System.Environment
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath ((</>))
 import Types
 
-h :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, WithMyErr] r => String -> Sem r ()
-h name = do
+data Options = Options
+  { optHackagePath :: FilePath,
+    optOutputDir :: FilePath,
+    optFlags :: [(String, String, Bool)],
+    optTarget :: String
+  }
+  deriving stock (Show)
+
+options :: Parser Options
+options =
+  Options
+    <$> strOption
+      ( long "hackage"
+          <> metavar "PATH"
+          <> short 'h'
+          <> help "Path to 00-index.tar"
+          <> showDefault
+          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/00-index.tar"
+      )
+    <*> strOption
+      ( long "output"
+          <> metavar "PATH"
+          <> short 'o'
+          <> help "Output path to generated PKGBUILD files (empty means dry run)"
+          <> showDefault
+          <> value ""
+      )
+    <*> option
+      auto
+      ( long "flags"
+          <> metavar "[(\"package_name\",\"flag_name\",True|False),...]"
+          <> short 'f'
+          <> help "Flag assignments for packages - e.g. [(\"inline-c\",\"gsl-example\",True)], notice that quotation marks can't be ignored"
+          <> showDefault
+          <> value []
+      )
+    <*> strArgument (metavar "TARGET")
+
+h :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, WithMyErr] r => String -> FilePath -> Sem r ()
+h name path = do
   let target = mkPackageName name
   deps <- getDependencies S.empty 0 target
   exist <- isInCommunity target
@@ -42,38 +83,83 @@ h name = do
 
   liftIO $ C.infoMessage "Solved target:"
   liftIO $ putStrLn . prettySolvedPkgs $ cooked
+
   let flattened = filter (`elem` (toBePacked ^.. each . pkgName)) $ G.reachable target $ G.skeleton deps
   liftIO $ C.infoMessage "Recommended package order (from topological sort):"
   liftIO $ putStrLn . prettyDeps $ flattened
   flags <- filter (\(_, l) -> length l /= 0) <$> mapM (\n -> (n,) <$> getPackageFlag n) flattened
-  liftIO $ when (length flags /= 0) $ do
+
+  liftIO $
+    when (length flags /= 0) $ do
       C.infoMessage "Detected flags from targets (their values will keep default unless you specify):"
       putStrLn . prettyFlags $ flags
 
-  _ <- mapM (\solved -> (liftIO . writeFile ("/home/berberman/Desktop/test/" <> (solved ^. pkgName & unPackageName) <> ".PKGBUILD") . applyTemplate) =<< cabalToPkgBuild solved) toBePacked
-  return ()
+  let dry = path == ""
+  liftIO $ when dry $ C.warningMessage "You didn't pass -o, PKGBUILD files will not be generated."
+  when (not dry) $
+    mapM_
+      ( \solved -> do
+          txt <- applyTemplate <$> cabalToPkgBuild solved
+          let pName = solved ^. pkgName & unPackageName
+              dir = path </> pName
+              fileName = dir </> "PKGBUILD"
+          liftIO $ createDirectoryIfMissing True dir
+          liftIO $ writeFile fileName txt
+          liftIO $ C.infoMessage $ "Write file: " <> T.pack fileName
+      )
+      toBePacked
 
 runH ::
   HackageDB ->
   CommunityDB ->
+  Map.Map PackageName FlagAssignment ->
   Sem '[CommunityEnv, HackageEnv, FlagAssignmentEnv, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runH hackage community =
+runH hackage community flags =
   runFinal
     . embedToFinal
     . errorToIOFinal
-    . runReader (Map.fromList [(mkPackageName "inline-c", (mkFlagAssignment [("gsl-example", True)]))])
+    . runReader flags
     . runReader hackage
     . runReader community
 
 main :: IO ()
 main = do
-  name <- head <$> getArgs
-  hackage <- defaultHackageDB
+  Options {..} <-
+    execParser $
+      info
+        (options <**> helper)
+        ( fullDesc
+            <> progDesc "Try to reach the TARGET QAQ."
+            <> header "arch-hs - a program converting packges from hackage to arch PKGBUILD."
+        )
+  let isDefault = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
+  when isDefault $ C.skipMessage "You didn't pass -h, use hackage index file from default places."
+
+  let isFlagEmpty = optFlags == []
+      cookedFlags = cookFlag optFlags
+  when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag values make difference in dependency solving."
+  when (not isFlagEmpty) $ do
+    C.infoMessage "You assigned flags:"
+    putStrLn . prettyFlagAssignments $ cookedFlags
+
+  hackage <- if isDefault then defaultHackageDB else loadHackageDB optHackagePath
+  C.infoMessage "Loading hackage..."
   community <- defaultCommunity
-  runH hackage community (h name) >>= \case
+  C.infoMessage "Loading community.db..."
+  C.infoMessage "Start running..."
+  runH hackage community cookedFlags (h optTarget optOutputDir) >>= \case
     Left x -> C.errorMessage $ "Error: " <> (T.pack . show $ x)
     _ -> C.successMessage "Success!"
+
+cookFlag :: [(String, String, Bool)] -> Map.Map PackageName FlagAssignment
+cookFlag [] = Map.empty
+cookFlag list = z
+  where
+    x = groupBy (\(a, _, _) (b, _, _) -> a == b) list
+    y = fmap (\l -> (mkPackageName . fst' . head $l, foldr (\(_, f, v) acc -> insertFlagAssignment (mkFlagName f) v acc) (mkFlagAssignment []) l)) x
+    z = Map.fromList y
+    fst' (a, _, _) = a
 
 groupDeps :: G.AdjacencyMap (S.Set DependencyType) PackageName -> [SolvedPackage]
 groupDeps =
@@ -85,15 +171,21 @@ groupDeps =
     . G.edgeSet
 
 prettyFlags :: [(PackageName, [Flag])] -> String
-prettyFlags = mconcat . fmap (\(name, flags) -> (C.formatWith [C.magenta] $ pkgNameStr name ++ "\n") ++ mconcat (fmap (C.formatWith [C.indent 4] . prettyFlag) flags))
+prettyFlags = mconcat . fmap (\(name, flags) -> (C.formatWith [C.magenta] $ unPackageName name ++ "\n") ++ mconcat (fmap (C.formatWith [C.indent 4] . prettyFlag) flags))
 
 prettyFlag :: Flag -> String
-prettyFlag flag = "⚐ " ++ C.formatWith [C.yellow] name ++ ":\n" ++ mconcat (fmap (C.formatWith [C.indent 6] . (++ "\n")) $ ["description: " ++ desc, "default: " ++ def, "isManual: " ++ manual])
+prettyFlag f = "⚐ " ++ C.formatWith [C.yellow] name ++ ":\n" ++ mconcat (fmap (C.formatWith [C.indent 6] . (++ "\n")) $ ["description: " ++ desc, "default: " ++ def, "isManual: " ++ manual])
   where
-    name = unFlagName . flagName $flag
-    desc = flagDescription flag
-    def = show $ flagDefault flag
-    manual = show $ flagManual flag
+    name = unFlagName . flagName $ f
+    desc = flagDescription f
+    def = show $ flagDefault f
+    manual = show $ flagManual f
+
+prettyFlagAssignments :: Map.Map PackageName FlagAssignment -> String
+prettyFlagAssignments m = mconcat $ fmap (fmap (\(n, a) -> C.formatWith [C.magenta] (unPackageName n) ++ "\n" ++ C.formatWith [C.indent 4] (prettyFlagAssignment a))) Map.toList m
+
+prettyFlagAssignment :: FlagAssignment -> String
+prettyFlagAssignment m = mconcat $fmap (\(n, v) -> "⚐ " ++ C.formatWith [C.yellow] (unFlagName n) ++ " : " ++ C.formatWith [C.cyan] (show v) ++ "\n") $ unFlagAssignment m
 
 prettySolvedPkgs :: [SolvedPackage] -> String
 prettySolvedPkgs =
@@ -101,24 +193,21 @@ prettySolvedPkgs =
     . fmap
       ( \case
           SolvedPackage {..} ->
-            C.formatWith [C.bold, C.yellow] ("⊢ " ++ pkgNameStr _pkgName ++ "\n")
+            C.formatWith [C.bold, C.yellow] ("⊢ " ++ unPackageName _pkgName ++ "\n")
               ++ mconcat
                 ( fmap
                     ( \SolvedDependency {..} -> case _depProvider of
-                        (Just x) -> (C.formatWith [C.green] $ "    ⊢ " ++ pkgNameStr _depName ++ " " ++ show _depType ++ " ✔ ") ++ (C.formatWith [C.cyan] $ "[" ++ show x ++ "]\n")
-                        _ -> C.formatWith [C.bold, C.yellow] $ "    ⊢ " ++ pkgNameStr _depName ++ " " ++ show _depType ++ "\n"
+                        (Just x) -> (C.formatWith [C.green] $ "    ⊢ " ++ unPackageName _depName ++ " " ++ show _depType ++ " ✔ ") ++ (C.formatWith [C.cyan] $ "[" ++ show x ++ "]\n")
+                        _ -> C.formatWith [C.bold, C.yellow] $ "    ⊢ " ++ unPackageName _depName ++ " " ++ show _depType ++ "\n"
                     )
                     _pkgDeps
                 )
-          ProvidedPackage {..} -> (C.formatWith [C.green] $ "⊢ " ++ pkgNameStr _pkgName ++ " ✔ ") ++ (C.formatWith [C.cyan] $ "[" ++ show _pkgProvider ++ "]\n")
+          ProvidedPackage {..} -> (C.formatWith [C.green] $ "⊢ " ++ unPackageName _pkgName ++ " ✔ ") ++ (C.formatWith [C.cyan] $ "[" ++ show _pkgProvider ++ "]\n")
       )
 
 prettyDeps :: [PackageName] -> String
 prettyDeps list =
   mconcat $
-    fmap (\(i, n) -> show @Int i ++ ". " ++ pkgNameStr n ++ "\n") $
+    fmap (\(i, n) -> show @Int i ++ ". " ++ unPackageName n ++ "\n") $
       zip [1 ..] $
         reverse list
-
-pkgNameStr :: PackageName -> String
-pkgNameStr = show . unPackageName

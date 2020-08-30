@@ -80,7 +80,7 @@ executable arch-hs
   import:              common-options
   hs-source-dirs:      app
   main-is:             Main.hs
-  build-depends:       arch-hs
+  build-depends:       arch-hs, optparse-applicative
   ghc-options:         -threaded
                        -rtsopts
                        -with-rtsopts=-N

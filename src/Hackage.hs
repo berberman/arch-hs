@@ -29,9 +29,7 @@ defaultHackageDB :: IO HackageDB
 defaultHackageDB = defaultHackagePath >>= loadHackageDB
 
 loadHackageDB :: FilePath -> IO HackageDB
-loadHackageDB path = do
-  putStrLn $ "Hackage index: " ++ path
-  readTarball Nothing path
+loadHackageDB = readTarball Nothing
 
 getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
 getLatestCabal name = do
