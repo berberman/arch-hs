@@ -21,12 +21,12 @@ source-repository head
   location:            https://github.com/berberman/arch-hs.git
 common common-options
   build-depends:       base ^>= 4.13.0.0,
-                       Cabal, 
+                       Cabal ^>= 3.0.1.0, 
                        req, 
                        hackage-db, 
                        conduit, 
                        containers, 
-                       deepseq, 
+                       deepseq,
                        algebraic-graphs,
                        megaparsec, 
                        directory, 
@@ -40,7 +40,7 @@ common common-options
                        microlens-th,
                        polysemy,
                        filepath,
-                       colourista
+                       colourista ^>= 0.1
 
   
   ghc-options:         -Wall

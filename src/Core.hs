@@ -156,8 +156,15 @@ cabalToPkgBuild pkg = do
       _pkgName = toLower' _hkgName
       _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
       _pkgDesc = synopsis cabal
-      (License (ELicense (ELicenseId cabalLicense) _)) = license cabal --  TODO unexhausted
-      _license = show . mapLicense $ cabalLicense
+      getL (NONE) = ""
+      getL (License e) = getE e
+      getE ((ELicense (ELicenseId x) _)) = show . mapLicense $ x
+      getE ((ELicense (ELicenseIdPlus x) _)) = show . mapLicense $ x
+      getE ((ELicense (ELicenseRef x) _)) = "Custom: " ++ licenseRef x
+      getE ((EAnd x y)) = getE x ++ " " ++ getE y
+      getE ((EOr x y)) = getE x ++ " " ++ getE y
+
+      _license = getL . license $ cabal
       _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepType isLib x || selectDepType isExe x)) & depsToString
       _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepType isLibBuildTools x || selectDepType isTest x || selectDepType isTestBuildTools x)) & depsToString
       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
