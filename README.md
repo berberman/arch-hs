@@ -27,26 +27,26 @@ This program is not released currently, thus `stack` is required to build and ru
 ### Install from AUR
 
 ```bash
-yay -S arch-hs-git
+❯ yay -S arch-hs-git
 ```
 
 ### Examples:
 
-```bash
+```
 ❯ arch-hs -o "/home/berberman/Desktop/test/" termonad
 ```
 
 This will generate a series of PKGBUILD including termonad with its dependencies into the output dir.
 
-```bash
+```
 ❯ arch-hs -f inline-c:gsl-example:true -o "/home/berberman/Desktop/test/" termonad
 ```
 
 Using `-f` can pass flags, which may affect the results of solving.  
 For all available options, have a look at the help message:
 
-```bash
-❯ stack run -- --help
+```
+❯ arch-hs --help
 arch-hs - a program generating PKGBUILD for hackage packages.
 
 Usage: arch-hs [-h|--hackage PATH] [-o|--output PATH] 
