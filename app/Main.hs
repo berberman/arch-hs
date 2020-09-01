@@ -26,6 +26,8 @@ import Options.Applicative
 import PkgBuild
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
+import qualified Text.Megaparsec as M
+import qualified Text.Megaparsec.Char as M
 import Types
 
 data Options = Options
@@ -52,19 +54,42 @@ options =
           <> metavar "PATH"
           <> short 'o'
           <> help "Output path to generated PKGBUILD files (empty means dry run)"
-          <> showDefault
           <> value ""
       )
     <*> option
-      auto
+      myFlagReader
       ( long "flags"
-          <> metavar "[(\"package_name\",\"flag_name\",True|False),...]"
+          <> metavar "package_name:flag_name:true|false,..."
           <> short 'f'
-          <> help "Flag assignments for packages - e.g. [(\"inline-c\",\"gsl-example\",True)], notice that quotation marks can't be ignored"
-          <> showDefault
+          <> help "Flag assignments for packages - e.g. inline-c:gsl-example:true (separated by ',')"
           <> value []
       )
     <*> strArgument (metavar "TARGET")
+
+myFlagReader :: ReadM [(String, String, Bool)]
+myFlagReader = eitherReader (\s -> case M.parse myFlagParser "" s of
+    Right x -> Right x
+    Left err -> Left $ M.errorBundlePretty err
+   )
+
+myFlagParser :: M.Parsec Void String [(String, String, Bool)]
+myFlagParser =
+  ( do
+      pkg <- M.manyTill M.anySingle $ M.single ':'
+      flg <- M.manyTill M.anySingle $ M.single ':'
+      b <- bool
+      return (pkg, flg, b)
+  )
+    `M.sepBy` ","
+  where
+    bool = do
+      s <- M.string "true" <|> M.string "false"
+      case s of
+        "true" -> return True
+        "false" -> return False
+        _ -> fail $ "unknown bool: " ++ s
+
+-----------------------------------------------------------------------------
 
 h :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, WithMyErr] r => String -> FilePath -> Sem r ()
 h name path = do
@@ -131,7 +156,7 @@ main = do
         (options <**> helper)
         ( fullDesc
             <> progDesc "Try to reach the TARGET QAQ."
-            <> header "arch-hs - a program converting packges from hackage to arch PKGBUILD."
+            <> header "arch-hs - a program generating PKGBUILD for hackage packages."
         )
   let isDefault = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
   when isDefault $ C.skipMessage "You didn't pass -h, use hackage index file from default places."
@@ -151,6 +176,8 @@ main = do
   runH hackage community cookedFlags (h optTarget optOutputDir) >>= \case
     Left x -> C.errorMessage $ "Error: " <> (T.pack . show $ x)
     _ -> C.successMessage "Success!"
+
+-----------------------------------------------------------------------------
 
 cookFlag :: [(String, String, Bool)] -> Map.Map PackageName FlagAssignment
 cookFlag [] = Map.empty
