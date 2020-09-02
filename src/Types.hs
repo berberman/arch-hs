@@ -63,7 +63,7 @@ data MyException
   = PkgNotFound PackageName
   | VersionError
   | UrlError PackageName
-  | TargetExist PackageName
+  | TargetExist PackageName DependencyProvider
   | LicenseError PackageName
   deriving stock (Show, Eq)
 
@@ -94,8 +94,8 @@ data DependencyProvider = ByCommunity | ByAur
   deriving anyclass (NFData)
 
 instance Show DependencyProvider where
-  show ByCommunity = "community"
-  show ByAur = "aur"
+  show ByCommunity = "~ community"
+  show ByAur = "~ aur"
 
 data SolvedDependency = SolvedDependency {_depProvider :: Maybe DependencyProvider, _depName :: PackageName, _depType :: [DependencyType]}
   deriving stock (Show, Eq, Generic)

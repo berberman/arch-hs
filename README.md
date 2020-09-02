@@ -61,6 +61,7 @@ Available options:
   -f,--flags package_name:flag_name:true|false,...
                            Flag assignments for packages - e.g.
                            inline-c:gsl-example:true (separated by ',')
+  -a,--aur                 Enable AUR searching.
   -h,--help                Show this help text
 
 ```
@@ -77,7 +78,7 @@ file patches, loose of version constraints, etc. are need to be done manually, s
 
 * Structuralized PKGBUILD template.
 
-* AUR support.
+* ~~AUR support.~~ ✔
 
 * Logging system.
 

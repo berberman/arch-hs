@@ -11,10 +11,12 @@ module Utils
     isBenchmark,
     isBenchmarkBuildTools,
     unExe,
+    fixName
   )
 where
 
 import Data.Char (toLower)
+import Data.List.Split (splitOn)
 import Distribution.PackageDescription (GenericPackageDescription, package, packageDescription)
 import Distribution.Types.ExeDependency (ExeDependency (..))
 import qualified Distribution.Types.PackageId as I
@@ -26,6 +28,11 @@ unExe (ExeDependency name _ _) = name
 
 getPkgName :: GenericPackageDescription -> PackageName
 getPkgName = I.pkgName . package . packageDescription
+
+fixName :: String -> String
+fixName s = case splitOn "-" s of
+  ("haskell" : _) -> toLower' s
+  _ -> "haskell-" ++ toLower' s
 
 mapSnd :: (b -> c) -> (a, b) -> (a, c)
 mapSnd f (a, b) = (a, f b)

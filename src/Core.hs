@@ -9,7 +9,6 @@ where
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Control.Monad ((<=<))
 import Data.List (intercalate)
-import Data.List.Split (splitOn)
 import qualified Data.Map as Map
 import qualified Data.Set as S
 import qualified Distribution.Compat.Lens as L
@@ -172,9 +171,7 @@ cabalToPkgBuild pkg = do
       notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
       notMyself x = x ^. depName /= name
       selectDepType f x = any f (x ^. depType)
-      fixName s = case splitOn "-" s of
-        ("haskell" : _) -> toLower' s
-        _ -> "haskell-" ++ toLower' s
+      
   _url <- case homepage cabal of
     "" -> fromJust . repoLocation <=< head' $ sourceRepos cabal
     x -> return x
