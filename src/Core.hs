@@ -8,7 +8,7 @@ where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Control.Monad ((<=<))
-import Data.List (intercalate)
+import Data.List (intercalate, stripPrefix)
 import qualified Data.Map as Map
 import qualified Data.Set as S
 import qualified Distribution.Compat.Lens as L
@@ -148,21 +148,33 @@ cabalToPkgBuild pkg = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> (getLatestCabal name)
   let _hkgName = pkg ^. pkgName & unPackageName
-      _pkgName = toLower' _hkgName
+      rawName = toLower' _hkgName
+      _pkgName = maybe rawName id $ stripPrefix "haskell-" rawName
       _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
       _pkgDesc = synopsis cabal
       getL (NONE) = ""
       getL (License e) = getE e
-      getE ((ELicense (ELicenseId x) _)) = show . mapLicense $ x
-      getE ((ELicense (ELicenseIdPlus x) _)) = show . mapLicense $ x
-      getE ((ELicense (ELicenseRef x) _)) = "Custom: " ++ licenseRef x
-      getE ((EAnd x y)) = getE x ++ " " ++ getE y
-      getE ((EOr x y)) = getE x ++ " " ++ getE y
+      getE (ELicense (ELicenseId x) _) = show . mapLicense $ x
+      getE (ELicense (ELicenseIdPlus x) _) = show . mapLicense $ x
+      getE (ELicense (ELicenseRef x) _) = "Custom: " ++ licenseRef x
+      getE (EAnd x y) = getE x ++ " " ++ getE y
+      getE (EOr x y) = getE x ++ " " ++ getE y
 
       _license = getL . license $ cabal
-      _depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepType isLib x || selectDepType isExe x)) & depsToString
-      _makeDepends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepType isLibBuildTools x || selectDepType isTest x || selectDepType isTestBuildTools x)) & depsToString
+      depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepType isLib x || selectDepType isExe x))
+      makeDepends =
+        pkg ^. pkgDeps
+          ^.. each
+            . filtered
+              ( \x ->
+                  x `notElem` depends
+                    && notMyself x
+                    && notInGHCLib x
+                    && (selectDepType isLibBuildTools x || selectDepType isTest x || selectDepType isTestBuildTools x)
+              )
       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
+      _depends = depsToString depends
+      _makeDepends = depsToString makeDepends
       wrap s = '\'' : s ++ "\'"
       fromJust (Just x) = return x
       fromJust _ = throw $ UrlError name
@@ -171,7 +183,7 @@ cabalToPkgBuild pkg = do
       notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
       notMyself x = x ^. depName /= name
       selectDepType f x = any f (x ^. depType)
-      
+
   _url <- case homepage cabal of
     "" -> fromJust . repoLocation <=< head' $ sourceRepos cabal
     x -> return x

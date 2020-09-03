@@ -105,9 +105,13 @@ h name path aurSupport = do
   let target = mkPackageName name
   deps <- getDependencies S.empty 0 target
   inCommunity <- isInCommunity target
-  inAur <- isInAur target
   when inCommunity $ throw $ TargetExist target ByCommunity
-  when (inAur && aurSupport) $ throw $ TargetExist target ByAur
+
+  if aurSupport
+    then do
+      inAur <- isInAur target
+      when inAur $ throw $ TargetExist target ByAur
+    else return ()
 
   let grouped = groupDeps deps
       namesFromSolved x = x ^.. each . pkgName ++ x ^.. each . pkgDeps . each . depName
@@ -122,21 +126,24 @@ h name path aurSupport = do
             .| fillProvidedPkgs communityProvideList ByCommunity
             .| fillProvidedDeps communityProvideList ByCommunity
             .| sinkList
-      toBePacked =  cooked ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
-  (cookedAgain,toBePackedAgain) <- do
-      embed $ C.infoMessage "Start searching AUR..."
-      aurProvideList <- if aurSupport then filterM (\n -> do{ embed $ C.infoMessage ("Searching " <> (T.pack $ unPackageName n)); isInAur n} ) $ toBePacked ^.. each. pkgName else return []
-      let cookedAgain = if aurSupport then 
-            runConduitPure $
+      toBePacked = cooked ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
+  (cookedAgain, toBePackedAgain) <- do
+    embed $ C.infoMessage "Start searching AUR..."
+    aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> (T.pack $ unPackageName n)); isInAur n) $ toBePacked ^.. each . pkgName else return []
+    let cookedAgain =
+          if aurSupport
+            then
+              runConduitPure $
                 yieldMany cooked
                   .| fillProvidedPkgs aurProvideList ByAur
                   .| fillProvidedDeps aurProvideList ByAur
                   .| sinkList
             else cooked
-          toBePackedAgain = if aurSupport 
+        toBePackedAgain =
+          if aurSupport
             then cookedAgain ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
             else toBePacked
-      return (cookedAgain,toBePackedAgain)
+    return (cookedAgain, toBePackedAgain)
 
   embed $ C.infoMessage "Solved target:"
   embed $ putStrLn . prettySolvedPkgs $ cookedAgain
