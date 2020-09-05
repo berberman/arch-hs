@@ -19,7 +19,7 @@ import qualified Data.Set as S
 import qualified Data.Text as T
 import Distribution.Hackage.DB (HackageDB)
 import Distribution.PackageDescription (Flag, FlagAssignment, flagDefault, flagDescription, flagManual, flagName, insertFlagAssignment, mkFlagAssignment, mkFlagName, unFlagAssignment, unFlagName)
-import Distribution.Types.PackageName
+import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Hackage
 import Lens.Micro
 import Local
@@ -33,6 +33,7 @@ import Types
 
 data Options = Options
   { optHackagePath :: FilePath,
+    optCommunityPath :: FilePath,
     optOutputDir :: FilePath,
     optFlags :: [(String, String, Bool)],
     optAur :: Bool,
@@ -52,6 +53,14 @@ options =
           <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/00-index.tar"
       )
     <*> strOption
+      ( long "community"
+          <> metavar "PATH"
+          <> short 'c'
+          <> help "Path to community.db"
+          <> showDefault
+          <> value "/var/lib/pacman/sync/community.db"
+      )
+    <*> strOption
       ( long "output"
           <> metavar "PATH"
           <> short 'o'
@@ -69,7 +78,7 @@ options =
     <*> switch
       ( long "aur"
           <> short 'a'
-          <> help "Enable AUR searching."
+          <> help "Enable AUR searching"
       )
     <*> strArgument (metavar "TARGET")
 
@@ -198,8 +207,11 @@ main = do
             <> progDesc "Try to reach the TARGET QAQ."
             <> header "arch-hs - a program generating PKGBUILD for hackage packages."
         )
-  let isDefault = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
-  when isDefault $ C.skipMessage "You didn't pass -h, use hackage index file from default places."
+  let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
+      useDefaultCommunity = "/var/lib/pacman/sync/communidy.db" == optCommunityPath
+
+  when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default places."
+  when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default places."
 
   let isFlagEmpty = optFlags == []
       cookedFlags = cookFlag optFlags
@@ -209,10 +221,12 @@ main = do
     putStrLn . prettyFlagAssignments $ cookedFlags
   when optAur $ C.infoMessage "You passed -a, searching AUR may takes a long time."
 
-  hackage <- if isDefault then defaultHackageDB else loadHackageDB optHackagePath
+  hackage <- if useDefaultHackage then defaultHackageDB else loadHackageDB optHackagePath
   C.infoMessage "Loading hackage..."
-  community <- defaultCommunity
+
+  community <- defaultLoadCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
   C.infoMessage "Loading community.db..."
+
   C.infoMessage "Start running..."
   runH hackage community cookedFlags (h optTarget optOutputDir optAur) >>= \case
     Left x -> C.errorMessage $ "Error: " <> (T.pack . show $ x)

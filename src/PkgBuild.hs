@@ -1,6 +1,6 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module PkgBuild
   ( PkgBuild (..),
@@ -10,9 +10,9 @@ module PkgBuild
   )
 where
 
-import Data.Text
+import Data.Text (Text, pack, unpack)
 import Distribution.SPDX.LicenseId
-import NeatInterpolation
+import NeatInterpolation (text)
 
 data PkgBuild = PkgBuild
   { _hkgName :: String,

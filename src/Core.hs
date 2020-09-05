@@ -12,17 +12,17 @@ import Data.List (intercalate, stripPrefix)
 import qualified Data.Map as Map
 import qualified Data.Set as S
 import qualified Distribution.Compat.Lens as L
-import Distribution.Compiler
+import Distribution.Compiler (CompilerFlavor (..))
 import Distribution.PackageDescription
 import Distribution.SPDX
-import Distribution.System
+import Distribution.System (Arch (X86_64), OS (Windows))
 import qualified Distribution.Types.BuildInfo.Lens as L
-import Distribution.Types.CondTree
-import Distribution.Types.Dependency
+import Distribution.Types.CondTree (simplifyCondTree)
+import Distribution.Types.Dependency (Dependency, depPkgName)
 import qualified Distribution.Types.PackageId as I
-import Distribution.Types.PackageName
-import Distribution.Types.UnqualComponentName
-import Distribution.Types.Version
+import Distribution.Types.PackageName (PackageName, unPackageName)
+import Distribution.Types.UnqualComponentName (UnqualComponentName)
+import Distribution.Types.Version (mkVersion, versionNumbers)
 import Distribution.Types.VersionRange
 import Hackage
 import Lens.Micro

@@ -2,9 +2,7 @@
 
 module Community
   ( defaultCommunityPath,
-    loadCommunity,
-    cookCommunity,
-    defaultCommunity,
+    defaultLoadCommunity,
     isInCommunity,
   )
 where
@@ -18,7 +16,7 @@ import Data.List (intercalate)
 import Data.List.Split (splitOn)
 import qualified Data.Set as S
 import Distribution.Types.PackageName (PackageName, unPackageName)
-import System.FilePath
+import System.FilePath ( (</>) )
 import Types
 
 defaultCommunityPath :: FilePath
@@ -45,8 +43,8 @@ cookCommunity = mapC (go . (splitOn "-"))
           then intercalate "-" . fst . splitAt (s - 3) . tail $ list
           else intercalate "-" . fst . splitAt (s - 2) $ list
 
-defaultCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => m CommunityDB
-defaultCommunity = fmap S.fromList $ runConduitRes $ loadCommunity defaultCommunityPath .| cookCommunity .| sinkList
+defaultLoadCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
+defaultLoadCommunity path = fmap S.fromList $ runConduitRes $ loadCommunity path .| cookCommunity .| sinkList
 
 isInCommunity :: Member CommunityEnv r => PackageName -> Sem r Bool
 isInCommunity name =

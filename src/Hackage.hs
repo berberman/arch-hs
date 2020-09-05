@@ -9,11 +9,15 @@ where
 
 import qualified Data.Map as Map
 import Distribution.Hackage.DB (HackageDB, cabalFile, readTarball)
-import Distribution.Types.GenericPackageDescription
+import Distribution.Types.GenericPackageDescription (Flag, GenericPackageDescription (genPackageFlags))
 import Distribution.Types.PackageName (PackageName)
 import Lens.Micro
 import System.Directory
-import System.FilePath
+  ( findFile,
+    getHomeDirectory,
+    listDirectory,
+  )
+import System.FilePath ((</>))
 import Types
 
 defaultHackagePath :: IO FilePath
