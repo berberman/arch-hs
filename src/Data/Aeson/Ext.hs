@@ -1,33 +1,39 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RankNTypes       #-}
-{-# LANGUAGE TemplateHaskell  #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Data.Aeson.Ext
-  ( generateJSONInstance
-  , parseJSONDrop
-  , toJSONDrop
-  ) where
+  ( generateJSONInstance,
+    parseJSONDrop,
+    toJSONDrop,
+  )
+where
 
-import           Data.Aeson
-import           Data.Aeson.Types
-import           GHC.Generics        (Generic, Rep)
-import           Language.Haskell.TH
+import Data.Aeson
+import Data.Aeson.Types
+import GHC.Generics (Generic, Rep)
+import Language.Haskell.TH
 
 dropSize :: Type -> Q Int
 dropSize (ConT n) = do
   info <- reify n
   case info of
-    (TyConI (DataD _ _ [] _ cons _))  -> go cons
+    (TyConI (DataD _ _ [] _ cons _)) -> go cons
     (TyConI (NewtypeD _ _ _ _ con _)) -> go [con]
     _ -> fail "Unsupported."
   where
+    -- Try only the first record constructor
+    rec (x : _) = case x of
+      (RecC _ f) -> f
+      _ -> fail "Unsupported"
+    rec [] = fail "Unsupported"
     go cons = do
-      let (RecC _ fields) = head cons
-          -- Try only the first record constructor
-          -- Find prefix from the first field
+      let fields = rec cons
+      -- Find prefix from the first field
       let (name, _, _) = head fields
       let str = nameBase name
       return . (+ 1) $ length str - length (dropWhile (/= '_') str)
+dropSize _ = fail "Unsupported"
 
 generateToJSONInstance :: Name -> DecQ
 generateToJSONInstance targetType =
@@ -48,16 +54,18 @@ generateJSONInstance name = do
   return [from, to]
 
 toJSONDrop ::
-     forall a. (Generic a, GToJSON Zero (Rep a))
-  => Int
-  -> a
-  -> Value
+  forall a.
+  (Generic a, GToJSON Zero (Rep a)) =>
+  Int ->
+  a ->
+  Value
 toJSONDrop prefix =
   genericToJSON defaultOptions {fieldLabelModifier = drop prefix, omitNothingFields = True, sumEncoding = UntaggedValue}
 
 parseJSONDrop ::
-     forall a. (Generic a, GFromJSON Zero (Rep a))
-  => Int
-  -> Value
-  -> Parser a
+  forall a.
+  (Generic a, GFromJSON Zero (Rep a)) =>
+  Int ->
+  Value ->
+  Parser a
 parseJSONDrop prefix = genericParseJSON defaultOptions {fieldLabelModifier = drop prefix, sumEncoding = UntaggedValue}

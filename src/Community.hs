@@ -9,15 +9,15 @@ where
 
 import Conduit
 import Control.Monad (when)
-import Data.Char (toLower)
 import qualified Data.Conduit.Tar as Tar
 import qualified Data.Conduit.Zlib as Zlib
 import Data.List (intercalate)
 import Data.List.Split (splitOn)
 import qualified Data.Set as S
 import Distribution.Types.PackageName (PackageName, unPackageName)
-import System.FilePath ( (</>) )
+import System.FilePath ((</>))
 import Types
+import Utils
 
 defaultCommunityPath :: FilePath
 defaultCommunityPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "community.db"
@@ -51,4 +51,4 @@ isInCommunity name =
   ask @CommunityDB >>= \db ->
     return $ case splitOn "-" . unPackageName $ name of
       ("haskell" : xs) -> intercalate "-" xs `elem` db
-      _ -> (fmap toLower $ unPackageName name) `elem` db
+      _ -> (toLower' $ unPackageName name) `elem` db

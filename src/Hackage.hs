@@ -4,10 +4,12 @@ module Hackage
     loadHackageDB,
     getLatestCabal,
     getPackageFlag,
+    traverseHackage
   )
 where
 
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 import Distribution.Hackage.DB (HackageDB, cabalFile, readTarball)
 import Distribution.Types.GenericPackageDescription (Flag, GenericPackageDescription (genPackageFlags))
 import Distribution.Types.PackageName (PackageName)
@@ -48,3 +50,13 @@ getPackageFlag :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r [Fla
 getPackageFlag name = do
   cabal <- getLatestCabal name
   return $ cabal & genPackageFlags
+
+traverseHackage :: (Member HackageEnv r, Applicative f) => ((PackageName, GenericPackageDescription) -> f b) -> Sem r (f [b])
+traverseHackage f = do
+  db <- ask @HackageDB
+  let x =
+        Map.toList
+          . Map.map (cabalFile . (^. _2) . fromJust)
+          . Map.filter (/= Nothing)
+          $ Map.map Map.lookupMax db
+  return $ traverse f x

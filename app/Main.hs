@@ -112,7 +112,7 @@ myFlagParser =
 h :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr] r => String -> FilePath -> Bool -> Sem r ()
 h name path aurSupport = do
   let target = mkPackageName name
-  deps <- getDependencies S.empty 0 target
+  deps <- getDependencies S.empty target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
 

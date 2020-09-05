@@ -61,11 +61,11 @@ evalConditionTree name cond = do
 getDependencies ::
   Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r =>
   S.Set PackageName ->
-  Int ->
   PackageName ->
   Sem r (G.AdjacencyMap (S.Set DependencyType) PackageName)
-getDependencies resolved n name = do
+getDependencies resolved name = do
   cabal <- getLatestCabal name
+  -- Ignore subLibraries
   (libDeps, libToolsDeps) <- collectLibDeps cabal
   (exeDeps, exeToolsDeps) <- collectExeDeps cabal
   (testDeps, testToolsDeps) <- collectTestDeps cabal
@@ -96,8 +96,8 @@ getDependencies resolved n name = do
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies (S.insert name (resolved)) (n + 1)) $ ignored (libDeps)
-  nextExe <- mapM (getDependencies (S.insert name (resolved)) (n + 1)) $ ignored . fmap snd . flatten . uname Exe $ exeDeps
+  nextLib <- mapM (getDependencies (S.insert name resolved)) $ ignored (libDeps)
+  nextExe <- mapM (getDependencies (S.insert name resolved)) $ ignored . fmap snd . flatten . uname Exe $ exeDeps
   return $
     currentLib
       <+> currentLibDeps
