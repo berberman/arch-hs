@@ -85,7 +85,7 @@ instance (FromJSON a) => FromJSON (AurReply a) where
         <*> v .: "type"
         <*> v .: "resultcount"
         <*> v .: "results"
-
+  parseJSON  _  = fail "Unable to parse AUR reply."
 instance (ToJSON a) => ToJSON (AurReply a)
 
 $(generateJSONInstance ''AurSearch)

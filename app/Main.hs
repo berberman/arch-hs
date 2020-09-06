@@ -13,13 +13,15 @@ import Community
 import Conduit
 import Control.Monad (filterM, when)
 import Core
-import Data.List (groupBy, isInfixOf)
+import Data.List (groupBy, intercalate, isInfixOf)
+import Data.List.Split (splitOn)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Distribution.Hackage.DB (HackageDB)
 import Distribution.PackageDescription (Flag, FlagAssignment, flagDefault, flagDescription, flagManual, flagName, insertFlagAssignment, mkFlagAssignment, mkFlagName, unFlagAssignment, unFlagName)
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
+import Distribution.Types.UnqualComponentName (mkUnqualComponentName)
 import Hackage
 import Lens.Micro
 import Local
@@ -36,6 +38,7 @@ data Options = Options
     optCommunityPath :: FilePath,
     optOutputDir :: FilePath,
     optFlags :: [(String, String, Bool)],
+    optSkip :: [String],
     optAur :: Bool,
     optTarget :: String
   }
@@ -68,11 +71,19 @@ options =
           <> value ""
       )
     <*> option
-      myFlagReader
+      optFlagReader
       ( long "flags"
           <> metavar "package_name:flag_name:true|false,..."
           <> short 'f'
           <> help "Flag assignments for packages - e.g. inline-c:gsl-example:true (separated by ',')"
+          <> value []
+      )
+    <*> option
+      optSkipReader
+      ( long "skip"
+          <> metavar "component_name,..."
+          <> short 's'
+          <> help "Skip a runnable component (executable, test suit, or benchmark) in dependency calculation"
           <> value []
       )
     <*> switch
@@ -82,16 +93,16 @@ options =
       )
     <*> strArgument (metavar "TARGET")
 
-myFlagReader :: ReadM [(String, String, Bool)]
-myFlagReader =
+optFlagReader :: ReadM [(String, String, Bool)]
+optFlagReader =
   eitherReader
-    ( \s -> case M.parse myFlagParser "" s of
+    ( \s -> case M.parse optFlagParser "" s of
         Right x -> Right x
         Left err -> Left $ M.errorBundlePretty err
     )
 
-myFlagParser :: M.Parsec Void String [(String, String, Bool)]
-myFlagParser =
+optFlagParser :: M.Parsec Void String [(String, String, Bool)]
+optFlagParser =
   ( do
       pkg <- M.manyTill M.anySingle $ M.single ':'
       flg <- M.manyTill M.anySingle $ M.single ':'
@@ -107,12 +118,15 @@ myFlagParser =
         "false" -> return False
         _ -> fail $ "unknown bool: " ++ s
 
+optSkipReader :: ReadM [String]
+optSkipReader = eitherReader $ Right . splitOn ","
+
 -----------------------------------------------------------------------------
 
-h :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr] r => String -> FilePath -> Bool -> Sem r ()
-h name path aurSupport = do
+h :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr] r => String -> FilePath -> Bool -> [String] -> Sem r ()
+h name path aurSupport skip = do
   let target = mkPackageName name
-  deps <- getDependencies S.empty target
+  deps <- getDependencies S.empty (fmap mkUnqualComponentName skip) target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
 
@@ -137,7 +151,7 @@ h name path aurSupport = do
             .| sinkList
       toBePacked = cooked ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
   (cookedAgain, toBePackedAgain) <- do
-    embed $ C.infoMessage "Start searching AUR..."
+    embed . when aurSupport $ C.infoMessage "Start searching AUR..."
     aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> (T.pack $ unPackageName n)); isInAur n) $ toBePacked ^.. each . pkgName else return []
     let cookedAgain =
           if aurSupport
@@ -215,10 +229,17 @@ main = do
 
   let isFlagEmpty = optFlags == []
       cookedFlags = cookFlag optFlags
+      isSkipEmpty = optSkip == []
+
   when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag values may make difference in dependency solving."
   when (not isFlagEmpty) $ do
     C.infoMessage "You assigned flags:"
     putStrLn . prettyFlagAssignments $ cookedFlags
+
+  when (not isSkipEmpty) $ do
+    C.infoMessage "You chose to skip:"
+    putStrLn $ prettySkip optSkip
+
   when optAur $ C.infoMessage "You passed -a, searching AUR may takes a long time."
 
   hackage <- if useDefaultHackage then defaultHackageDB else loadHackageDB optHackagePath
@@ -228,11 +249,14 @@ main = do
   C.infoMessage "Loading community.db..."
 
   C.infoMessage "Start running..."
-  runH hackage community cookedFlags (h optTarget optOutputDir optAur) >>= \case
+  runH hackage community cookedFlags (h optTarget optOutputDir optAur optSkip) >>= \case
     Left x -> C.errorMessage $ "Error: " <> (T.pack . show $ x)
     _ -> C.successMessage "Success!"
 
 -----------------------------------------------------------------------------
+
+prettySkip :: [String] -> String
+prettySkip = C.formatWith [C.magenta] . intercalate ", "
 
 cookFlag :: [(String, String, Bool)] -> Map.Map PackageName FlagAssignment
 cookFlag [] = Map.empty

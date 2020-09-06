@@ -61,15 +61,16 @@ evalConditionTree name cond = do
 getDependencies ::
   Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r =>
   S.Set PackageName ->
+  [UnqualComponentName] ->
   PackageName ->
   Sem r (G.AdjacencyMap (S.Set DependencyType) PackageName)
-getDependencies resolved name = do
+getDependencies resolved skip name = do
   cabal <- getLatestCabal name
   -- Ignore subLibraries
   (libDeps, libToolsDeps) <- collectLibDeps cabal
-  (exeDeps, exeToolsDeps) <- collectExeDeps cabal
-  (testDeps, testToolsDeps) <- collectTestDeps cabal
-  (benchDeps, benchToolsDeps) <- collectBenchMarkDeps cabal
+  (exeDeps, exeToolsDeps) <- collectExeDeps cabal skip
+  (testDeps, testToolsDeps) <- collectTestDeps cabal skip
+  (benchDeps, benchToolsDeps) <- collectBenchMarkDeps cabal skip
   let uname :: (UnqualComponentName -> DependencyType) -> ComponentPkgList -> [(DependencyType, PkgList)]
       uname cons list = zip (fmap (cons . fst) list) (fmap snd list)
 
@@ -96,8 +97,8 @@ getDependencies resolved name = do
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies (S.insert name resolved)) $ ignored (libDeps)
-  nextExe <- mapM (getDependencies (S.insert name resolved)) $ ignored . fmap snd . flatten . uname Exe $ exeDeps
+  nextLib <- mapM (getDependencies (S.insert name resolved) skip) $ ignored (libDeps)
+  nextExe <- mapM (getDependencies (S.insert name resolved) skip) $ ignored . fmap snd . flatten . uname Exe $ exeDeps
   return $
     currentLib
       <+> currentLibDeps
@@ -124,21 +125,22 @@ collectRunnableDeps ::
   (Semigroup k, L.HasBuildInfo k, Members [HackageEnv, FlagAssignmentEnv] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
+  [UnqualComponentName] ->
   Sem r (ComponentPkgList, ComponentPkgList)
-collectRunnableDeps f cabal = do
+collectRunnableDeps f cabal skip = do
   let exes = cabal & f
-  info <- zip (fmap fst exes) <$> mapM (evalConditionTree (getPkgName cabal) . snd) exes
+  info <- filter (not . (`elem` skip) . fst) . zip (fmap fst exes) <$> mapM (evalConditionTree (getPkgName cabal) . snd) exes
   let runnableDeps = fmap (mapSnd $ fmap depPkgName . targetBuildDepends) info
       toolDeps = fmap (mapSnd $ fmap unExe . buildToolDepends) info
   return (runnableDeps, toolDeps)
 
-collectExeDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (ComponentPkgList, ComponentPkgList)
+collectExeDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectExeDeps = collectRunnableDeps condExecutables
 
-collectTestDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (ComponentPkgList, ComponentPkgList)
+collectTestDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
-collectBenchMarkDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (ComponentPkgList, ComponentPkgList)
+collectBenchMarkDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectBenchMarkDeps = collectRunnableDeps condBenchmarks
 
 -----------------------------------------------------------------------------

@@ -16,13 +16,15 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 
 ## Prerequisite
 
+`arch-hs` is just a PKGBUILD text file generator, which is not integrated with `pacman`, and depends on nothing than:
+
 * Pacman database, ~~i.e., archlinux system.~~ the db file can be specified manually for now. 
 
 * Hackage database tarball, usually provided by `cabal-install`.
 
-`arch-hs` has not been released currently, thus `stack` is required to build from source.
+## Installation
 
-## Getting Started
+`arch-hs` has not been released currently, thus `stack` is required to build from source.
 
 ### Install from AUR
 
@@ -30,27 +32,48 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 ❯ yay -S arch-hs-git
 ```
 
-### Examples:
+## Usage
 
+### Output
 ```
 ❯ arch-hs -o "/home/berberman/Desktop/test/" termonad
 ```
 
 This will generate a series of PKGBUILD including termonad with its dependencies into the output dir.
 
+### Flag Assignments
 ```
 ❯ arch-hs -f inline-c:gsl-example:true -o "/home/berberman/Desktop/test/" termonad
 ```
 
 Using `-f` can pass flags, which may affect the results of solving.  
 
+### AUR Searching
+```
+❯ arch-hs -a termonad
+```
+
+Using `-a` can regard AUR as another package provider. `arch-hs` will try to search missing packages in AUR.
+
+### Skipping Components
+```
+❯ arch-hs -c termonad-test termonad
+```
+
+Using `-c` can force skip a runnable component in dependency solving.
+This is useful when a package doesn't provide flag to disable some runnables which will be built by default but trivial in system level packaging.
+Notice that this only makes sense in the lifetime of `arch-hs`, whereas generated PKGBUILD and actual build processes will not be affected.
+
+
+### Help
+
 ```
 ❯ arch-hs --help
 arch-hs - a program generating PKGBUILD for hackage packages.
 
 Usage: arch-hs [-h|--hackage PATH] [-c|--community PATH] [-o|--output PATH] 
-               [-f|--flags package_name:flag_name:true|false,...] [-a|--aur]
-               TARGET
+               [-f|--flags package_name:flag_name:true|false,...] 
+               [-s|--skip component_name,...] [-a|--aur] TARGET
   Try to reach the TARGET QAQ.
 
 Available options:
@@ -63,6 +86,9 @@ Available options:
   -f,--flags package_name:flag_name:true|false,...
                            Flag assignments for packages - e.g.
                            inline-c:gsl-example:true (separated by ',')
+  -s,--skip component_name,...
+                           Skip a runnable component (executable, test suit, or
+                           benchmark) in dependency calculation
   -a,--aur                 Enable AUR searching
   -h,--help                Show this help text
 
