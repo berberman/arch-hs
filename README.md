@@ -16,11 +16,11 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 
 ## Prerequisite
 
-`arch-hs` is just a PKGBUILD text file generator, which is not integrated with `pacman`, and depends on nothing than:
+`arch-hs` is just a PKGBUILD text file generator, which is not integrated with `pacman`, depending on nothing than:
 
-* Pacman database, ~~i.e., archlinux system.~~ the db file can be specified manually for now. 
+* Pacman database (`community.db`), ~~i.e., archlinux system.~~ the db file can be specified manually for now. 
 
-* Hackage database tarball, usually provided by `cabal-install`.
+* Hackage database tarball (`00-index.tar`), usually provided by `cabal-install`.
 
 ## Installation
 
@@ -39,11 +39,11 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 ❯ arch-hs -o "/home/berberman/Desktop/test/" termonad
 ```
 
-This will generate a series of PKGBUILD including termonad with its dependencies into the output dir.
+This will generate a series of PKGBUILD including `termonad` with its dependencies into the output dir.
 
 ### Flag Assignments
 ```
-❯ arch-hs -f inline-c:gsl-example:true -o "/home/berberman/Desktop/test/" termonad
+❯ arch-hs -f inline-c:gsl-example:true termonad
 ```
 
 Using `-f` can pass flags, which may affect the results of solving.  
@@ -60,8 +60,8 @@ Using `-a` can regard AUR as another package provider. `arch-hs` will try to sea
 ❯ arch-hs -c termonad-test termonad
 ```
 
-Using `-c` can force skip a runnable component in dependency solving.
-This is useful when a package doesn't provide flag to disable some runnables which will be built by default but trivial in system level packaging.
+Using `-c` can force skip runnable components in dependency solving.
+This is useful when a package doesn't provide flag to disable its runnables, which will be built by default but are trivial in system level packaging.
 Notice that this only makes sense in the lifetime of `arch-hs`, whereas generated PKGBUILD and actual build processes will not be affected.
 
 
@@ -108,7 +108,7 @@ file patches, loose of version constraints, etc. are need to be done manually, s
 
 - [ ] Structuralized PKGBUILD template.
 
-- [ ] Ability to Switch *buildable* of a component in the beginning.
+- [x] ~~Ability to switch *buildable* of a component in the beginning.~~ Skipping specific components as alternative.
 
 - [x] AUR support.
 
