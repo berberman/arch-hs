@@ -149,7 +149,7 @@ h name path aurSupport skip = do
             .| fillProvidedPkgs communityProvideList ByCommunity
             .| fillProvidedDeps communityProvideList ByCommunity
             .| sinkList
-      toBePacked = cooked ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
+      toBePacked = cooked ^.. each . filtered (\case ProvidedPackage _ _ -> False; _ -> True)
   (cookedAgain, toBePackedAgain) <- do
     embed . when aurSupport $ C.infoMessage "Start searching AUR..."
     aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> (T.pack $ unPackageName n)); isInAur n) $ toBePacked ^.. each . pkgName else return []
@@ -164,7 +164,7 @@ h name path aurSupport skip = do
             else cooked
         toBePackedAgain =
           if aurSupport
-            then cookedAgain ^.. each . filtered (\case ProvidedPackage {..} -> False; _ -> True)
+            then cookedAgain ^.. each . filtered (\case ProvidedPackage _ _ -> False; _ -> True)
             else toBePacked
     return (cookedAgain, toBePackedAgain)
 

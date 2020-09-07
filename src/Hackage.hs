@@ -11,7 +11,6 @@ where
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Distribution.Hackage.DB (HackageDB, cabalFile, readTarball)
-import Distribution.Types.GenericPackageDescription (Flag, GenericPackageDescription (genPackageFlags))
 import Distribution.Types.PackageName (PackageName)
 import Lens.Micro
 import System.Directory
@@ -21,6 +20,8 @@ import System.Directory
   )
 import System.FilePath ((</>))
 import Types
+import Distribution.Types.GenericPackageDescription (genPackageFlags, GenericPackageDescription)
+import Distribution.Types.Flag (Flag)
 
 defaultHackagePath :: IO FilePath
 defaultHackagePath = do

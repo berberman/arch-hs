@@ -24,6 +24,7 @@ import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName)
 import Distribution.Types.Version (mkVersion, versionNumbers)
 import Distribution.Types.VersionRange
+import Distribution.Utils.ShortText (fromShortText)
 import Hackage
 import Lens.Micro
 import Local
@@ -153,7 +154,7 @@ cabalToPkgBuild pkg = do
       rawName = toLower' _hkgName
       _pkgName = maybe rawName id $ stripPrefix "haskell-" rawName
       _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
-      _pkgDesc = synopsis cabal
+      _pkgDesc = fromShortText $ synopsis cabal
       getL (NONE) = ""
       getL (License e) = getE e
       getE (ELicense (ELicenseId x) _) = show . mapLicense $ x
@@ -186,7 +187,7 @@ cabalToPkgBuild pkg = do
       notMyself x = x ^. depName /= name
       selectDepType f x = any f (x ^. depType)
 
-  _url <- case homepage cabal of
+  _url <- case fromShortText $ homepage cabal of
     "" -> fromJust . repoLocation <=< head' $ sourceRepos cabal
     x -> return x
   return PkgBuild {..}
