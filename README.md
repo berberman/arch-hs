@@ -151,7 +151,7 @@ package() {
 
 `arch-hs` will collect the information from hackage db, and apply it into a fixed template after some processing steps
 including renaming, matching license, and filling out dependencies etc.
-If the package dosen't have test suits, `check()` will be removed. However, packaging haven't been done so far.
+If the package doesn't have test suits, `check()` will be removed. However, packaging haven't been done so far.
 `arch-hs` may does well statically, but we should guarantee that this package can be built by ghc with the latest dependencies;
 hence some patchs may be required in `prepare()`.
 
