@@ -101,7 +101,9 @@ data SolvedDependency = SolvedDependency {_depProvider :: Maybe DependencyProvid
   deriving stock (Show, Eq, Generic)
   deriving anyclass (NFData)
 
-data SolvedPackage = ProvidedPackage {_pkgName :: PackageName, _pkgProvider :: DependencyProvider} | SolvedPackage {_pkgName :: PackageName, _pkgDeps :: [SolvedDependency]}
+data SolvedPackage
+  = ProvidedPackage {_pkgName :: PackageName, _pkgProvider :: DependencyProvider}
+  | SolvedPackage {_pkgName :: PackageName, _pkgDeps :: [SolvedDependency]}
   deriving stock (Show, Eq, Generic)
   deriving anyclass (NFData)
 
