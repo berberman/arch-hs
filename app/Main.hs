@@ -222,7 +222,7 @@ main = do
             <> header "arch-hs - a program generating PKGBUILD for hackage packages."
         )
   let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
-      useDefaultCommunity = "/var/lib/pacman/sync/communidy.db" == optCommunityPath
+      useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
 
   when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default places."
   when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default places."
