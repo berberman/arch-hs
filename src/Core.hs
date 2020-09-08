@@ -32,11 +32,6 @@ import PkgBuild
 import Types
 import Utils
 
-{- For ghc 8.8.3, the following modules are included in
-  GenericPackageDescription.
-import Distribution.Types.ConfVar
-import Distribution.Types.Flag -}
-
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Windows) = Right True
 archEnv _ (OS _) = Right False
@@ -71,7 +66,8 @@ getDependencies resolved skip name = do
   (libDeps, libToolsDeps) <- collectLibDeps cabal
   (exeDeps, exeToolsDeps) <- collectExeDeps cabal skip
   (testDeps, testToolsDeps) <- collectTestDeps cabal skip
-  (benchDeps, benchToolsDeps) <- collectBenchMarkDeps cabal skip
+  -- Ignore benchmarks
+  -- (benchDeps, benchToolsDeps) <- collectBenchMarkDeps cabal skip
   let uname :: (UnqualComponentName -> DependencyType) -> ComponentPkgList -> [(DependencyType, PkgList)]
       uname cons list = zip (fmap (cons . fst) list) (fmap snd list)
 
@@ -93,8 +89,9 @@ getDependencies resolved skip name = do
       currentExeTools = runnableEdges ExeBuildTools exeToolsDeps
       currentTest = runnableEdges Test testDeps
       currentTestTools = runnableEdges TestBuildTools testToolsDeps
-      currentBench = runnableEdges Types.Benchmark benchDeps
-      currentBenchTools = runnableEdges BenchmarkBuildTools benchToolsDeps
+
+      -- currentBench = runnableEdges Types.Benchmark benchDeps
+      -- currentBenchTools = runnableEdges BenchmarkBuildTools benchToolsDeps
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
@@ -107,8 +104,8 @@ getDependencies resolved skip name = do
       <+> currentExeTools
       <+> currentTest
       <+> currentTestTools
-      <+> currentBench
-      <+> currentBenchTools
+      -- <+> currentBench
+      -- <+> currentBenchTools
       <+> (G.overlays nextLib)
       <+> (G.overlays nextExe)
 
@@ -141,8 +138,8 @@ collectExeDeps = collectRunnableDeps condExecutables
 collectTestDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
-collectBenchMarkDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
-collectBenchMarkDeps = collectRunnableDeps condBenchmarks
+-- collectBenchMarkDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+-- collectBenchMarkDeps = collectRunnableDeps condBenchmarks
 
 -----------------------------------------------------------------------------
 
