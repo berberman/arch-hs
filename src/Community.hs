@@ -2,7 +2,7 @@
 
 module Community
   ( defaultCommunityPath,
-    defaultLoadCommunity,
+    loadProcessedCommunity,
     isInCommunity,
   )
 where
@@ -43,8 +43,8 @@ cookCommunity = mapC (go . (splitOn "-"))
           then intercalate "-" . fst . splitAt (s - 3) . tail $ list
           else intercalate "-" . fst . splitAt (s - 2) $ list
 
-defaultLoadCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
-defaultLoadCommunity path = fmap S.fromList $ runConduitRes $ loadCommunity path .| cookCommunity .| sinkList
+loadProcessedCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
+loadProcessedCommunity path = fmap S.fromList $ runConduitRes $ loadCommunity path .| cookCommunity .| sinkList
 
 isInCommunity :: Member CommunityEnv r => PackageName -> Sem r Bool
 isInCommunity name =

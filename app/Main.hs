@@ -242,10 +242,10 @@ main = do
 
   when optAur $ C.infoMessage "You passed -a, searching AUR may takes a long time."
 
-  hackage <- if useDefaultHackage then defaultHackageDB else loadHackageDB optHackagePath
+  hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
   C.infoMessage "Loading hackage..."
 
-  community <- defaultLoadCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
+  community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
   C.infoMessage "Loading community.db..."
 
   C.infoMessage "Start running..."

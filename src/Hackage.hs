@@ -1,6 +1,5 @@
 module Hackage
-  ( defaultHackagePath,
-    defaultHackageDB,
+  ( lookupHackagePath,
     loadHackageDB,
     getLatestCabal,
     getPackageFlag,
@@ -23,17 +22,14 @@ import Types
 import Distribution.Types.GenericPackageDescription (genPackageFlags, GenericPackageDescription)
 import Distribution.Types.Flag (Flag)
 
-defaultHackagePath :: IO FilePath
-defaultHackagePath = do
+lookupHackagePath :: IO FilePath
+lookupHackagePath = do
   home <- (\d -> d </> ".cabal" </> "packages") <$> getHomeDirectory
   subs <- fmap (home </>) <$> listDirectory home
   target <- findFile subs "00-index.tar"
   case target of
     Just x -> return x
     Nothing -> fail $ "Unable to find hackage index [00-index.tar] from " ++ show subs
-
-defaultHackageDB :: IO HackageDB
-defaultHackageDB = defaultHackagePath >>= loadHackageDB
 
 loadHackageDB :: FilePath -> IO HackageDB
 loadHackageDB = readTarball Nothing
