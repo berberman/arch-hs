@@ -24,7 +24,7 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 
 ## Installation
 
-`arch-hs` has not been released currently, thus `stack` or `cabal` is required to build from source.
+`arch-hs` has not been released currently, thus it is required to build from source.
 `arch-hs` only supports the latest GHC version.
 
 ### Install from AUR
@@ -33,7 +33,9 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 ❯ yay -S arch-hs-git
 ```
 
-### Install from source
+This is the **recommended** way, since it doesn't require `cabal` or `stack`, using system level ghc and haskell packages instead.
+
+### Install from source (development)
 
 ```
 ❯ git clone https://github.com/haskell/haskell-language-server
