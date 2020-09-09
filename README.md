@@ -183,7 +183,7 @@ Using `-a` can regard AUR as another package provider. `arch-hs` will try to sea
 
 ### Skipping Components
 ```
-❯ arch-hs -c termonad-test termonad
+❯ arch-hs -s termonad-test termonad
 ```
 
 Using `-c` can force skip runnable components in dependency solving.
@@ -241,6 +241,8 @@ file patches, loose of version constraints, etc. are need to be done manually, s
 - [ ] Logging system.
 
 - [ ] A watchdog during dependency calculation.
+
+- [ ] Working with given `.cabal` files which havn't been released to hackage.
 
 
 ## Contributing
