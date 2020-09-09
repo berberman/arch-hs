@@ -1,15 +1,21 @@
 module Hackage
   ( lookupHackagePath,
     loadHackageDB,
+    insertDB,
+    parseCabalFile,
     getLatestCabal,
     getPackageFlag,
-    traverseHackage
+    traverseHackage,
   )
 where
 
+import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
-import Distribution.Hackage.DB (HackageDB, cabalFile, readTarball)
+import Distribution.Hackage.DB
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
+import Distribution.Types.Flag (Flag)
+import Distribution.Types.GenericPackageDescription (GenericPackageDescription, genPackageFlags)
 import Distribution.Types.PackageName (PackageName)
 import Lens.Micro
 import System.Directory
@@ -19,8 +25,7 @@ import System.Directory
   )
 import System.FilePath ((</>))
 import Types
-import Distribution.Types.GenericPackageDescription (genPackageFlags, GenericPackageDescription)
-import Distribution.Types.Flag (Flag)
+import Utils
 
 lookupHackagePath :: IO FilePath
 lookupHackagePath = do
@@ -33,6 +38,21 @@ lookupHackagePath = do
 
 loadHackageDB :: FilePath -> IO HackageDB
 loadHackageDB = readTarball Nothing
+
+insertDB :: GenericPackageDescription -> HackageDB -> HackageDB
+insertDB cabal db = Map.insert name packageData db
+  where
+    name = getPkgName cabal
+    version = getPkgVersion cabal
+    versionData = VersionData cabal $ Map.empty
+    packageData = Map.singleton version versionData
+
+parseCabalFile :: FilePath -> IO GenericPackageDescription
+parseCabalFile path = do
+  bs <- BS.readFile path
+  case parseGenericPackageDescriptionMaybe bs of
+    Just x -> return x
+    _ -> fail $ "Failed to parse .cabal from " ++ path
 
 getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
 getLatestCabal name = do

@@ -161,7 +161,7 @@ cabalToPkgBuild pkg = do
       getE (EOr x y) = getE x ++ " " ++ getE y
 
       _license = getL . license $ cabal
-      _enableCheck = any id $ pkg ^. pkgDeps & mapped %~ (\dep -> dep ^. depName == pkg ^. pkgName)
+      _enableCheck = any id $ pkg ^. pkgDeps & mapped %~ (\dep -> selectDepType isTest dep && dep ^. depName == pkg ^. pkgName)
       depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepType isLib x || selectDepType isExe x))
       makeDepends =
         pkg ^. pkgDeps

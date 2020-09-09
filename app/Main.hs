@@ -7,124 +7,32 @@ module Main (main) where
 
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
+import Args
 import Aur
 import qualified Colourista as C
 import Community
 import Conduit
+import qualified Control.Exception as CE
 import Control.Monad (filterM, when)
 import Core
 import Data.List (groupBy, intercalate, isInfixOf)
-import Data.List.Split (splitOn)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Distribution.Hackage.DB (HackageDB)
-import Distribution.PackageDescription (Flag, FlagAssignment, flagDefault, flagDescription, flagManual, flagName, insertFlagAssignment, mkFlagAssignment, mkFlagName, unFlagAssignment, unFlagName)
+import Distribution.PackageDescription
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (mkUnqualComponentName)
 import Hackage
 import Lens.Micro
 import Local
-import Options.Applicative
 import PkgBuild
 import System.Directory (createDirectoryIfMissing)
-import System.FilePath ((</>))
-import qualified Text.Megaparsec as M
-import qualified Text.Megaparsec.Char as M
+import System.FilePath (takeFileName, (</>))
 import Types
 
-data Options = Options
-  { optHackagePath :: FilePath,
-    optCommunityPath :: FilePath,
-    optOutputDir :: FilePath,
-    optFlags :: [(String, String, Bool)],
-    optSkip :: [String],
-    optAur :: Bool,
-    optTarget :: String
-  }
-  deriving stock (Show)
-
-options :: Parser Options
-options =
-  Options
-    <$> strOption
-      ( long "hackage"
-          <> metavar "PATH"
-          <> short 'h'
-          <> help "Path to 00-index.tar"
-          <> showDefault
-          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/00-index.tar"
-      )
-    <*> strOption
-      ( long "community"
-          <> metavar "PATH"
-          <> short 'c'
-          <> help "Path to community.db"
-          <> showDefault
-          <> value "/var/lib/pacman/sync/community.db"
-      )
-    <*> strOption
-      ( long "output"
-          <> metavar "PATH"
-          <> short 'o'
-          <> help "Output path to generated PKGBUILD files (empty means dry run)"
-          <> value ""
-      )
-    <*> option
-      optFlagReader
-      ( long "flags"
-          <> metavar "package_name:flag_name:true|false,..."
-          <> short 'f'
-          <> help "Flag assignments for packages - e.g. inline-c:gsl-example:true (separated by ',')"
-          <> value []
-      )
-    <*> option
-      optSkipReader
-      ( long "skip"
-          <> metavar "component_name,..."
-          <> short 's'
-          <> help "Skip a runnable component (executable, test suit, or benchmark) in dependency calculation"
-          <> value []
-      )
-    <*> switch
-      ( long "aur"
-          <> short 'a'
-          <> help "Enable AUR searching"
-      )
-    <*> strArgument (metavar "TARGET")
-
-optFlagReader :: ReadM [(String, String, Bool)]
-optFlagReader =
-  eitherReader
-    ( \s -> case M.parse optFlagParser "" s of
-        Right x -> Right x
-        Left err -> Left $ M.errorBundlePretty err
-    )
-
-optFlagParser :: M.Parsec Void String [(String, String, Bool)]
-optFlagParser =
-  ( do
-      pkg <- M.manyTill M.anySingle $ M.single ':'
-      flg <- M.manyTill M.anySingle $ M.single ':'
-      b <- bool
-      return (pkg, flg, b)
-  )
-    `M.sepBy` ","
-  where
-    bool = do
-      s <- M.string "true" <|> M.string "false"
-      case s of
-        "true" -> return True
-        "false" -> return False
-        _ -> fail $ "unknown bool: " ++ s
-
-optSkipReader :: ReadM [String]
-optSkipReader = eitherReader $ Right . splitOn ","
-
------------------------------------------------------------------------------
-
-h :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr] r => String -> FilePath -> Bool -> [String] -> Sem r ()
-h name path aurSupport skip = do
+app :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr] r => String -> FilePath -> Bool -> [String] -> Sem r ()
+app name path aurSupport skip = do
   let target = mkPackageName name
   deps <- getDependencies S.empty (fmap mkUnqualComponentName skip) target
   inCommunity <- isInCommunity target
@@ -196,13 +104,13 @@ h name path aurSupport skip = do
       )
       toBePackedAgain
 
-runH ::
+runApp ::
   HackageDB ->
   CommunityDB ->
   Map.Map PackageName FlagAssignment ->
   Sem '[CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runH hackage community flags =
+runApp hackage community flags =
   runFinal
     . embedToFinal
     . errorToIOFinal
@@ -212,46 +120,53 @@ runH hackage community flags =
     . runReader community
 
 main :: IO ()
-main = do
-  Options {..} <-
-    execParser $
-      info
-        (options <**> helper)
-        ( fullDesc
-            <> progDesc "Try to reach the TARGET QAQ."
-            <> header "arch-hs - a program generating PKGBUILD for hackage packages."
-        )
-  let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
-      useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
+main = CE.catch @CE.IOException
+  ( do
+      Options {..} <- runArgsParser
 
-  when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default places."
-  when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default places."
+      let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
+          useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
 
-  let isFlagEmpty = optFlags == []
-      cookedFlags = cookFlag optFlags
-      isSkipEmpty = optSkip == []
+      when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default places."
+      when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default places."
 
-  when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag values may make difference in dependency solving."
-  when (not isFlagEmpty) $ do
-    C.infoMessage "You assigned flags:"
-    putStrLn . prettyFlagAssignments $ cookedFlags
+      let isFlagEmpty = optFlags == []
+          cookedFlags = cookFlag optFlags
+          isSkipEmpty = optSkip == []
 
-  when (not isSkipEmpty) $ do
-    C.infoMessage "You chose to skip:"
-    putStrLn $ prettySkip optSkip
+      when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag values may make difference in dependency solving."
+      when (not isFlagEmpty) $ do
+        C.infoMessage "You assigned flags:"
+        putStrLn . prettyFlagAssignments $ cookedFlags
 
-  when optAur $ C.infoMessage "You passed -a, searching AUR may takes a long time."
+      when (not isSkipEmpty) $ do
+        C.infoMessage "You chose to skip:"
+        putStrLn $ prettySkip optSkip
 
-  hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
-  C.infoMessage "Loading hackage..."
+      when optAur $ C.infoMessage "You passed -a, searching AUR may takes a long time."
 
-  community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
-  C.infoMessage "Loading community.db..."
+      hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
+      C.infoMessage "Loading hackage..."
 
-  C.infoMessage "Start running..."
-  runH hackage community cookedFlags (h optTarget optOutputDir optAur optSkip) >>= \case
-    Left x -> C.errorMessage $ "Error: " <> (T.pack . show $ x)
-    _ -> C.successMessage "Success!"
+      let isExtraEmpty = optExtraCabalPath == []
+
+      when (not isExtraEmpty) $
+        C.infoMessage $ "You added " <> (T.pack . intercalate ", " $ map takeFileName optExtraCabalPath) <> " as extra cabal file(s), starting parsing right now."
+
+      parsedExtra <- mapM parseCabalFile optExtraCabalPath
+
+      let newHackage = foldr (\x acc -> x `insertDB` acc) hackage parsedExtra
+
+      community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
+      C.infoMessage "Loading community.db..."
+
+      C.infoMessage "Start running..."
+
+      runApp newHackage community cookedFlags (app optTarget optOutputDir optAur optSkip) >>= \case
+        Left x -> C.errorMessage $ "Error: " <> (T.pack . show $ x)
+        _ -> C.successMessage "Success!"
+  )
+  $ \e -> C.errorMessage $ "IOException: " <> (T.pack . show $ e)
 
 -----------------------------------------------------------------------------
 

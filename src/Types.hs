@@ -33,7 +33,7 @@ module Types
 where
 
 import Control.DeepSeq (NFData)
-import qualified Data.Map.Strict as M
+import Data.Map.Strict (Map)
 import qualified Data.Set as S
 import qualified Distribution.Hackage.DB as DB
 import Distribution.PackageDescription (FlagAssignment)
@@ -55,7 +55,7 @@ type HackageEnv = Reader DB.HackageDB
 
 type CommunityEnv = Reader CommunityDB
 
-type FlagAssignmentEnv = Reader (M.Map PackageName FlagAssignment)
+type FlagAssignmentEnv = Reader (Map PackageName FlagAssignment)
 
 type WithMyErr = Error MyException
 
@@ -94,8 +94,8 @@ data DependencyProvider = ByCommunity | ByAur
   deriving anyclass (NFData)
 
 instance Show DependencyProvider where
-  show ByCommunity = "~ community"
-  show ByAur = "~ aur"
+  show ByCommunity = "community"
+  show ByAur = "aur"
 
 data SolvedDependency = SolvedDependency {_depProvider :: Maybe DependencyProvider, _depName :: PackageName, _depType :: [DependencyType]}
   deriving stock (Show, Eq, Generic)

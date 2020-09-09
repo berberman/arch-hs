@@ -1,5 +1,6 @@
 module Utils
   ( getPkgName,
+    getPkgVersion,
     mapSnd,
     toLower',
     isExe,
@@ -11,7 +12,7 @@ module Utils
     isBenchmark,
     isBenchmarkBuildTools,
     unExe,
-    fixName
+    fixName,
   )
 where
 
@@ -21,6 +22,7 @@ import Distribution.PackageDescription (GenericPackageDescription, package, pack
 import Distribution.Types.ExeDependency (ExeDependency (..))
 import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName (PackageName)
+import Distribution.Version (Version)
 import Types
 
 unExe :: ExeDependency -> PackageName
@@ -28,6 +30,9 @@ unExe (ExeDependency name _ _) = name
 
 getPkgName :: GenericPackageDescription -> PackageName
 getPkgName = I.pkgName . package . packageDescription
+
+getPkgVersion :: GenericPackageDescription -> Version
+getPkgVersion = I.pkgVersion . package . packageDescription
 
 fixName :: String -> String
 fixName s = case splitOn "-" s of

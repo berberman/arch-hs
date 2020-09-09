@@ -227,10 +227,12 @@ For all available options, have a look at the help message.
 * The dependency solver will **ONLY** expand the dependencies of *executables* and *libraries* recursively, because
 circular dependency lies ubiquitously involving *test suites*, *benchmarks*, and their *buildTools*.
 
-* Currently, this `arch-hs`'s functionality is limited to dependency processing, whereas necessary procedures like
+* Currently, `arch-hs`'s functionality is limited to dependency processing, whereas necessary procedures like
 file patches, loose of version constraints, etc. are need to be done manually, so **DO NOT** give too much trust in generated PKGBUILD files.
 
 ## ToDoList
+
+- [ ] **Standardized pretty printing**.
 
 - [ ] Structuralized PKGBUILD template.
 
@@ -242,7 +244,7 @@ file patches, loose of version constraints, etc. are need to be done manually, s
 
 - [ ] A watchdog during dependency calculation.
 
-- [ ] Working with given `.cabal` files which havn't been released to hackage.
+- [x] Working with given `.cabal` files which havn't been released to hackage.
 
 
 ## Contributing

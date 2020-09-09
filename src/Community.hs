@@ -13,7 +13,7 @@ import qualified Data.Conduit.Tar as Tar
 import qualified Data.Conduit.Zlib as Zlib
 import Data.List (intercalate)
 import Data.List.Split (splitOn)
-import qualified Data.Set as S
+import qualified Data.Set as Set
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import System.FilePath ((</>))
 import Types
@@ -44,7 +44,7 @@ cookCommunity = mapC (go . (splitOn "-"))
           else intercalate "-" . fst . splitAt (s - 2) $ list
 
 loadProcessedCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
-loadProcessedCommunity path = fmap S.fromList $ runConduitRes $ loadCommunity path .| cookCommunity .| sinkList
+loadProcessedCommunity path = fmap Set.fromList $ runConduitRes $ loadCommunity path .| cookCommunity .| sinkList
 
 isInCommunity :: Member CommunityEnv r => PackageName -> Sem r Bool
 isInCommunity name =

@@ -73,20 +73,21 @@ common common-options
 library
   import:              common-options
   hs-source-dirs:      src
-  exposed-modules:     Aur, 
-                       PkgDesc, 
-                       Community, 
-                       Core, 
-                       Hackage, 
-                       Local, 
-                       PkgBuild, 
-                       Types, 
-                       Utils, 
+  exposed-modules:     Aur,
+                       PkgDesc,
+                       Community,
+                       Core,
+                       Hackage,
+                       Local,
+                       PkgBuild,
+                       Types,
+                       Utils,
                        Data.Aeson.Ext
 executable arch-hs
   import:              common-options
   hs-source-dirs:      app
   main-is:             Main.hs
+  other-modules:       Args
   build-depends:       arch-hs, optparse-applicative
   ghc-options:         -threaded
                        -rtsopts
