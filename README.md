@@ -38,7 +38,7 @@ This is the **recommended** way, since it doesn't require `cabal` or `stack`, us
 ### Install from source (development)
 
 ```
-❯ git clone https://github.com/haskell/haskell-language-server
+❯ git clone https://github.com/berberman/arch-hs
 ```
 
 Then build it via stack or cabal.
