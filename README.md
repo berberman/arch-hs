@@ -186,10 +186,17 @@ Using `-a` can regard AUR as another package provider. `arch-hs` will try to sea
 ❯ arch-hs -s termonad-test termonad
 ```
 
-Using `-c` can force skip runnable components in dependency solving.
+Using `-s` can force skip runnable components in dependency solving.
 This is useful when a package doesn't provide flag to disable its runnables, which will be built by default but are trivial in system level packaging.
 Notice that this only makes sense in the lifetime of `arch-hs`, whereas generated PKGBUILD and actual build processes will not be affected.
 
+### Extra Cabal Files
+
+```
+❯ arch-hs -e /home/berberman/arch-hs/arch-hs.cabal arch-hs
+```
+
+Using `-e` can can include extra `.cabal` files as supplementary. Useful when the target like `arch-hs` hasn't been released to hackage. 
 
 ### Help
 
@@ -199,7 +206,8 @@ arch-hs - a program generating PKGBUILD for hackage packages.
 
 Usage: arch-hs [-h|--hackage PATH] [-c|--community PATH] [-o|--output PATH] 
                [-f|--flags package_name:flag_name:true|false,...] 
-               [-s|--skip component_name,...] [-a|--aur] TARGET
+               [-s|--skip component_name,...] [-e|--extra PATH_1,...] [-a|--aur]
+               TARGET
   Try to reach the TARGET QAQ.
 
 Available options:
@@ -215,6 +223,8 @@ Available options:
   -s,--skip component_name,...
                            Skip a runnable component (executable, test suit, or
                            benchmark) in dependency calculation
+  -e,--extra PATH_1,...    Extra cabal files' path - e.g.
+                           /home/berberman/arch-hs/arch-hs.cabal
   -a,--aur                 Enable AUR searching
   -h,--help                Show this help text
 
