@@ -2,14 +2,7 @@ module Utils
   ( getPkgName,
     getPkgVersion,
     toLower',
-    isExe,
-    isExeBuildTools,
-    isLib,
-    isLibBuildTools,
-    isTest,
-    isTestBuildTools,
-    isBenchmark,
-    isBenchmarkBuildTools,
+    dependencyTypeToKind,
     unExe,
     fixName,
   )
@@ -38,38 +31,15 @@ fixName s = case splitOn "-" s of
   ("haskell" : _) -> toLower' s
   _ -> "haskell-" ++ toLower' s
 
-
 toLower' :: String -> String
 toLower' = fmap toLower
 
-isExe :: DependencyType -> Bool
-isExe (Exe _) = True
-isExe _ = False
-
-isExeBuildTools :: DependencyType -> Bool
-isExeBuildTools (ExeBuildTools _) = True
-isExeBuildTools _ = False
-
-isLib :: DependencyType -> Bool
-isLib Lib = True
-isLib _ = False
-
-isTest :: DependencyType -> Bool
-isTest (Test _) = True
-isTest _ = False
-
-isBenchmark :: DependencyType -> Bool
-isBenchmark (Benchmark _) = True
-isBenchmark _ = False
-
-isLibBuildTools :: DependencyType -> Bool
-isLibBuildTools LibBuildTools = True
-isLibBuildTools _ = False
-
-isTestBuildTools :: DependencyType -> Bool
-isTestBuildTools (TestBuildTools _) = True
-isTestBuildTools _ = False
-
-isBenchmarkBuildTools :: DependencyType -> Bool
-isBenchmarkBuildTools (BenchmarkBuildTools _) = True
-isBenchmarkBuildTools _ = False
+dependencyTypeToKind :: DependencyType -> DependencyKind
+dependencyTypeToKind (CExe _) = Exe
+dependencyTypeToKind (CExeBuildTools _) = ExeBuildTools
+dependencyTypeToKind (CLib) = Lib
+dependencyTypeToKind (CTest _) = Test
+dependencyTypeToKind (CBenchmark _) = Benchmark
+dependencyTypeToKind (CLibBuildTools) = LibBuildTools
+dependencyTypeToKind (CTestBuildTools _) = TestBuildTools
+dependencyTypeToKind (CBenchmarkBuildTools _) = BenchmarkBuildTools

@@ -80,15 +80,15 @@ getDependencies resolved skip name = do
       ignored = filter (\x -> not $ x `elem` ignoreList || x == name || x `elem` resolved)
       filterNot p = filter (not . p)
 
-      currentLib = G.edges $ zip3 (repeat $ S.singleton Lib) (repeat name) $ filterNot (`elem` ignoreList) libDeps
-      currentLibDeps = G.edges $ zip3 (repeat $ S.singleton LibBuildTools) (repeat name) $ filterNot (`elem` ignoreList) libToolsDeps
+      currentLib = G.edges $ zip3 (repeat $ S.singleton CLib) (repeat name) $ filterNot (`elem` ignoreList) libDeps
+      currentLibDeps = G.edges $ zip3 (repeat $ S.singleton CLibBuildTools) (repeat name) $ filterNot (`elem` ignoreList) libToolsDeps
 
       runnableEdges k l = G.edges $ fmap (\(x, y, z) -> (S.singleton x, y, z)) . withThisName . filterNot (\(_, x) -> x `elem` ignoreList) . flatten . uname k $ l
 
-      currentExe = runnableEdges Exe exeDeps
-      currentExeTools = runnableEdges ExeBuildTools exeToolsDeps
-      currentTest = runnableEdges Test testDeps
-      currentTestTools = runnableEdges TestBuildTools testToolsDeps
+      currentExe = runnableEdges CExe exeDeps
+      currentExeTools = runnableEdges CExeBuildTools exeToolsDeps
+      currentTest = runnableEdges CTest testDeps
+      currentTestTools = runnableEdges CTestBuildTools testToolsDeps
 
       -- currentBench = runnableEdges Types.Benchmark benchDeps
       -- currentBenchTools = runnableEdges BenchmarkBuildTools benchToolsDeps
@@ -96,7 +96,7 @@ getDependencies resolved skip name = do
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
   nextLib <- mapM (getDependencies (S.insert name resolved) skip) $ ignored (libDeps)
-  nextExe <- mapM (getDependencies (S.insert name resolved) skip) $ ignored . fmap snd . flatten . uname Exe $ exeDeps
+  nextExe <- mapM (getDependencies (S.insert name resolved) skip) $ ignored . fmap snd . flatten . uname CExe $ exeDeps
   return $
     currentLib
       <+> currentLibDeps
@@ -161,8 +161,8 @@ cabalToPkgBuild pkg = do
       getE (EOr x y) = getE x ++ " " ++ getE y
 
       _license = getL . license $ cabal
-      _enableCheck = any id $ pkg ^. pkgDeps & mapped %~ (\dep -> selectDepType isTest dep && dep ^. depName == pkg ^. pkgName)
-      depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepType isLib x || selectDepType isExe x))
+      _enableCheck = any id $ pkg ^. pkgDeps & mapped %~ (\dep -> selectDepKind Test dep && dep ^. depName == pkg ^. pkgName)
+      depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepKind Lib x || selectDepKind Exe x))
       makeDepends =
         pkg ^. pkgDeps
           ^.. each
@@ -171,7 +171,10 @@ cabalToPkgBuild pkg = do
                   x `notElem` depends
                     && notMyself x
                     && notInGHCLib x
-                    && (selectDepType isLibBuildTools x || selectDepType isTest x || selectDepType isTestBuildTools x)
+                    && ( selectDepKind LibBuildTools x
+                           || selectDepKind Test x
+                           || selectDepKind TestBuildTools x
+                       )
               )
       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
       _depends = depsToString depends
@@ -181,9 +184,9 @@ cabalToPkgBuild pkg = do
       fromJust _ = throw $ UrlError name
       head' (x : _) = return x
       head' [] = throw $ UrlError name
-      notInGHCLib x = not ((x ^. depName) `elem` ghcLibList)
+      notInGHCLib x = (x ^. depName) `notElem` ghcLibList
       notMyself x = x ^. depName /= name
-      selectDepType f x = any f (x ^. depType)
+      selectDepKind k x = k `elem` (x ^. depType & mapped %~ dependencyTypeToKind)
 
   _url <- case fromShortText $ homepage cabal of
     "" -> fromJust . repoLocation <=< head' $ sourceRepos cabal

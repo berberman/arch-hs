@@ -17,6 +17,7 @@ module Types
     WithMyErr,
     MyException (..),
     DependencyType (..),
+    DependencyKind (..),
     DependencyProvider (..),
     SolvedPackage (..),
     SolvedDependency (..),
@@ -68,26 +69,37 @@ data MyException
   deriving stock (Show, Eq)
 
 data DependencyType
-  = Exe UnqualComponentName
-  | ExeBuildTools UnqualComponentName
-  | Lib
-  | Test UnqualComponentName
-  | Benchmark UnqualComponentName
-  | LibBuildTools
-  | TestBuildTools UnqualComponentName
-  | BenchmarkBuildTools UnqualComponentName
+  = CExe UnqualComponentName
+  | CExeBuildTools UnqualComponentName
+  | CLib
+  | CTest UnqualComponentName
+  | CBenchmark UnqualComponentName
+  | CLibBuildTools
+  | CTestBuildTools UnqualComponentName
+  | CBenchmarkBuildTools UnqualComponentName
   deriving stock (Eq, Ord, Generic)
   deriving anyclass (NFData)
 
+data DependencyKind
+  = Exe
+  | ExeBuildTools
+  | Lib
+  | Test
+  | Benchmark
+  | LibBuildTools
+  | TestBuildTools
+  | BenchmarkBuildTools
+  deriving stock (Eq)
+
 instance Show DependencyType where
-  show (Exe x) = unUnqualComponentName x ++ " ← Exe"
-  show (ExeBuildTools x) = unUnqualComponentName x ++ " ← ExeBuildTools"
-  show (Test x) = unUnqualComponentName x ++ " ← Test"
-  show (Benchmark x) = unUnqualComponentName x ++ " ← Benchmark"
-  show (TestBuildTools x) = unUnqualComponentName x ++ " ← TestBuildTools"
-  show (BenchmarkBuildTools x) = unUnqualComponentName x ++ " ← BenchmarkBuildTools"
-  show Lib = "Lib"
-  show LibBuildTools = "LibBuildTools"
+  show (CExe x) = unUnqualComponentName x ++ " ← Exe"
+  show (CExeBuildTools x) = unUnqualComponentName x ++ " ← ExeBuildTools"
+  show (CTest x) = unUnqualComponentName x ++ " ← Test"
+  show (CBenchmark x) = unUnqualComponentName x ++ " ← Benchmark"
+  show (CTestBuildTools x) = unUnqualComponentName x ++ " ← TestBuildTools"
+  show (CBenchmarkBuildTools x) = unUnqualComponentName x ++ " ← BenchmarkBuildTools"
+  show CLib = "Lib"
+  show CLibBuildTools = "LibBuildTools"
 
 data DependencyProvider = ByCommunity | ByAur
   deriving stock (Eq, Generic)
