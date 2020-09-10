@@ -1,7 +1,6 @@
 module Utils
   ( getPkgName,
     getPkgVersion,
-    mapSnd,
     toLower',
     isExe,
     isExeBuildTools,
@@ -39,8 +38,6 @@ fixName s = case splitOn "-" s of
   ("haskell" : _) -> toLower' s
   _ -> "haskell-" ++ toLower' s
 
-mapSnd :: (b -> c) -> (a, b) -> (a, c)
-mapSnd f (a, b) = (a, f b)
 
 toLower' :: String -> String
 toLower' = fmap toLower

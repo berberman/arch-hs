@@ -163,10 +163,10 @@ main = CE.catch @CE.IOException
       C.infoMessage "Start running..."
 
       runApp newHackage community cookedFlags (app optTarget optOutputDir optAur optSkip) >>= \case
-        Left x -> C.errorMessage $ "Error: " <> (T.pack . show $ x)
+        Left x -> C.errorMessage $ "Error " <> (T.pack . show $ x)
         _ -> C.successMessage "Success!"
   )
-  $ \e -> C.errorMessage $ "IOException: " <> (T.pack . show $ e)
+  $ \e -> C.errorMessage $ "IOException " <> (T.pack . show $ e)
 
 -----------------------------------------------------------------------------
 

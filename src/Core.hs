@@ -127,9 +127,9 @@ collectRunnableDeps ::
   Sem r (ComponentPkgList, ComponentPkgList)
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
-  info <- filter (not . (`elem` skip) . fst) . zip (fmap fst exes) <$> mapM (evalConditionTree (getPkgName cabal) . snd) exes
-  let runnableDeps = fmap (mapSnd $ fmap depPkgName . targetBuildDepends) info
-      toolDeps = fmap (mapSnd $ fmap unExe . buildToolDepends) info
+  info <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName cabal) . snd) exes
+  let runnableDeps = info <&> ((_2 %~) $ fmap depPkgName . targetBuildDepends)
+      toolDeps = info <&> ((_2 %~) $ fmap unExe . buildToolDepends)
   return (runnableDeps, toolDeps)
 
 collectExeDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
