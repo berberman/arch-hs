@@ -34,9 +34,9 @@ cmdOptions =
       ( long "hackage"
           <> metavar "PATH"
           <> short 'h'
-          <> help "Path to 00-index.tar"
+          <> help "Path to 01-index.tar"
           <> showDefault
-          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/00-index.tar"
+          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/01-index.tar"
       )
       <*> strOption
         ( long "community"

@@ -33,10 +33,10 @@ lookupHackagePath :: IO FilePath
 lookupHackagePath = do
   home <- (\d -> d </> ".cabal" </> "packages") <$> getHomeDirectory
   subs <- fmap (home </>) <$> listDirectory home
-  target <- findFile subs "00-index.tar"
+  target <- findFile subs "01-index.tar"
   case target of
     Just x -> return x
-    Nothing -> fail $ "Unable to find hackage index [00-index.tar] from " ++ show subs
+    Nothing -> fail $ "Unable to find hackage index [01-index.tar] from " ++ show subs
 
 loadHackageDB :: FilePath -> IO HackageDB
 loadHackageDB = readTarball Nothing

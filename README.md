@@ -20,7 +20,7 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 
 * Pacman database (`community.db`), ~~i.e., archlinux system.~~ the db file can be specified manually for now. 
 
-* Hackage database tarball (`00-index.tar`), usually provided by `cabal-install`.
+* Hackage database tarball (`01-index.tar`), usually provided by `cabal-install`.
 
 ## Installation
 
@@ -212,7 +212,7 @@ Usage: arch-hs [-h|--hackage PATH] [-c|--community PATH] [-o|--output PATH]
 
 Available options:
   -h,--hackage PATH        Path to
-                           00-index.tar (default: "~/.cabal/packages/YOUR_HACKAGE_MIRROR/00-index.tar")
+                           01-index.tar (default: "~/.cabal/packages/YOUR_HACKAGE_MIRROR/01-index.tar")
   -c,--community PATH      Path to
                            community.db (default: "/var/lib/pacman/sync/community.db")
   -o,--output PATH         Output path to generated PKGBUILD files (empty means
