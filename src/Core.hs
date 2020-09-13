@@ -3,6 +3,9 @@
 module Core
   ( getDependencies,
     cabalToPkgBuild,
+    collectLibDeps,
+    collectTestDeps,
+    collectExeDeps,
   )
 where
 
@@ -58,9 +61,10 @@ getDependencies ::
   Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r =>
   S.Set PackageName ->
   [UnqualComponentName] ->
+  Bool ->
   PackageName ->
   Sem r (G.AdjacencyMap (S.Set DependencyType) PackageName)
-getDependencies resolved skip name = do
+getDependencies resolved skip recursive name = do
   cabal <- getLatestCabal name
   -- Ignore subLibraries
   (libDeps, libToolsDeps) <- collectLibDeps cabal
@@ -95,8 +99,8 @@ getDependencies resolved skip name = do
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies (S.insert name resolved) skip) $ ignored (libDeps)
-  nextExe <- mapM (getDependencies (S.insert name resolved) skip) $ ignored . fmap snd . flatten . uname CExe $ exeDeps
+  nextLib <- mapM (getDependencies (S.insert name resolved) skip recursive) $ ignored libDeps
+  nextExe <- mapM (getDependencies (S.insert name resolved) skip recursive) $ ignored . fmap snd . flatten . uname CExe $ exeDeps
   return $
     currentLib
       <+> currentLibDeps
@@ -106,8 +110,9 @@ getDependencies resolved skip name = do
       <+> currentTestTools
       -- <+> currentBench
       -- <+> currentBenchTools
-      <+> (G.overlays nextLib)
-      <+> (G.overlays nextExe)
+      <+> if recursive
+        then (G.overlays nextLib) <+> (G.overlays nextExe)
+        else G.empty
 
 collectLibDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
 collectLibDeps cabal = do

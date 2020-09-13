@@ -15,9 +15,9 @@ import Conduit
 import qualified Control.Exception as CE
 import Control.Monad (filterM, when)
 import Core
-import Data.List (groupBy, intercalate, isInfixOf)
+import Data.List (groupBy, intercalate, isInfixOf, nub)
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as S
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Distribution.Hackage.DB (HackageDB)
 import Distribution.PackageDescription
@@ -34,7 +34,7 @@ import Types
 app :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr] r => String -> FilePath -> Bool -> [String] -> Sem r ()
 app name path aurSupport skip = do
   let target = mkPackageName name
-  deps <- getDependencies S.empty (fmap mkUnqualComponentName skip) target
+  deps <- getDependencies Set.empty (fmap mkUnqualComponentName skip) True target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
 
@@ -46,8 +46,7 @@ app name path aurSupport skip = do
 
   let grouped = groupDeps deps
       namesFromSolved x = x ^.. each . pkgName ++ x ^.. each . pkgDeps . each . depName
-      allNames = distinct $ namesFromSolved grouped
-      distinct = fmap head . groupBy (==)
+      allNames = nub $ namesFromSolved grouped
   communityProvideList <- (++ ghcLibList) <$> filterM isInCommunity allNames
   let fillProvidedPkgs provideList provider = mapC (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = mapC (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider .~ (Just provider) else y))
@@ -181,13 +180,13 @@ cookFlag list =
     . groupBy (\a b -> a ^. _1 == b ^. _1)
     $ list
 
-groupDeps :: G.AdjacencyMap (S.Set DependencyType) PackageName -> [SolvedPackage]
+groupDeps :: G.AdjacencyMap (Set.Set DependencyType) PackageName -> [SolvedPackage]
 groupDeps =
   fmap (\(name, deps) -> SolvedPackage name $ fmap (uncurry . flip $ SolvedDependency Nothing) deps)
     . fmap ((\(a, b, c) -> (head b, zip a c)) . unzip3)
     . groupBy (\x y -> uncurry (==) ((x, y) & both %~ (^. _2)))
-    . fmap (_1 %~ S.toList)
-    . S.toList
+    . fmap (_1 %~ Set.toList)
+    . Set.toList
     . G.edgeSet
 
 prettyFlags :: [(PackageName, [Flag])] -> String
