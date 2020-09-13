@@ -10,15 +10,22 @@ import Core
 import Data.List (intercalate, nub, (\\))
 import Distribution.PackageDescription
 import Distribution.Parsec (simpleParsec)
+import Distribution.Pretty (prettyShow)
+import qualified Distribution.Types.BuildInfo.Lens as L
+import Distribution.Types.Dependency
+import Distribution.Types.ExeDependency (ExeDependency (ExeDependency))
 import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName
+import Distribution.Types.UnqualComponentName
 import Distribution.Utils.ShortText (fromShortText)
-import Distribution.Version (Version, versionNumbers)
+import Distribution.Version
 import Hackage
+import Lens.Micro
 import Local (ghcLibList, ignoreList)
 import Options.Applicative
 import Polysemy
 import Types
+import Utils
 
 data Options = Options
   { optHackagePath :: FilePath,
@@ -65,6 +72,46 @@ runArgsParser =
 
 -----------------------------------------------------------------------------
 
+-- This parts are duplicated from Core.hs with modifications.
+
+type VersionedList = [(PackageName, VersionRange)]
+
+type VersionedComponentList = [(UnqualComponentName, VersionedList)]
+
+unExe' :: ExeDependency -> (PackageName, VersionRange)
+unExe' (ExeDependency name _ v) = (name, v)
+
+collectLibDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
+collectLibDeps cabal = do
+  case cabal & condLibrary of
+    Just lib -> do
+      bInfo <- evalConditionTree (getPkgName cabal) lib
+      let libDeps = fmap (\x -> (depPkgName x, depVerRange x)) $ targetBuildDepends bInfo
+          toolDeps = fmap unExe' $ buildToolDepends bInfo
+      return (libDeps, toolDeps)
+    Nothing -> return ([], [])
+
+collectRunnableDeps ::
+  (Semigroup k, L.HasBuildInfo k, Members [HackageEnv, FlagAssignmentEnv] r) =>
+  (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
+  GenericPackageDescription ->
+  [UnqualComponentName] ->
+  Sem r (VersionedComponentList, VersionedComponentList)
+collectRunnableDeps f cabal skip = do
+  let exes = cabal & f
+  bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName cabal) . snd) exes
+  let runnableDeps = bInfo <&> ((_2 %~) $ fmap (\x -> (depPkgName x, depVerRange x)) . targetBuildDepends)
+      toolDeps = bInfo <&> ((_2 %~) $ fmap unExe' . buildToolDepends)
+  return (runnableDeps, toolDeps)
+
+collectExeDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectExeDeps = collectRunnableDeps condExecutables
+
+collectTestDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectTestDeps = collectRunnableDeps condTestSuites
+
+-----------------------------------------------------------------------------
+
 diffCabal :: Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r => PackageName -> Version -> Version -> Sem r String
 diffCabal name a b = do
   ga <- getCabal name a
@@ -78,8 +125,8 @@ diffCabal name a b = do
       [ "Package: " <> unPackageName name,
         ver pa pb,
         desc pa pb,
-        dep "Depends: " ba bb,
-        dep "MakeDepends: " ma mb
+        dep "Depends: \n" ba bb,
+        dep "MakeDepends: \n    " ma mb
       ]
 
 directDependencies ::
@@ -90,14 +137,15 @@ directDependencies cabal = do
   (libDeps, libToolsDeps) <- collectLibDeps cabal
   (exeDeps, exeToolsDeps) <- collectExeDeps cabal []
   (testDeps, testToolsDeps) <- collectTestDeps cabal []
-  let flatten = fmap unPackageName . mconcat . fmap snd
-      l = fmap unPackageName libDeps
-      lt = fmap unPackageName libToolsDeps
+  let connectVersionWithName (n, range) = unPackageName n <> "  " <> prettyShow range
+      flatten = fmap connectVersionWithName . mconcat . fmap snd
+      l = fmap connectVersionWithName libDeps
+      lt = fmap connectVersionWithName libToolsDeps
       e = flatten exeDeps
       et = flatten exeToolsDeps
       t = flatten testDeps
       tt = flatten testToolsDeps
-      name = unPackageName . I.pkgName . package . packageDescription $ cabal
+      name = unPackageName $getPkgName cabal
       notInGHCLib = (`notElem` ghcLibList) . mkPackageName
       notInIgnore = (`notElem` ignoreList) . mkPackageName
       notMyself = (/= name)
@@ -111,7 +159,7 @@ directDependencies cabal = do
   return (depends, makedepends)
 
 diffTerm :: String -> (a -> String) -> a -> a -> String
-diffTerm s f a b = let (ra, rb) = (f a, f b) in s <> (if ra == rb then ra else (C.formatWith [C.red] $ ra <> " ⇒ " <> rb))
+diffTerm s f a b = let (ra, rb) = (f a, f b) in s <> (if ra == rb then ra else (C.formatWith [C.red] $ ra <> "  ⇒  " <> rb))
 
 desc :: PackageDescription -> PackageDescription -> String
 desc = diffTerm "Synopsis: " $ fromShortText . synopsis
@@ -121,9 +169,18 @@ ver = diffTerm "Version: " $ intercalate "." . fmap show . versionNumbers . I.pk
 
 dep :: String -> [String] -> [String] -> String
 dep s a b =
-  s <> case b \\ a of
+  s <> case diffNew of
     [] -> joinToString a
-    xs -> C.formatWith [C.red] $ joinToString a <> " ⇒ " <> joinToString b <> "Diff: " <> joinToString xs
+    _ ->
+      (C.formatWith [C.indent 4] (joinToString $ fmap (\x -> red (x `elem` diffOld) x) a))
+        <> "\n"
+        <> replicate 28 '-'
+        <> "\n"
+        <> (C.formatWith [C.indent 4] (joinToString $ fmap (\x -> green (x `elem` diffNew) x) b))
   where
+    diffNew = b \\ a
+    diffOld = a \\ b
     joinToString [] = "[]"
-    joinToString xs = intercalate ", " xs
+    joinToString xs = intercalate "\n    " xs
+    red p x = if p then C.formatWith [C.red] x else x
+    green p x = if p then C.formatWith [C.green] x else x

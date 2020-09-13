@@ -3,9 +3,7 @@
 module Core
   ( getDependencies,
     cabalToPkgBuild,
-    collectLibDeps,
-    collectTestDeps,
-    collectExeDeps,
+    evalConditionTree,
   )
 where
 
