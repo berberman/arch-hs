@@ -107,7 +107,7 @@ directDependencies cabal = do
           . filter notMyself
           . nub
       depends = distinct $ l ++ e
-      makedepends = distinct $ lt ++ et ++ t ++ tt
+      makedepends = (distinct $ lt ++ et ++ t ++ tt) \\ depends
   return (depends, makedepends)
 
 diffTerm :: String -> (a -> String) -> a -> a -> String
