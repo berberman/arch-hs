@@ -4,6 +4,7 @@ module Hackage
     insertDB,
     parseCabalFile,
     getLatestCabal,
+    getCabal,
     getPackageFlag,
     traverseHackage,
   )
@@ -17,6 +18,7 @@ import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMay
 import Distribution.Types.Flag (Flag)
 import Distribution.Types.GenericPackageDescription (GenericPackageDescription, genPackageFlags)
 import Distribution.Types.PackageName (PackageName)
+import Distribution.Version (Version, nullVersion)
 import Lens.Micro
 import System.Directory
   ( findFile,
@@ -60,7 +62,16 @@ getLatestCabal name = do
   case Map.lookup name db of
     (Just m) -> case Map.lookupMax m of
       Just (_, vdata) -> return $ vdata & cabalFile
-      Nothing -> throw VersionError
+      Nothing -> throw $ VersionError name nullVersion
+    Nothing -> throw $ PkgNotFound name
+
+getCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Version -> Sem r GenericPackageDescription
+getCabal name version = do
+  db <- ask @HackageDB
+  case Map.lookup name db of
+    (Just m) -> case Map.lookup version m of
+      Just vdata -> return $ vdata & cabalFile
+      Nothing -> throw $ VersionError name version
     Nothing -> throw $ PkgNotFound name
 
 getPackageFlag :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r [Flag]

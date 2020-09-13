@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    - path: "./app"
+      component: "arch-hs:exe:arch-hs"    
+    - path: "./diff"
+      component: "arch-hs:exe:arch-hs-diff"
+    - path: "./src"
+      component: "arch-hs:lib"

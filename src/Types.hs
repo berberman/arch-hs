@@ -40,6 +40,7 @@ import qualified Distribution.Hackage.DB as DB
 import Distribution.PackageDescription (FlagAssignment)
 import Distribution.Types.PackageName (PackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName, unUnqualComponentName)
+import Distribution.Types.Version (Version)
 import GHC.Generics (Generic)
 import Lens.Micro.TH (makeLenses)
 import Polysemy
@@ -62,7 +63,7 @@ type WithMyErr = Error MyException
 
 data MyException
   = PkgNotFound PackageName
-  | VersionError
+  | VersionError PackageName Version
   | UrlError PackageName
   | TargetExist PackageName DependencyProvider
   | LicenseError PackageName
