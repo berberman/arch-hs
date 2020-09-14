@@ -29,7 +29,7 @@ getPkgVersion = I.pkgVersion . package . packageDescription
 fixName :: String -> String
 fixName s = case splitOn "-" s of
   ("haskell" : _) -> toLower' s
-  _ -> "haskell-" ++ toLower' s
+  _ -> "haskell-" <> toLower' s
 
 toLower' :: String -> String
 toLower' = fmap toLower

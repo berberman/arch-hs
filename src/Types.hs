@@ -93,12 +93,12 @@ data DependencyKind
   deriving stock (Eq)
 
 instance Show DependencyType where
-  show (CExe x) = unUnqualComponentName x ++ " ← Exe"
-  show (CExeBuildTools x) = unUnqualComponentName x ++ " ← ExeBuildTools"
-  show (CTest x) = unUnqualComponentName x ++ " ← Test"
-  show (CBenchmark x) = unUnqualComponentName x ++ " ← Benchmark"
-  show (CTestBuildTools x) = unUnqualComponentName x ++ " ← TestBuildTools"
-  show (CBenchmarkBuildTools x) = unUnqualComponentName x ++ " ← BenchmarkBuildTools"
+  show (CExe x) = unUnqualComponentName x <> " ← Exe"
+  show (CExeBuildTools x) = unUnqualComponentName x <> " ← ExeBuildTools"
+  show (CTest x) = unUnqualComponentName x <> " ← Test"
+  show (CBenchmark x) = unUnqualComponentName x <> " ← Benchmark"
+  show (CTestBuildTools x) = unUnqualComponentName x <> " ← TestBuildTools"
+  show (CBenchmarkBuildTools x) = unUnqualComponentName x <> " ← BenchmarkBuildTools"
   show CLib = "Lib"
   show CLibBuildTools = "LibBuildTools"
 

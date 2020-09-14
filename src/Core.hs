@@ -19,6 +19,7 @@ import qualified Data.Set as S
 import qualified Distribution.Compat.Lens as L
 import Distribution.Compiler (CompilerFlavor (..))
 import Distribution.PackageDescription
+import Distribution.Pretty (prettyShow)
 import Distribution.SPDX
 import Distribution.System (Arch (X86_64), OS (Windows))
 import qualified Distribution.Types.BuildInfo.Lens as L
@@ -36,7 +37,6 @@ import Local
 import PkgBuild
 import Types
 import Utils
-import Distribution.Pretty (prettyShow)
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Windows) = Right True
@@ -60,9 +60,10 @@ evalConditionTree name cond = do
   return $ (L.^. L.buildInfo) . snd $ simplifyCondTree (archEnv thisFlag) cond
 
 -----------------------------------------------------------------------------
+
 -- | Get dependencies of a package recursively.
 -- All version constraints will be discarded,
--- and only packages depended by executables, libraries, and test suits will be collected. 
+-- and only packages depended by executables, libraries, and test suits will be collected.
 getDependencies ::
   Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r =>
   S.Set PackageName ->
@@ -168,9 +169,9 @@ cabalToPkgBuild pkg = do
       getL (License e) = getE e
       getE (ELicense (ELicenseId x) _) = show . mapLicense $ x
       getE (ELicense (ELicenseIdPlus x) _) = show . mapLicense $ x
-      getE (ELicense (ELicenseRef x) _) = "Custom: " ++ licenseRef x
-      getE (EAnd x y) = getE x ++ " " ++ getE y
-      getE (EOr x y) = getE x ++ " " ++ getE y
+      getE (ELicense (ELicenseRef x) _) = "custom:" <> licenseRef x
+      getE (EAnd x y) = getE x <> " " <> getE y
+      getE (EOr x y) = getE x <> " " <> getE y
 
       _license = getL . license $ cabal
       _enableCheck = any id $ pkg ^. pkgDeps & mapped %~ (\dep -> selectDepKind Test dep && dep ^. depName == pkg ^. pkgName)
@@ -191,7 +192,7 @@ cabalToPkgBuild pkg = do
       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
       _depends = depsToString depends
       _makeDepends = depsToString makeDepends
-      wrap s = '\'' : s ++ "\'"
+      wrap s = '\'' : s <> "\'"
       fromJust (Just x) = return x
       fromJust _ = throw $ UrlError name
       head' (x : _) = return x

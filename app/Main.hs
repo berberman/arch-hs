@@ -45,9 +45,9 @@ app name path aurSupport skip = do
     else return ()
 
   let grouped = groupDeps deps
-      namesFromSolved x = x ^.. each . pkgName ++ x ^.. each . pkgDeps . each . depName
+      namesFromSolved x = x ^.. each . pkgName <> x ^.. each . pkgDeps . each . depName
       allNames = nub $ namesFromSolved grouped
-  communityProvideList <- (++ ghcLibList) <$> filterM isInCommunity allNames
+  communityProvideList <- (<> ghcLibList) <$> filterM isInCommunity allNames
   let fillProvidedPkgs provideList provider = mapC (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = mapC (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider .~ (Just provider) else y))
       cooked =
@@ -190,10 +190,10 @@ groupDeps =
     . G.edgeSet
 
 prettyFlags :: [(PackageName, [Flag])] -> String
-prettyFlags = mconcat . fmap (\(name, flags) -> (C.formatWith [C.magenta] $ unPackageName name ++ "\n") ++ mconcat (fmap (C.formatWith [C.indent 4] . prettyFlag) flags))
+prettyFlags = mconcat . fmap (\(name, flags) -> (C.formatWith [C.magenta] $ unPackageName name <> "\n") <> mconcat (fmap (C.formatWith [C.indent 4] . prettyFlag) flags))
 
 prettyFlag :: Flag -> String
-prettyFlag f = "⚐ " ++ C.formatWith [C.yellow] name ++ ":\n" ++ mconcat (fmap (C.formatWith [C.indent 6] . (++ "\n")) $ ["description: " ++ desc, "default: " ++ def, "isManual: " ++ manual])
+prettyFlag f = "⚐ " <> C.formatWith [C.yellow] name <> ":\n" <> mconcat (fmap (C.formatWith [C.indent 6] . (<> "\n")) $ ["description: " <> desc, "default: " <> def, "isManual: " <> manual])
   where
     name = unFlagName . flagName $ f
     desc = flagDescription f
@@ -201,10 +201,10 @@ prettyFlag f = "⚐ " ++ C.formatWith [C.yellow] name ++ ":\n" ++ mconcat (fmap 
     manual = show $ flagManual f
 
 prettyFlagAssignments :: Map.Map PackageName FlagAssignment -> String
-prettyFlagAssignments m = mconcat $ fmap (fmap (\(n, a) -> C.formatWith [C.magenta] (unPackageName n) ++ "\n" ++ C.formatWith [C.indent 4] (prettyFlagAssignment a))) Map.toList m
+prettyFlagAssignments m = mconcat $ fmap (fmap (\(n, a) -> C.formatWith [C.magenta] (unPackageName n) <> "\n" <> C.formatWith [C.indent 4] (prettyFlagAssignment a))) Map.toList m
 
 prettyFlagAssignment :: FlagAssignment -> String
-prettyFlagAssignment m = mconcat $ fmap (\(n, v) -> "⚐ " ++ C.formatWith [C.yellow] (unFlagName n) ++ " : " ++ C.formatWith [C.cyan] (show v) ++ "\n") $ unFlagAssignment m
+prettyFlagAssignment m = mconcat $ fmap (\(n, v) -> "⚐ " <> C.formatWith [C.yellow] (unFlagName n) <> " : " <> C.formatWith [C.cyan] (show v) <> "\n") $ unFlagAssignment m
 
 prettySolvedPkgs :: [SolvedPackage] -> String
 prettySolvedPkgs =
@@ -212,21 +212,21 @@ prettySolvedPkgs =
     . fmap
       ( \case
           SolvedPackage {..} ->
-            C.formatWith [C.bold, C.yellow] ("⊢ " ++ unPackageName _pkgName ++ "\n")
-              ++ mconcat
+            C.formatWith [C.bold, C.yellow] ("⊢ " <> unPackageName _pkgName <> "\n")
+              <> mconcat
                 ( fmap
                     ( \SolvedDependency {..} -> case _depProvider of
-                        (Just x) -> (C.formatWith [C.green] $ "    ⊢ " ++ unPackageName _depName ++ " " ++ show _depType ++ " ✔ ") ++ (C.formatWith [C.cyan] $ "[" ++ show x ++ "]\n")
-                        _ -> C.formatWith [C.bold, C.yellow] $ "    ⊢ " ++ unPackageName _depName ++ " " ++ show _depType ++ "\n"
+                        (Just x) -> (C.formatWith [C.green] $ "    ⊢ " <> unPackageName _depName <> " " <> show _depType <> " ✔ ") <> (C.formatWith [C.cyan] $ "[" <> show x <> "]\n")
+                        _ -> C.formatWith [C.bold, C.yellow] $ "    ⊢ " <> unPackageName _depName <> " " <> show _depType <> "\n"
                     )
                     _pkgDeps
                 )
-          ProvidedPackage {..} -> (C.formatWith [C.green] $ "⊢ " ++ unPackageName _pkgName ++ " ✔ ") ++ (C.formatWith [C.cyan] $ "[" ++ show _pkgProvider ++ "]\n")
+          ProvidedPackage {..} -> (C.formatWith [C.green] $ "⊢ " <> unPackageName _pkgName <> " ✔ ") <> (C.formatWith [C.cyan] $ "[" <> show _pkgProvider <> "]\n")
       )
 
 prettyDeps :: [PackageName] -> String
 prettyDeps list =
   mconcat $
-    fmap (\(i, n) -> show @Int i ++ ". " ++ unPackageName n ++ "\n") $
+    fmap (\(i, n) -> show @Int i <> ". " <> unPackageName n <> "\n") $
       zip [1 ..] $
         reverse list

@@ -88,8 +88,8 @@ descParser =
     lookupSingle fields f = case Map.lookup f fields of
       (Just x) -> case x of
         (e : _) -> return e
-        _ -> fail $ "Expect a singleton " ++ f
-      _ -> fail $ "Unable to find field " ++ f
+        _ -> fail $ "Expect a singleton " <> f
+      _ -> fail $ "Unable to find field " <> f
     lookupList fields f = return $ case Map.lookup f fields of
       (Just x) -> x
       _ -> []

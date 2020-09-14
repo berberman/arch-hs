@@ -34,9 +34,9 @@ cmdOptions =
       ( long "hackage"
           <> metavar "PATH"
           <> short 'h'
-          <> help "Path to 00-index.tar"
+          <> help "Path to hackage index tarball"
           <> showDefault
-          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/00-index.tar"
+          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/01-index.tar | 00-index.tar"
       )
       <*> strOption
         ( long "community"
@@ -107,7 +107,7 @@ optFlagParser =
       case s of
         "true" -> return True
         "false" -> return False
-        _ -> fail $ "unknown bool: " ++ s
+        _ -> fail $ "unknown bool: " <> s
 
 optSkippedReader :: ReadM [String]
 optSkippedReader = eitherReader $ Right . splitOn ","
@@ -118,7 +118,7 @@ optExtraCabalReader = eitherReader $ \x ->
       check = map (\e -> if takeExtension x == ".cabal" then (e, True) else (e, False)) splitted
       failed = map fst . filter (not . snd) $ check
       successful = map fst . filter snd $ check
-   in if failed /= [] then Left ("Unexpected file name: " ++ intercalate ", " failed) else Right successful
+   in if failed /= [] then Left ("Unexpected file name: " <> intercalate ", " failed) else Right successful
 
 runArgsParser :: IO Options
 runArgsParser =

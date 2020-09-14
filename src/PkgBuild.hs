@@ -81,7 +81,7 @@ instance Show ArchLicense where
   show PkgBuild.Unlicense = "Unlicense"
   show PkgBuild.W3C = "W3C"
   show ZPL = "ZPL"
-  show (Custom x) = "custom:" ++ x
+  show (Custom x) = "custom:" <> x
 
 mapLicense :: LicenseId -> ArchLicense
 mapLicense AGPL_3_0_only = AGPL3

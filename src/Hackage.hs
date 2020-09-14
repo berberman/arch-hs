@@ -10,6 +10,7 @@ module Hackage
   )
 where
 
+import Control.Applicative (Alternative ((<|>)))
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
@@ -21,10 +22,6 @@ import Distribution.Types.PackageName (PackageName)
 import Distribution.Version (Version, nullVersion)
 import Lens.Micro
 import System.Directory
-  ( findFile,
-    getHomeDirectory,
-    listDirectory,
-  )
 import System.FilePath ((</>))
 import Types
 import Utils
@@ -33,10 +30,11 @@ lookupHackagePath :: IO FilePath
 lookupHackagePath = do
   home <- (\d -> d </> ".cabal" </> "packages") <$> getHomeDirectory
   subs <- fmap (home </>) <$> listDirectory home
-  target <- findFile subs "00-index.tar"
-  case target of
+  legacy <- findFile subs "00-index.tar"
+  new <- findFile subs "01-index.tar"
+  case new <|> legacy of
     Just x -> return x
-    Nothing -> fail $ "Unable to find hackage index [00-index.tar] from " ++ show subs
+    Nothing -> fail $ "Unable to find hackage index tarball from " <> show subs
 
 loadHackageDB :: FilePath -> IO HackageDB
 loadHackageDB = readTarball Nothing
@@ -54,7 +52,7 @@ parseCabalFile path = do
   bs <- BS.readFile path
   case parseGenericPackageDescriptionMaybe bs of
     Just x -> return x
-    _ -> fail $ "Failed to parse .cabal from " ++ path
+    _ -> fail $ "Failed to parse .cabal from " <> path
 
 getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
 getLatestCabal name = do
