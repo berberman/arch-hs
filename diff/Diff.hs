@@ -33,8 +33,7 @@ import Types
 import Utils
 
 data Options = Options
-  { optHackagePath :: FilePath,
-    optPackageName :: PackageName,
+  { optPackageName :: PackageName,
     optVersionA :: Version,
     optVersionB :: Version
   }
@@ -42,15 +41,7 @@ data Options = Options
 cmdOptions :: Parser Options
 cmdOptions =
   Options
-    <$> strOption
-      ( long "hackage"
-          <> metavar "PATH"
-          <> short 'h'
-          <> help "Path to 00-index.tar"
-          <> showDefault
-          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/00-index.tar"
-      )
-    <*> argument optPackageNameReader (metavar "TARGET")
+    <$> argument optPackageNameReader (metavar "TARGET")
     <*> argument optVersionReader (metavar "VERSION_A")
     <*> argument optVersionReader (metavar "VERSION_B")
 
