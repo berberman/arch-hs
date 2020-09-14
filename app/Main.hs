@@ -119,7 +119,7 @@ runApp hackage community flags =
     . runReader community
 
 main :: IO ()
-main = CE.catch @CE.SomeException
+main = CE.catch @CE.IOException
   ( do
       Options {..} <- runArgsParser
 
