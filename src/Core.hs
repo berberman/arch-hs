@@ -1,5 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 
+-- | Copyright: (c) 2020 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <1793913507@qq.com>
+-- The core functions of @arch-hs@.
 module Core
   ( getDependencies,
     cabalToPkgBuild,
@@ -45,6 +49,7 @@ archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
     go _ (Just r) = Right r
     go x Nothing = Left x
 
+-- | Simplify the condition tree from 'GenericPackageDescription' with given flag assignments.
 evalConditionTree :: (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentEnv r) => PackageName -> CondTree ConfVar [Dependency] k -> Sem r BuildInfo
 evalConditionTree name cond = do
   flg <- ask
@@ -54,7 +59,9 @@ evalConditionTree name cond = do
   return $ (L.^. L.buildInfo) . snd $ simplifyCondTree (archEnv thisFlag) cond
 
 -----------------------------------------------------------------------------
-
+-- | Get dependencies of a package recursively.
+-- All version constraints will be discarded,
+-- and only packages depended by executables, libraries, and test suits will be collected. 
 getDependencies ::
   Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r =>
   S.Set PackageName ->
@@ -146,6 +153,7 @@ collectTestDeps = collectRunnableDeps condTestSuites
 
 -----------------------------------------------------------------------------
 
+-- | Generate 'PkgBuild' for a 'SolvedPackage'.
 cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r => SolvedPackage -> Sem r PkgBuild
 cabalToPkgBuild pkg = do
   let name = pkg ^. pkgName

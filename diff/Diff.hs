@@ -145,7 +145,7 @@ directDependencies cabal = do
       et = flatten exeToolsDeps
       t = flatten testDeps
       tt = flatten testToolsDeps
-      name = unPackageName $getPkgName cabal
+      name = unPackageName $ getPkgName cabal
       notInGHCLib = (`notElem` ghcLibList) . mkPackageName
       notInIgnore = (`notElem` ignoreList) . mkPackageName
       notMyself = (/= name)

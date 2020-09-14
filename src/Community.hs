@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Copyright: (c) 2020 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <1793913507@qq.com>
+-- This module provides functios operating with @community.db@ of pacman.
 module Community
   ( defaultCommunityPath,
     loadProcessedCommunity,
@@ -19,6 +23,7 @@ import System.FilePath ((</>))
 import Types
 import Utils
 
+-- | Default path to @community.db@.
 defaultCommunityPath :: FilePath
 defaultCommunityPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "community.db"
 
@@ -43,9 +48,11 @@ cookCommunity = mapC (go . (splitOn "-"))
           then intercalate "-" . fst . splitAt (s - 3) . tail $ list
           else intercalate "-" . fst . splitAt (s - 2) $ list
 
+-- | Load @community.db@ from @path@, removing @haskell-@ prefix.
 loadProcessedCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
 loadProcessedCommunity path = fmap Set.fromList $ runConduitRes $ loadCommunity path .| cookCommunity .| sinkList
 
+-- | Check if a package from hackage with @name@ exists in archlinux community repo.
 isInCommunity :: Member CommunityEnv r => PackageName -> Sem r Bool
 isInCommunity name =
   ask @CommunityDB >>= \db ->
