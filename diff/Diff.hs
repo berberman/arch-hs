@@ -128,7 +128,7 @@ getCabalFromHackage name version revision0 = do
 diffCabal :: Members [FlagAssignmentEnv, WithMyErr, Embed IO] r => PackageName -> Version -> Version -> Sem r String
 diffCabal name a b = do
   ga <- getCabalFromHackage name a True
-  gb <- getCabalFromHackage name b False
+  gb <- getCabalFromHackage name b True
   let pa = packageDescription ga
       pb = packageDescription gb
   (ba, ma) <- directDependencies ga
