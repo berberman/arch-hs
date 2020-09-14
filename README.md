@@ -232,6 +232,74 @@ Available options:
 
 For all available options, have a look at the help message.
 
+## Diff
+
+`arch-hs` also provides a component called `arch-hs-diff`. `arch-hs-diff` can show differences of information used in PKGBUILD between two versions of a hackage package.
+This is useful in the subsequent maintenance of a package. Example:
+
+```
+❯ arch-hs-diff sbv 8.7 8.8
+  ⓘ Start running...
+  ⓘ Downloading cabal file from https://hackage.haskell.org/package/sbv-8.7/revision/0.cabal...
+  ⓘ Downloading cabal file from https://hackage.haskell.org/package/sbv-8.8/sbv.cabal...
+Package: sbv
+Version: 8.7  ⇒  8.8
+Synopsis: SMT Based Verification: Symbolic Haskell theorem prover using SMT solving.
+Depends: 
+    base  >=4.11 && <5
+    crackNum  >=2.3
+    QuickCheck  -any
+    template-haskell  -any
+    array  -any
+    async  -any
+    containers  -any
+    deepseq  -any
+    directory  -any
+    filepath  -any
+    time  -any
+    pretty  -any
+    process  -any
+    mtl  -any
+    random  -any
+    syb  -any
+    transformers  -any
+    generic-deriving  -any
+----------------------------
+    base  >=4.11 && <5
+    crackNum  -any
+    QuickCheck  -any
+    template-haskell  -any
+    array  -any
+    async  -any
+    containers  -any
+    deepseq  -any
+    directory  -any
+    filepath  -any
+    time  -any
+    pretty  -any
+    process  -any
+    mtl  -any
+    random  -any
+    syb  -any
+    transformers  -any
+MakeDepends: 
+    base  >=4.11
+    sbv  -any
+    bytestring  -any
+    tasty  -any
+    tasty-golden  -any
+    tasty-hunit  -any
+    tasty-quickcheck  -any
+    base  -any
+    doctest  -any
+    Glob  -any
+    hlint  -any
+
+  ✔ Success!
+```
+
+`arch-hs-diff` does not require hackage db, it downloads from hackage server instead. 
+
 ## Limitations
 
 * The dependency solver will **ONLY** expand the dependencies of *executables* and *libraries* recursively, because
