@@ -173,7 +173,7 @@ ver :: PackageDescription -> PackageDescription -> String
 ver = diffTerm "Version: " (prettyShow . getPkgVersion)
 
 url :: PackageDescription -> PackageDescription -> String
-url = diffTerm "URL: " $ fromShortText . homepage
+url = diffTerm "URL: " getUrl
 
 dep :: String -> [String] -> [String] -> String
 dep s a b =
