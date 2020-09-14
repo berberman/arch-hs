@@ -14,15 +14,15 @@ import Polysemy.Reader
 import Types
 
 main :: IO ()
-main = CE.catch @CE.IOException
+main = CE.catch @CE.SomeException
   ( do
       Options {..} <- runArgsParser
       C.infoMessage "Start running..."
       runDiff (diffCabal optPackageName optVersionA optVersionB) >>= \case
-        Left x -> C.errorMessage $ "Error " <> (T.pack . show $ x)
+        Left x -> C.errorMessage $ "Runtime Error: " <> (T.pack . show $ x)
         Right r -> putStrLn r >> C.successMessage "Success!"
   )
-  $ \e -> C.errorMessage $ "IOException " <> (T.pack . show $ e)
+  $ \e -> C.errorMessage $ "Uncaught Exception: " <> (T.pack . show $ e)
 
 runDiff :: Sem '[FlagAssignmentEnv, WithMyErr, Embed IO, Final IO] a -> IO (Either MyException a)
 runDiff = runFinal . embedToFinal . errorToIOFinal . runReader (Map.empty)

@@ -8,6 +8,7 @@ module Diff
 where
 
 import qualified Colourista as C
+import qualified Control.Exception as CE
 import Core
 import Data.List (intercalate, nub, (\\))
 import qualified Data.Text as T
@@ -28,7 +29,7 @@ import Local (ghcLibList, ignoreList)
 import Network.HTTP.Req hiding (header)
 import Options.Applicative
 import Polysemy
-import Polysemy.Req
+import Polysemy.Error
 import Types
 import Utils
 
@@ -106,7 +107,7 @@ collectExeDeps = collectRunnableDeps condExecutables
 collectTestDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
-getCabalFromHackage :: Member (Embed IO) r => PackageName -> Version -> Bool -> Sem r GenericPackageDescription
+getCabalFromHackage :: Members [Embed IO, WithMyErr] r => PackageName -> Version -> Bool -> Sem r GenericPackageDescription
 getCabalFromHackage name version revision0 = do
   let urlPath = T.pack $ unPackageName name <> "-" <> prettyShow version
       revision0Api = https "hackage.haskell.org" /: "package" /: urlPath /: "revision" /: "0.cabal"
@@ -114,8 +115,11 @@ getCabalFromHackage name version revision0 = do
       api = if revision0 then revision0Api else normalApi
       r = req GET api NoReqBody bsResponse mempty
   embed $ C.infoMessage $ "Downloading cabal file from " <> renderUrl api <> "..."
-  response <- reqToIO r
-  case parseGenericPackageDescriptionMaybe $ responseBody response of
+  response <- embed $ CE.try @HttpException (runReq defaultHttpConfig r)
+  result <- case response of
+    Left _ -> throw $ VersionError name version
+    Right x -> return x
+  case parseGenericPackageDescriptionMaybe $ responseBody result of
     Just x -> return x
     _ -> embed @IO $ fail $ "Failed to parse .cabal file from " <> show api
 
@@ -139,7 +143,7 @@ diffCabal name a b = do
       ]
 
 directDependencies ::
-  Members [FlagAssignmentEnv, WithMyErr] r =>
+  Member FlagAssignmentEnv r =>
   GenericPackageDescription ->
   Sem r ([String], [String])
 directDependencies cabal = do

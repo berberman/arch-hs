@@ -38,7 +38,8 @@ import Data.Map.Strict (Map)
 import qualified Data.Set as S
 import qualified Distribution.Hackage.DB as DB
 import Distribution.PackageDescription (FlagAssignment)
-import Distribution.Types.PackageName (PackageName)
+import Distribution.Pretty (prettyShow)
+import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName, unUnqualComponentName)
 import Distribution.Types.Version (Version)
 import GHC.Generics (Generic)
@@ -67,7 +68,14 @@ data MyException
   | UrlError PackageName
   | TargetExist PackageName DependencyProvider
   | LicenseError PackageName
-  deriving stock (Show, Eq)
+  deriving stock (Eq)
+
+instance Show MyException where
+  show (PkgNotFound name) = "Unable to find [" <> unPackageName name <> "]"
+  show (VersionError name version) = "Unable to find [" <> unPackageName name <> "-" <> prettyShow version <> "]"
+  show (UrlError name) = "Unable to find the url of [" <> unPackageName name <> "]"
+  show (TargetExist name provider) = "Target [" <> unPackageName name <> "] has been provided by " <> show provider
+  show (LicenseError name) = "Unable to find the license of [" <> unPackageName name <> "]"
 
 data DependencyType
   = CExe UnqualComponentName
