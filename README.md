@@ -238,67 +238,32 @@ For all available options, have a look at the help message.
 This is useful in the subsequent maintenance of a package. Example:
 
 ```
-❯ arch-hs-diff sbv 8.7 8.8
+❯ arch-hs-diff optparse-applicative 0.15.1.0 0.16.0.0
   ⓘ Start running...
-  ⓘ Downloading cabal file from https://hackage.haskell.org/package/sbv-8.7/revision/0.cabal...
-  ⓘ Downloading cabal file from https://hackage.haskell.org/package/sbv-8.8/sbv.cabal...
-Package: sbv
-Version: 8.7  ⇒  8.8
-Synopsis: SMT Based Verification: Symbolic Haskell theorem prover using SMT solving.
+  ⓘ Downloading cabal file from https://hackage.haskell.org/package/optparse-applicative-0.15.1.0/revision/0.cabal...
+  ⓘ Downloading cabal file from https://hackage.haskell.org/package/optparse-applicative-0.16.0.0/revision/0.cabal...
+Package: optparse-applicative
+Version: 0.15.1.0  ⇒  0.16.0.0
+Synopsis: Utilities and combinators for parsing command line options
 Depends: 
-    base  >=4.11 && <5
-    crackNum  >=2.3
-    QuickCheck  -any
-    template-haskell  -any
-    array  -any
-    async  -any
-    containers  -any
-    deepseq  -any
-    directory  -any
-    filepath  -any
-    time  -any
-    pretty  -any
-    process  -any
-    mtl  -any
-    random  -any
-    syb  -any
-    transformers  -any
-    generic-deriving  -any
-----------------------------
-    base  >=4.11 && <5
-    crackNum  -any
-    QuickCheck  -any
-    template-haskell  -any
-    array  -any
-    async  -any
-    containers  -any
-    deepseq  -any
-    directory  -any
-    filepath  -any
-    time  -any
-    pretty  -any
-    process  -any
-    mtl  -any
-    random  -any
-    syb  -any
-    transformers  -any
+    base  ==4.*
+    transformers  >=0.2 && <0.6
+    transformers-compat  >=0.3 && <0.7
+    process  >=1.0 && <1.7
+    ansi-wl-pprint  >=0.6.8 && <0.7
 MakeDepends: 
-    base  >=4.11
-    sbv  -any
-    bytestring  -any
-    tasty  -any
-    tasty-golden  -any
-    tasty-hunit  -any
-    tasty-quickcheck  -any
     base  -any
-    doctest  -any
-    Glob  -any
-    hlint  -any
+    bytestring  >=0.9 && <0.11
+    QuickCheck  >=2.8 && <2.14
+----------------------------
+    base  -any
+    bytestring  >=0.9 && <0.11
+    QuickCheck  >=2.8 && <2.15
 
   ✔ Success!
 ```
 
-`arch-hs-diff` does not require hackage db, it downloads from hackage server instead. 
+`arch-hs-diff` does not require hackage db, it downloads cabal files from hackage server instead. 
 
 ## Limitations
 
@@ -323,6 +288,8 @@ file patches, loose of version constraints, etc. are need to be done manually, s
 - [ ] A watchdog during dependency calculation.
 
 - [x] Working with given `.cabal` files which havn't been released to hackage.
+
+- [ ] Using `hackage-security` to manage hackage index tarball.
 
 
 ## Contributing
