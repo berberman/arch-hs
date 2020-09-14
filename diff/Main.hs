@@ -14,7 +14,7 @@ import Polysemy.Reader
 import Types
 
 main :: IO ()
-main = CE.catch @CE.SomeException
+main = CE.catch @CE.IOException
   ( do
       Options {..} <- runArgsParser
       C.infoMessage "Start running..."
