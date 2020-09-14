@@ -137,7 +137,7 @@ diffCabal name a b = do
         ver pa pb,
         desc pa pb,
         dep "Depends: \n" ba bb,
-        dep "MakeDepends: \n    " ma mb
+        dep "MakeDepends: \n" ma mb
       ]
 
 directDependencies ::
@@ -182,14 +182,15 @@ ver = diffTerm "Version: " $ intercalate "." . fmap show . versionNumbers . I.pk
 
 dep :: String -> [String] -> [String] -> String
 dep s a b =
-  (C.formatWith [C.magenta] s) <> case diffNew of
+  (C.formatWith [C.magenta] s) <> "    " <> case diffNew of
     [] -> joinToString a
     _ ->
-      (C.formatWith [C.indent 4] (joinToString $ fmap (\x -> red (x `elem` diffOld) x) a))
+      (joinToString $ fmap (\x -> red (x `elem` diffOld) x) a)
         <> "\n"
         <> replicate 28 '-'
         <> "\n"
-        <> (C.formatWith [C.indent 4] (joinToString $ fmap (\x -> green (x `elem` diffNew) x) b))
+        <> "    "
+        <> (joinToString $ fmap (\x -> green (x `elem` diffNew) x) b)
   where
     diffNew = b \\ a
     diffOld = a \\ b
