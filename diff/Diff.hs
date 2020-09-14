@@ -140,7 +140,7 @@ diffCabal name a b = do
   (bb, mb) <- directDependencies gb
   return $
     unlines
-      [ "Package: " <> unPackageName name,
+      [ C.formatWith [C.magenta] "Package: " <> unPackageName name,
         ver pa pb,
         desc pa pb,
         dep "Depends: \n" ba bb,
