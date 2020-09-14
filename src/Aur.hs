@@ -22,6 +22,7 @@ import Distribution.Types.PackageName (PackageName, unPackageName)
 import GHC.Generics (Generic)
 import Network.HTTP.Req
 import Polysemy
+import Polysemy.Req
 import Utils
 
 data AurReply a = AurReply
@@ -85,7 +86,8 @@ instance (FromJSON a) => FromJSON (AurReply a) where
         <*> v .: "type"
         <*> v .: "resultcount"
         <*> v .: "results"
-  parseJSON  _  = fail "Unable to parse AUR reply."
+  parseJSON _ = fail "Unable to parse AUR reply."
+
 instance (ToJSON a) => ToJSON (AurReply a)
 
 $(generateJSONInstance ''AurSearch)
@@ -97,9 +99,6 @@ data Aur m a where
   IsInAur :: PackageName -> Aur m Bool
 
 makeSem ''Aur
-
-reqToIO :: forall a r. Member (Embed IO) r => Req a -> Sem r a
-reqToIO r = embed @IO $ runReq defaultHttpConfig r
 
 baseURL :: Url 'Https
 baseURL = https "aur.archlinux.org" /: "rpc"

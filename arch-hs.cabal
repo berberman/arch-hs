@@ -81,7 +81,9 @@ library
                        PkgBuild,
                        Types,
                        Utils,
-                       Data.Aeson.Ext
+                       Data.Aeson.Ext,
+                       Polysemy.Req
+
 executable arch-hs
   import:              common-options
   hs-source-dirs:      app

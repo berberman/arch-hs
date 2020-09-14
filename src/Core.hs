@@ -27,7 +27,7 @@ import Distribution.Types.Dependency (Dependency, depPkgName)
 import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName)
-import Distribution.Types.Version (mkVersion, versionNumbers)
+import Distribution.Types.Version (mkVersion)
 import Distribution.Types.VersionRange
 import Distribution.Utils.ShortText (fromShortText)
 import Hackage
@@ -36,6 +36,7 @@ import Local
 import PkgBuild
 import Types
 import Utils
+import Distribution.Pretty (prettyShow)
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Windows) = Right True
@@ -161,7 +162,7 @@ cabalToPkgBuild pkg = do
   let _hkgName = pkg ^. pkgName & unPackageName
       rawName = toLower' _hkgName
       _pkgName = maybe rawName id $ stripPrefix "haskell-" rawName
-      _pkgVer = intercalate "." . fmap show . versionNumbers . I.pkgVersion . package $ cabal
+      _pkgVer = prettyShow . I.pkgVersion . package $ cabal
       _pkgDesc = fromShortText $ synopsis cabal
       getL (NONE) = ""
       getL (License e) = getE e

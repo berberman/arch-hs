@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Diff
   ( diffCabal,
     Options (..),
@@ -8,7 +10,9 @@ where
 import qualified Colourista as C
 import Core
 import Data.List (intercalate, nub, (\\))
+import qualified Data.Text as T
 import Distribution.PackageDescription
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import Distribution.Parsec (simpleParsec)
 import Distribution.Pretty (prettyShow)
 import qualified Distribution.Types.BuildInfo.Lens as L
@@ -19,11 +23,12 @@ import Distribution.Types.PackageName
 import Distribution.Types.UnqualComponentName
 import Distribution.Utils.ShortText (fromShortText)
 import Distribution.Version
-import Hackage
 import Lens.Micro
 import Local (ghcLibList, ignoreList)
+import Network.HTTP.Req hiding (header)
 import Options.Applicative
 import Polysemy
+import Polysemy.Req
 import Types
 import Utils
 
@@ -81,7 +86,7 @@ type VersionedComponentList = [(UnqualComponentName, VersionedList)]
 unExe' :: ExeDependency -> (PackageName, VersionRange)
 unExe' (ExeDependency name _ v) = (name, v)
 
-collectLibDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
+collectLibDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
@@ -92,7 +97,7 @@ collectLibDeps cabal = do
     Nothing -> return ([], [])
 
 collectRunnableDeps ::
-  (Semigroup k, L.HasBuildInfo k, Members [HackageEnv, FlagAssignmentEnv] r) =>
+  (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentEnv r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
@@ -104,18 +109,31 @@ collectRunnableDeps f cabal skip = do
       toolDeps = bInfo <&> ((_2 %~) $ fmap unExe' . buildToolDepends)
   return (runnableDeps, toolDeps)
 
-collectExeDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectExeDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectExeDeps = collectRunnableDeps condExecutables
 
-collectTestDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectTestDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectTestDeps = collectRunnableDeps condTestSuites
+
+getCabalFromHackage :: Member (Embed IO) r => PackageName -> Version -> Bool -> Sem r GenericPackageDescription
+getCabalFromHackage name version revision0 = do
+  let urlPath = T.pack $ unPackageName name <> "-" <> prettyShow version
+      revision0Api = https "hackage.haskell.org" /: "package" /: urlPath /: "revision" /: "0.cabal"
+      normalApi = https "hackage.haskell.org" /: "package" /: urlPath /: T.pack (unPackageName name) <> ".cabal"
+      api = if revision0 then revision0Api else normalApi
+      r = req GET api NoReqBody bsResponse mempty
+  embed $ C.infoMessage $ "Downloading cabal file from " <> renderUrl api <> "..."
+  response <- reqToIO r
+  case parseGenericPackageDescriptionMaybe $ responseBody response of
+    Just x -> return x
+    _ -> embed @IO $ fail $ "Failed to parse .cabal file from " <> show api
 
 -----------------------------------------------------------------------------
 
-diffCabal :: Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r => PackageName -> Version -> Version -> Sem r String
+diffCabal :: Members [FlagAssignmentEnv, WithMyErr, Embed IO] r => PackageName -> Version -> Version -> Sem r String
 diffCabal name a b = do
-  ga <- getCabal name a
-  gb <- getCabal name b
+  ga <- getCabalFromHackage name a True
+  gb <- getCabalFromHackage name b False
   let pa = packageDescription ga
       pb = packageDescription gb
   (ba, ma) <- directDependencies ga
@@ -130,7 +148,7 @@ diffCabal name a b = do
       ]
 
 directDependencies ::
-  Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r =>
+  Members [FlagAssignmentEnv, WithMyErr] r =>
   GenericPackageDescription ->
   Sem r ([String], [String])
 directDependencies cabal = do
@@ -159,7 +177,9 @@ directDependencies cabal = do
   return (depends, makedepends)
 
 diffTerm :: String -> (a -> String) -> a -> a -> String
-diffTerm s f a b = let (ra, rb) = (f a, f b) in s <> (if ra == rb then ra else (C.formatWith [C.red] $ ra <> "  ⇒  " <> rb))
+diffTerm s f a b =
+  let (ra, rb) = (f a, f b)
+   in (C.formatWith [C.magenta] s) <> (if ra == rb then ra else ((C.formatWith [C.red] ra) <> "  ⇒  " <> C.formatWith [C.green] rb))
 
 desc :: PackageDescription -> PackageDescription -> String
 desc = diffTerm "Synopsis: " $ fromShortText . synopsis
@@ -169,7 +189,7 @@ ver = diffTerm "Version: " $ intercalate "." . fmap show . versionNumbers . I.pk
 
 dep :: String -> [String] -> [String] -> String
 dep s a b =
-  s <> case diffNew of
+  (C.formatWith [C.magenta] s) <> case diffNew of
     [] -> joinToString a
     _ ->
       (C.formatWith [C.indent 4] (joinToString $ fmap (\x -> red (x `elem` diffOld) x) a))
