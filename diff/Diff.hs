@@ -134,6 +134,7 @@ diffCabal name a b = do
       [ C.formatWith [C.magenta] "Package: " <> unPackageName name,
         ver pa pb,
         desc pa pb,
+        url pa pb,
         dep "Depends: \n" ba bb,
         dep "MakeDepends: \n" ma mb
       ]
@@ -170,6 +171,9 @@ desc = diffTerm "Synopsis: " $ fromShortText . synopsis
 
 ver :: PackageDescription -> PackageDescription -> String
 ver = diffTerm "Version: " (prettyShow . getPkgVersion)
+
+url :: PackageDescription -> PackageDescription -> String
+url = diffTerm "URL: " getUrl
 
 dep :: String -> [String] -> [String] -> String
 dep s a b =
