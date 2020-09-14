@@ -25,7 +25,6 @@ import Distribution.Types.UnqualComponentName
 import Distribution.Utils.ShortText (fromShortText)
 import Distribution.Version
 import Lens.Micro
-import Local (ghcLibList, ignoreList)
 import Network.HTTP.Req hiding (header)
 import Options.Applicative
 import Polysemy
@@ -149,25 +148,18 @@ directDependencies cabal = do
   (exeDeps, exeToolsDeps) <- collectExeDeps cabal []
   (testDeps, testToolsDeps) <- collectTestDeps cabal []
   let connectVersionWithName (n, range) = unPackageName n <> "  " <> prettyShow range
-      flatten = fmap connectVersionWithName . mconcat . fmap snd
-      l = fmap connectVersionWithName libDeps
-      lt = fmap connectVersionWithName libToolsDeps
+      flatten = mconcat . fmap snd
+      l = libDeps
+      lt = libToolsDeps
       e = flatten exeDeps
       et = flatten exeToolsDeps
       t = flatten testDeps
       tt = flatten testToolsDeps
-      name = unPackageName $ getPkgName cabal
-      notInGHCLib = (`notElem` ghcLibList) . mkPackageName
-      notInIgnore = (`notElem` ignoreList) . mkPackageName
-      notMyself = (/= name)
-      distinct =
-        filter notInIgnore
-          . filter notInGHCLib
-          . filter notMyself
-          . nub
+      notMyself = (/= getPkgName cabal)
+      distinct = filter (notMyself . fst) . nub
       depends = distinct $ l <> e
       makedepends = (distinct $ lt <> et <> t <> tt) \\ depends
-  return (depends, makedepends)
+  return (fmap connectVersionWithName depends, fmap connectVersionWithName makedepends)
 
 diffTerm :: String -> (a -> String) -> a -> a -> String
 diffTerm s f a b =
