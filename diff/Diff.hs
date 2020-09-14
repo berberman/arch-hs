@@ -19,7 +19,6 @@ import Distribution.Pretty (prettyShow)
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.Dependency
 import Distribution.Types.ExeDependency (ExeDependency (ExeDependency))
-import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName
 import Distribution.Types.UnqualComponentName
 import Distribution.Utils.ShortText (fromShortText)
@@ -81,7 +80,7 @@ collectLibDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> Sem
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
-      bInfo <- evalConditionTree (getPkgName cabal) lib
+      bInfo <- evalConditionTree (getPkgName' cabal) lib
       let libDeps = fmap (\x -> (depPkgName x, depVerRange x)) $ targetBuildDepends bInfo
           toolDeps = fmap unExe' $ buildToolDepends bInfo
       return (libDeps, toolDeps)
@@ -95,7 +94,7 @@ collectRunnableDeps ::
   Sem r (VersionedComponentList, VersionedComponentList)
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
-  bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName cabal) . snd) exes
+  bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName' cabal) . snd) exes
   let runnableDeps = bInfo <&> ((_2 %~) $ fmap (\x -> (depPkgName x, depVerRange x)) . targetBuildDepends)
       toolDeps = bInfo <&> ((_2 %~) $ fmap unExe' . buildToolDepends)
   return (runnableDeps, toolDeps)
@@ -155,7 +154,7 @@ directDependencies cabal = do
       et = flatten exeToolsDeps
       t = flatten testDeps
       tt = flatten testToolsDeps
-      notMyself = (/= getPkgName cabal)
+      notMyself = (/= (getPkgName' cabal))
       distinct = filter (notMyself . fst) . nub
       depends = distinct $ l <> e
       makedepends = (distinct $ lt <> et <> t <> tt) \\ depends
@@ -170,7 +169,7 @@ desc :: PackageDescription -> PackageDescription -> String
 desc = diffTerm "Synopsis: " $ fromShortText . synopsis
 
 ver :: PackageDescription -> PackageDescription -> String
-ver = diffTerm "Version: " $ intercalate "." . fmap show . versionNumbers . I.pkgVersion . package
+ver = diffTerm "Version: " (prettyShow . getPkgVersion)
 
 dep :: String -> [String] -> [String] -> String
 dep s a b =

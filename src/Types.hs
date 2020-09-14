@@ -65,7 +65,6 @@ type WithMyErr = Error MyException
 data MyException
   = PkgNotFound PackageName
   | VersionError PackageName Version
-  | UrlError PackageName
   | TargetExist PackageName DependencyProvider
   | LicenseError PackageName
   deriving stock (Eq)
@@ -73,7 +72,6 @@ data MyException
 instance Show MyException where
   show (PkgNotFound name) = "Unable to find [" <> unPackageName name <> "]"
   show (VersionError name version) = "Unable to find [" <> unPackageName name <> "-" <> prettyShow version <> "]"
-  show (UrlError name) = "Unable to find the url of [" <> unPackageName name <> "]"
   show (TargetExist name provider) = "Target [" <> unPackageName name <> "] has been provided by " <> show provider
   show (LicenseError name) = "Unable to find the license of [" <> unPackageName name <> "]"
 

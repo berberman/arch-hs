@@ -17,7 +17,7 @@ import Data.Maybe (fromJust)
 import Distribution.Hackage.DB
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import Distribution.Types.Flag (Flag)
-import Distribution.Types.GenericPackageDescription (GenericPackageDescription, genPackageFlags)
+import Distribution.Types.GenericPackageDescription (GenericPackageDescription, genPackageFlags, packageDescription)
 import Distribution.Types.PackageName (PackageName)
 import Distribution.Version (Version, nullVersion)
 import Lens.Micro
@@ -42,8 +42,8 @@ loadHackageDB = readTarball Nothing
 insertDB :: GenericPackageDescription -> HackageDB -> HackageDB
 insertDB cabal db = Map.insert name packageData db
   where
-    name = getPkgName cabal
-    version = getPkgVersion cabal
+    name = getPkgName $ packageDescription cabal
+    version = getPkgVersion $ packageDescription cabal
     versionData = VersionData cabal $ Map.empty
     packageData = Map.singleton version versionData
 

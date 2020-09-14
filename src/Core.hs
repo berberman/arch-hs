@@ -12,7 +12,6 @@ module Core
 where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
-import Control.Monad ((<=<))
 import Data.List (intercalate, stripPrefix)
 import qualified Data.Map as Map
 import qualified Data.Set as S
@@ -25,7 +24,6 @@ import Distribution.System (Arch (X86_64), OS (Windows))
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
 import Distribution.Types.Dependency (Dependency, depPkgName)
-import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName)
 import Distribution.Types.Version (mkVersion)
@@ -125,7 +123,7 @@ collectLibDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDes
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
-      info <- evalConditionTree (getPkgName cabal) lib
+      info <- evalConditionTree (getPkgName' cabal) lib
       let libDeps = fmap depPkgName $ targetBuildDepends info
           toolDeps = fmap unExe $ buildToolDepends info
       return (libDeps, toolDeps)
@@ -139,7 +137,7 @@ collectRunnableDeps ::
   Sem r (ComponentPkgList, ComponentPkgList)
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
-  info <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName cabal) . snd) exes
+  info <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName' cabal) . snd) exes
   let runnableDeps = info <&> ((_2 %~) $ fmap depPkgName . targetBuildDepends)
       toolDeps = info <&> ((_2 %~) $ fmap unExe . buildToolDepends)
   return (runnableDeps, toolDeps)
@@ -163,7 +161,7 @@ cabalToPkgBuild pkg = do
   let _hkgName = pkg ^. pkgName & unPackageName
       rawName = toLower' _hkgName
       _pkgName = maybe rawName id $ stripPrefix "haskell-" rawName
-      _pkgVer = prettyShow . I.pkgVersion . package $ cabal
+      _pkgVer = prettyShow $ getPkgVersion cabal
       _pkgDesc = fromShortText $ synopsis cabal
       getL (NONE) = ""
       getL (License e) = getE e
@@ -192,16 +190,9 @@ cabalToPkgBuild pkg = do
       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
       _depends = depsToString depends
       _makeDepends = depsToString makeDepends
+      _url = getUrl cabal
       wrap s = '\'' : s <> "\'"
-      fromJust (Just x) = return x
-      fromJust _ = throw $ UrlError name
-      head' (x : _) = return x
-      head' [] = throw $ UrlError name
       notInGHCLib x = (x ^. depName) `notElem` ghcLibList
       notMyself x = x ^. depName /= name
       selectDepKind k x = k `elem` (x ^. depType & mapped %~ dependencyTypeToKind)
-
-  _url <- case fromShortText $ homepage cabal of
-    "" -> fromJust . repoLocation <=< head' $ sourceRepos cabal
-    x -> return x
   return PkgBuild {..}
