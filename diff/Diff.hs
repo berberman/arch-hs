@@ -107,12 +107,10 @@ collectExeDeps = collectRunnableDeps condExecutables
 collectTestDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
-getCabalFromHackage :: Members [Embed IO, WithMyErr] r => PackageName -> Version -> Bool -> Sem r GenericPackageDescription
-getCabalFromHackage name version revision0 = do
+getCabalFromHackage :: Members [Embed IO, WithMyErr] r => PackageName -> Version -> Sem r GenericPackageDescription
+getCabalFromHackage name version = do
   let urlPath = T.pack $ unPackageName name <> "-" <> prettyShow version
-      revision0Api = https "hackage.haskell.org" /: "package" /: urlPath /: "revision" /: "0.cabal"
-      normalApi = https "hackage.haskell.org" /: "package" /: urlPath /: T.pack (unPackageName name) <> ".cabal"
-      api = if revision0 then revision0Api else normalApi
+      api = https "hackage.haskell.org" /: "package" /: urlPath /: "revision" /: "0.cabal"
       r = req GET api NoReqBody bsResponse mempty
   embed $ C.infoMessage $ "Downloading cabal file from " <> renderUrl api <> "..."
   response <- embed $ CE.try @HttpException (runReq defaultHttpConfig r)
@@ -127,8 +125,8 @@ getCabalFromHackage name version revision0 = do
 
 diffCabal :: Members [FlagAssignmentEnv, WithMyErr, Embed IO] r => PackageName -> Version -> Version -> Sem r String
 diffCabal name a b = do
-  ga <- getCabalFromHackage name a True
-  gb <- getCabalFromHackage name b True
+  ga <- getCabalFromHackage name a
+  gb <- getCabalFromHackage name b
   let pa = packageDescription ga
       pb = packageDescription gb
   (ba, ma) <- directDependencies ga
