@@ -50,13 +50,13 @@ runArgsParser =
 main :: IO ()
 main = do
   Options {..} <- runArgsParser
-  uusi optPath >>= putStrLn
+  uusiCabal optPath >>= putStrLn
 
 genPatch :: FilePath -> FilePath -> IO String
 genPatch a b = (^. _2) <$> readCreateProcessWithExitCode (shell $ "diff -u " <> a <> " " <> b) ""
 
-uusi :: FilePath -> IO String
-uusi origin = do
+uusiCabal :: FilePath -> IO String
+uusiCabal origin = do
   cabal <- parseCabalFile origin
   temp <- getTemporaryDirectory
   (path, handle) <- openTempFile temp "arch-hs-uusi"
@@ -70,25 +70,27 @@ uusi origin = do
 
 -----------------------------------------------------------------------------
 
-uusiDependency :: Dependency -> Dependency
+type Uusi a = a -> a
+
+uusiDependency :: Uusi Dependency
 uusiDependency (Dependency name _ lib) = Dependency name anyVersion lib
 
-uusiExeDependency :: ExeDependency -> ExeDependency
+uusiExeDependency :: Uusi ExeDependency
 uusiExeDependency (ExeDependency name component _) = ExeDependency name component anyVersion
 
-uusiBuildInfo :: BuildInfo -> BuildInfo
+uusiBuildInfo :: Uusi BuildInfo
 uusiBuildInfo i =
   i
     & (targetBuildDepends %~ fmap uusiDependency)
     & (buildToolDepends %~ fmap uusiExeDependency)
 
-uusiCondTree :: (HasBuildInfo a) => CondTree ConfVar [Dependency] a -> CondTree ConfVar [Dependency] a
+uusiCondTree :: (HasBuildInfo a) => Uusi (CondTree ConfVar [Dependency] a)
 uusiCondTree cond =
   mapTreeData (\a -> a & buildInfo %~ uusiBuildInfo)
     . mapTreeConstrs (fmap uusiDependency)
     $ cond
 
-uusiGenericPackageDescription :: GenericPackageDescription -> GenericPackageDescription
+uusiGenericPackageDescription :: Uusi GenericPackageDescription
 uusiGenericPackageDescription cabal =
   cabal
     & (condExecutables %~ uusiTrees)
