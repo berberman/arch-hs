@@ -8,10 +8,7 @@ import qualified Control.Exception as CE
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Diff
-import Polysemy
-import Polysemy.Error
-import Polysemy.Reader
-import Types
+import Distribution.ArchHs.Types
 
 main :: IO ()
 main = CE.catch @CE.IOException

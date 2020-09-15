@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_HADDOCK prune, ignore-exports #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
 -- This module provides functios operating with @community.db@ of pacman.
-module Community
+module Distribution.ArchHs.Community
   ( defaultCommunityPath,
     loadProcessedCommunity,
     isInCommunity,
@@ -18,10 +19,10 @@ import qualified Data.Conduit.Zlib as Zlib
 import Data.List (intercalate)
 import Data.List.Split (splitOn)
 import qualified Data.Set as Set
+import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import System.FilePath ((</>))
-import Types
-import Utils
 
 -- | Default path to @community.db@.
 defaultCommunityPath :: FilePath
@@ -52,7 +53,12 @@ cookCommunity = mapC (go . (splitOn "-"))
 loadProcessedCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
 loadProcessedCommunity path = fmap Set.fromList $ runConduitRes $ loadCommunity path .| cookCommunity .| sinkList
 
--- | Check if a package from hackage with @name@ exists in archlinux community repo.
+-- | Check if a package from hackage exists in archlinux community repo.
+-- A name conversion occurs during the checking to fit 'loadProcessedCommunity'.
+--
+-- >>> "aeson" --> "aeson"
+-- >>> "Cabal" --> "cabal"
+-- >>> "haskell-a" --> "a"
 isInCommunity :: Member CommunityEnv r => PackageName -> Sem r Bool
 isInCommunity name =
   ask @CommunityDB >>= \db ->

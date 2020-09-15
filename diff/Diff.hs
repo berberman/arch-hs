@@ -9,9 +9,11 @@ where
 
 import qualified Colourista as C
 import qualified Control.Exception as CE
-import Core
 import Data.List (intercalate, nub, (\\))
 import qualified Data.Text as T
+import Distribution.ArchHs.Core
+import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import Distribution.Parsec (simpleParsec)
@@ -28,8 +30,6 @@ import Network.HTTP.Req hiding (header)
 import Options.Applicative
 import Polysemy
 import Polysemy.Error
-import Types
-import Utils
 
 data Options = Options
   { optPackageName :: PackageName,

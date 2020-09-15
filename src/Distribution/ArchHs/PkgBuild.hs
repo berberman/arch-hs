@@ -2,11 +2,16 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module PkgBuild
+-- | Copyright: (c) 2020 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <1793913507@qq.com>
+-- Template of PKGBUILD file.
+module Distribution.ArchHs.PkgBuild
   ( PkgBuild (..),
     ArchLicense,
     mapLicense,
     applyTemplate,
+    felixTemplate,
   )
 where
 
@@ -14,30 +19,34 @@ import Data.Text (Text, pack, unpack)
 import Distribution.SPDX.LicenseId
 import NeatInterpolation (text)
 
+-- | PkgBuild data type, representing needed informations in filling the 'felixTemplate'.
 data PkgBuild = PkgBuild
-  { _hkgName :: String,
+  { -- | Field @_hkgName@.
+    _hkgName :: String,
+    -- | Field @pkgname@.
     _pkgName :: String,
+    -- | Field @pkgver@.
     _pkgVer :: String,
+    -- | Field @pkgdesc@.
     _pkgDesc :: String,
+    -- | Field @@url.
     _url :: String,
+    -- | Field @license@.
     _license :: String,
+    -- | Array @depends@, which has been joined into 'String'.
     _depends :: String,
+    -- | Array @makedepends@, which has been joined into 'String'.
     _makeDepends :: String,
+    -- | Whether generate @check()@ bash function in PKGBUILD.
     _enableCheck :: Bool
   }
 
+-- | Licenses available in <https://www.archlinux.org/packages/core/any/licenses/ licenses>.
 data ArchLicense
   = AGPL3
   | Apache
   | Artistic2_0
-  | -- | Boost
-    -- | CC_BY
-    -- | CC_BY_NC
-    -- | CC_BY_NC_ND
-    -- | CC_BY_NC_SA
-    -- | CC_BY_ND
-    -- | CC_BY_SA
-    CDDL
+  | CDDL
   | CPL
   | EPL
   | FDL1_2
@@ -78,11 +87,12 @@ instance Show ArchLicense where
   show PSF = "PSF"
   show PerlArtistic = "PerlArtistic"
   show RUBY = "RUBY"
-  show PkgBuild.Unlicense = "Unlicense"
-  show PkgBuild.W3C = "W3C"
+  show Distribution.ArchHs.PkgBuild.Unlicense = "Unlicense"
+  show Distribution.ArchHs.PkgBuild.W3C = "W3C"
   show ZPL = "ZPL"
   show (Custom x) = "custom:" <> x
 
+-- | Map 'LicenseId' to 'ArchLicense'. License not provided by system will be mapped to @custom:...@.
 mapLicense :: LicenseId -> ArchLicense
 mapLicense AGPL_3_0_only = AGPL3
 mapLicense Apache_2_0 = Apache
@@ -104,11 +114,12 @@ mapLicense Python_2_0 = PSF
 mapLicense Artistic_1_0_Perl = PerlArtistic
 mapLicense Ruby = RUBY
 mapLicense ZPL_2_1 = ZPL
-mapLicense Distribution.SPDX.LicenseId.Unlicense = PkgBuild.Unlicense
-mapLicense Distribution.SPDX.LicenseId.W3C = PkgBuild.W3C
+mapLicense Distribution.SPDX.LicenseId.Unlicense = Distribution.ArchHs.PkgBuild.Unlicense
+mapLicense Distribution.SPDX.LicenseId.W3C = Distribution.ArchHs.PkgBuild.W3C
 mapLicense BSD_3_Clause = Custom "BSD3"
 mapLicense x = Custom $ show x
 
+-- | Apply 'PkgBuild' to 'felixTemplate'.
 applyTemplate :: PkgBuild -> String
 applyTemplate PkgBuild {..} =
   unpack $
@@ -123,6 +134,7 @@ applyTemplate PkgBuild {..} =
       (pack _makeDepends)
       (if _enableCheck then check else "\n")
 
+-- | Text of @check()@ function.
 check :: Text
 check =
   [text|
@@ -132,6 +144,7 @@ check =
   }
 |]
 
+-- | A fixed template of haskell package in archlinux. See <https://wiki.archlinux.org/index.php/Haskell_package_guidelines Haskell package guidelines> .
 felixTemplate :: Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text
 felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends checkF =
   [text|

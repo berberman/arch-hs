@@ -4,8 +4,9 @@
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
 -- This module provides parser of @desc@ file in pacman db.
-module PkgDesc
+module Distribution.ArchHs.PkgDesc
   ( PkgDesc (..),
+    DescParser,
     descParser,
     descFieldsParser,
     runDescParser,
@@ -17,10 +18,11 @@ import Data.Void (Void)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 
+-- | A parser takes 'String' as input, without user state.
 type DescParser = Parsec Void String
 
 -- | Package description file of a installed system package,
--- which lies in 'repo'.db file.
+-- which lies in @repo.db@ file.
 data PkgDesc = PkgDesc
   { name :: String,
     version :: String,

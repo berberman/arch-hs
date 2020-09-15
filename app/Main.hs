@@ -8,28 +8,28 @@ module Main (main) where
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Args
-import Aur
 import qualified Colourista as C
-import Community
 import Conduit
 import qualified Control.Exception as CE
 import Control.Monad (filterM, when)
-import Core
 import Data.List (groupBy, intercalate, isInfixOf, nub)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import Distribution.ArchHs.Aur
+import Distribution.ArchHs.Community
+import Distribution.ArchHs.Core
+import Distribution.ArchHs.Hackage
+import Distribution.ArchHs.Local
+import Distribution.ArchHs.PkgBuild
+import Distribution.ArchHs.Types
 import Distribution.Hackage.DB (HackageDB)
 import Distribution.PackageDescription
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (mkUnqualComponentName)
-import Hackage
 import Lens.Micro
-import Local
-import PkgBuild
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName, (</>))
-import Types
 
 app :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr] r => String -> FilePath -> Bool -> [String] -> Sem r ()
 app name path aurSupport skip = do

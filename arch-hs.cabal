@@ -72,15 +72,15 @@ common common-options
 library
   import:              common-options
   hs-source-dirs:      src
-  exposed-modules:     Aur,
-                       PkgDesc,
-                       Community,
-                       Core,
-                       Hackage,
-                       Local,
-                       PkgBuild,
-                       Types,
-                       Utils,
+  exposed-modules:     Distribution.ArchHs.Aur,
+                       Distribution.ArchHs.PkgDesc,
+                       Distribution.ArchHs.Community,
+                       Distribution.ArchHs.Core,
+                       Distribution.ArchHs.Hackage,
+                       Distribution.ArchHs.Local,
+                       Distribution.ArchHs.PkgBuild,
+                       Distribution.ArchHs.Types,
+                       Distribution.ArchHs.Utils,
                        Data.Aeson.Ext,
                        Polysemy.Req
 

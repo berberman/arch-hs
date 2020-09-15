@@ -1,4 +1,8 @@
-module Hackage
+-- | Copyright: (c) 2020 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <1793913507@qq.com>
+-- This module provides functions operating with 'HackageDB' and 'GenericPackageDescription'.
+module Distribution.ArchHs.Hackage
   ( lookupHackagePath,
     loadHackageDB,
     insertDB,
@@ -14,6 +18,8 @@ import Control.Applicative (Alternative ((<|>)))
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
+import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils
 import Distribution.Hackage.DB
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import Distribution.Types.Flag (Flag)
@@ -23,9 +29,10 @@ import Distribution.Version (Version, nullVersion)
 import Lens.Micro
 import System.Directory
 import System.FilePath ((</>))
-import Types
-import Utils
 
+-- | Look up hackage tarball path from @~/.cabal@.
+-- Arbitrary hackage mirror is potential to be selected.
+-- Preferred to @01-index.tar@, whereas fallback to @00-index.tar@.
 lookupHackagePath :: IO FilePath
 lookupHackagePath = do
   home <- (\d -> d </> ".cabal" </> "packages") <$> getHomeDirectory
@@ -36,9 +43,11 @@ lookupHackagePath = do
     Just x -> return x
     Nothing -> fail $ "Unable to find hackage index tarball from " <> show subs
 
+-- | Read and parse hackage index tarball.
 loadHackageDB :: FilePath -> IO HackageDB
 loadHackageDB = readTarball Nothing
 
+-- | Insert a 'GenericPackageDescription' into 'HackageDB'.
 insertDB :: GenericPackageDescription -> HackageDB -> HackageDB
 insertDB cabal db = Map.insert name packageData db
   where
@@ -47,6 +56,7 @@ insertDB cabal db = Map.insert name packageData db
     versionData = VersionData cabal $ Map.empty
     packageData = Map.singleton version versionData
 
+-- | Read and parse @.cabal@ file.
 parseCabalFile :: FilePath -> IO GenericPackageDescription
 parseCabalFile path = do
   bs <- BS.readFile path
@@ -54,6 +64,7 @@ parseCabalFile path = do
     Just x -> return x
     _ -> fail $ "Failed to parse .cabal from " <> path
 
+-- | Get the latest 'GenericPackageDescription'.
 getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
 getLatestCabal name = do
   db <- ask @HackageDB
@@ -63,6 +74,7 @@ getLatestCabal name = do
       Nothing -> throw $ VersionError name nullVersion
     Nothing -> throw $ PkgNotFound name
 
+-- | Get 'GenericPackageDescription' with a specific version.
 getCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Version -> Sem r GenericPackageDescription
 getCabal name version = do
   db <- ask @HackageDB
@@ -72,11 +84,13 @@ getCabal name version = do
       Nothing -> throw $ VersionError name version
     Nothing -> throw $ PkgNotFound name
 
+-- | Get flags of a package.
 getPackageFlag :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r [Flag]
 getPackageFlag name = do
   cabal <- getLatestCabal name
   return $ cabal & genPackageFlags
 
+-- | Traverse hackage packages.
 traverseHackage :: (Member HackageEnv r, Applicative f) => ((PackageName, GenericPackageDescription) -> f b) -> Sem r (f [b])
 traverseHackage f = do
   db <- ask @HackageDB

@@ -1,12 +1,17 @@
-module Local
+-- | Copyright: (c) 2020 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <1793913507@qq.com>
+-- This module maintains names of packages which are need special treatments during dependency resolving or PKGBUILD generating.
+module Distribution.ArchHs.Local
   ( ignoreList,
     ghcLibList,
   )
 where
 
+import Distribution.ArchHs.Types
 import Distribution.Types.PackageName
-import Types
 
+-- | Packages which dependencies shouldn't be expanded any more.
 ignoreList :: PkgList
 ignoreList =
   mkPackageName
@@ -30,6 +35,7 @@ ignoreList =
           "Win32"
         ]
 
+-- | Packages already provided by <https://www.archlinux.org/packages/community/x86_64/ghc-libs/ ghc-libs>.
 ghcLibList :: PkgList
 ghcLibList =
   mkPackageName

@@ -4,7 +4,7 @@
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
 -- The core functions of @arch-hs@.
-module Core
+module Distribution.ArchHs.Core
   ( getDependencies,
     cabalToPkgBuild,
     evalConditionTree,
@@ -15,6 +15,11 @@ import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Data.List (intercalate, stripPrefix)
 import qualified Data.Map as Map
 import qualified Data.Set as S
+import Distribution.ArchHs.Hackage
+import Distribution.ArchHs.Local
+import Distribution.ArchHs.PkgBuild
+import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils
 import qualified Distribution.Compat.Lens as L
 import Distribution.Compiler (CompilerFlavor (..))
 import Distribution.PackageDescription
@@ -29,12 +34,7 @@ import Distribution.Types.UnqualComponentName (UnqualComponentName)
 import Distribution.Types.Version (mkVersion)
 import Distribution.Types.VersionRange
 import Distribution.Utils.ShortText (fromShortText)
-import Hackage
 import Lens.Micro
-import Local
-import PkgBuild
-import Types
-import Utils
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Windows) = Right True
@@ -48,7 +48,7 @@ archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
     go _ (Just r) = Right r
     go x Nothing = Left x
 
--- | Simplify the condition tree from 'GenericPackageDescription' with given flag assignments.
+-- | Simplify the condition tree from 'GenericPackageDescription' with given flag assignments and archlinux system assumption.
 evalConditionTree :: (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentEnv r) => PackageName -> CondTree ConfVar [Dependency] k -> Sem r BuildInfo
 evalConditionTree name cond = do
   flg <- ask
@@ -64,9 +64,13 @@ evalConditionTree name cond = do
 -- and only packages depended by executables, libraries, and test suits will be collected.
 getDependencies ::
   Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r =>
+  -- | Resolved
   S.Set PackageName ->
+  -- | Skipped
   [UnqualComponentName] ->
+  -- | Whether recursive
   Bool ->
+  -- | Target
   PackageName ->
   Sem r (G.AdjacencyMap (S.Set DependencyType) PackageName)
 getDependencies resolved skip recursive name = do

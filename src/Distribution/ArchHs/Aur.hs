@@ -3,7 +3,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Aur
+-- | Copyright: (c) 2020 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <1793913507@qq.com>
+-- This module supports <https://aur.archlinux.org/ AUR> searching.
+module Distribution.ArchHs.Aur
   ( AurReply (..),
     AurSearch (..),
     AurInfo (..),
@@ -18,13 +22,14 @@ where
 import Data.Aeson
 import Data.Aeson.Ext
 import Data.Text (Text, pack)
+import Distribution.ArchHs.Utils
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import GHC.Generics (Generic)
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Req
-import Utils
 
+-- | AUR response
 data AurReply a = AurReply
   { r_version :: Int,
     r_type :: String,
@@ -33,6 +38,7 @@ data AurReply a = AurReply
   }
   deriving stock (Show, Generic)
 
+-- | AUR search result
 data AurSearch = AurSearch
   { s_ID :: Int,
     s_Name :: String,
@@ -51,6 +57,7 @@ data AurSearch = AurSearch
   }
   deriving stock (Show, Generic)
 
+-- | AUR info result
 data AurInfo = AurInfo
   { i_ID :: Int,
     i_Name :: String,
@@ -93,9 +100,13 @@ instance (ToJSON a) => ToJSON (AurReply a)
 $(generateJSONInstance ''AurSearch)
 $(generateJSONInstance ''AurInfo)
 
+-- | AUR Effect
 data Aur m a where
+  -- | Serach a package from AUR
   SearchByName :: String -> Aur m (Maybe AurSearch)
+  -- | Get package info from AUR
   InfoByName :: String -> Aur m (Maybe AurInfo)
+  -- | Check whether a __haskell__ package exists in AUR
   IsInAur :: PackageName -> Aur m Bool
 
 makeSem ''Aur
@@ -103,6 +114,7 @@ makeSem ''Aur
 baseURL :: Url 'Https
 baseURL = https "aur.archlinux.org" /: "rpc"
 
+-- | Run 'Aur' effect.
 aurToIO :: Member (Embed IO) r => Sem (Aur ': r) a -> Sem r a
 aurToIO = interpret $ \case
   (SearchByName name) -> do
