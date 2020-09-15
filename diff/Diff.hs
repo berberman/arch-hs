@@ -28,8 +28,6 @@ import Distribution.Version
 import Lens.Micro
 import Network.HTTP.Req hiding (header)
 import Options.Applicative
-import Polysemy
-import Polysemy.Error
 
 data Options = Options
   { optPackageName :: PackageName,
