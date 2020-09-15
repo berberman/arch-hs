@@ -20,7 +20,6 @@ import Distribution.ArchHs.Local
 import Distribution.ArchHs.PkgBuild
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
-import qualified Distribution.Compat.Lens as L
 import Distribution.Compiler (CompilerFlavor (..))
 import Distribution.PackageDescription
 import Distribution.Pretty (prettyShow)
@@ -49,13 +48,17 @@ archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
     go x Nothing = Left x
 
 -- | Simplify the condition tree from 'GenericPackageDescription' with given flag assignments and archlinux system assumption.
-evalConditionTree :: (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentEnv r) => PackageName -> CondTree ConfVar [Dependency] k -> Sem r BuildInfo
+evalConditionTree ::
+  (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentEnv r) =>
+  PackageName ->
+  CondTree ConfVar [Dependency] k ->
+  Sem r BuildInfo
 evalConditionTree name cond = do
   flg <- ask
   let thisFlag = case Map.lookup name flg of
         Just f -> f
         Nothing -> mkFlagAssignment []
-  return $ (L.^. L.buildInfo) . snd $ simplifyCondTree (archEnv thisFlag) cond
+  return $ (^. L.buildInfo) . snd $ simplifyCondTree (archEnv thisFlag) cond
 
 -----------------------------------------------------------------------------
 
