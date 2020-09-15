@@ -2,7 +2,11 @@ cabal-version:       2.4
 name:                arch-hs
 version:             0.0.0.0
 synopsis:            A program generating PKGBUILD for hackage packages.
-description:         See README for more info
+description:         
+    @arch-hs@ is a command-line program, which simplifies the process of producing
+    and maintaining haskell packages for archlinux distribution by automating the
+    PKGBUILD generation with the dependency resolving and template filling. Packagers should follow the
+    <https://wiki.archlinux.org/index.php/Haskell_package_guidelines Haskell package guidelines>.
 homepage:            https://github.com/berberman/arch-hs
 bug-reports:         https://github.com/berberman/arch-hs/issues
 license:             MIT
