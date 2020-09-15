@@ -22,7 +22,7 @@ main = CE.catch @CE.IOException
         Left x -> C.errorMessage $ "Runtime Error: " <> (T.pack . show $ x)
         Right r -> putStrLn r >> C.successMessage "Success!"
   )
-  $ \e -> C.errorMessage $ "Uncaught Exception: " <> (T.pack . show $ e)
+  $ \e -> C.errorMessage $ "IOException: " <> (T.pack . show $ e)
 
 runDiff :: Sem '[FlagAssignmentEnv, WithMyErr, Embed IO, Final IO] a -> IO (Either MyException a)
 runDiff = runFinal . embedToFinal . errorToIOFinal . runReader (Map.empty)

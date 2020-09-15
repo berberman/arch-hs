@@ -164,7 +164,8 @@ directDependencies cabal = do
 diffTerm :: String -> (a -> String) -> a -> a -> String
 diffTerm s f a b =
   let (ra, rb) = (f a, f b)
-   in (C.formatWith [C.magenta] s) <> (if ra == rb then ra else ((C.formatWith [C.red] ra) <> "  ⇒  " <> C.formatWith [C.green] rb))
+   in (C.formatWith [C.magenta] s)
+        <> (if ra == rb then ra else ((C.formatWith [C.red] ra) <> "  ⇒  " <> C.formatWith [C.green] rb))
 
 desc :: PackageDescription -> PackageDescription -> String
 desc = diffTerm "Synopsis: " $ fromShortText . synopsis
@@ -177,7 +178,7 @@ url = diffTerm "URL: " getUrl
 
 dep :: String -> [String] -> [String] -> String
 dep s a b =
-  (C.formatWith [C.magenta] s) <> "    " <> case diffNew of
+  (C.formatWith [C.magenta] s) <> "    " <> case (diffOld <> diffNew) of
     [] -> joinToString a
     _ ->
       (joinToString $ fmap (\x -> red (x `elem` diffOld) x) a)
