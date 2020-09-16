@@ -207,24 +207,27 @@ prettyFlagAssignment :: FlagAssignment -> String
 prettyFlagAssignment m = mconcat $ fmap (\(n, v) -> "⚐ " <> C.formatWith [C.yellow] (unFlagName n) <> " : " <> C.formatWith [C.cyan] (show v) <> "\n") $ unFlagAssignment m
 
 prettySolvedPkgs :: [SolvedPackage] -> String
-prettySolvedPkgs =
-  mconcat
-    . fmap
-      ( \case
-          SolvedPackage {..} ->
-            C.formatWith [C.bold, C.yellow] (unPackageName _pkgName <> "\n")
-              <> mconcat
-                ( fmap
-                    ( \(i :: Int, SolvedDependency {..}) ->
-                        let prefix = if i == length _pkgDeps then " └─" else " ├─"
-                         in case _depProvider of
-                              (Just x) -> (C.formatWith [C.green] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType <> " ✔ ") <> (C.formatWith [C.cyan] $ "[" <> show x <> "]\n")
-                              _ -> C.formatWith [C.bold, C.yellow] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType <> "\n"
-                    )
-                    (zip [1 ..] _pkgDeps)
-                )
-          ProvidedPackage {..} -> (C.formatWith [C.green] $ unPackageName _pkgName <> " ✔ ") <> (C.formatWith [C.cyan] $ "[" <> show _pkgProvider <> "]\n")
+prettySolvedPkgs = con . mconcat . fmap prettySolvedPkg
+
+prettySolvedPkg :: SolvedPackage -> [(String, String)]
+prettySolvedPkg SolvedPackage {..} =
+  (C.formatWith [C.bold, C.yellow] (unPackageName _pkgName), C.formatWith [C.red] "    ✘") :
+  ( fmap
+      ( \(i :: Int, SolvedDependency {..}) ->
+          let prefix = if i == length _pkgDeps then " └─" else " ├─"
+           in case _depProvider of
+                (Just x) -> ((C.formatWith [C.green] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType), ((C.formatWith [C.green] "✔ ") <> (C.formatWith [C.cyan] $ "[" <> show x <> "]")))
+                _ -> (C.formatWith [C.bold, C.yellow] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.red] "    ✘")
       )
+      (zip [1 ..] _pkgDeps)
+  )
+prettySolvedPkg ProvidedPackage {..} = [((C.formatWith [C.green] $ unPackageName _pkgName), ((C.formatWith [C.green] "✔ ") <> (C.formatWith [C.cyan] $ "[" <> show _pkgProvider <> "]")))]
+
+con :: [(String, String)] -> String
+con l = mconcat complemented
+  where
+    maxL = maximum $ fmap (length . fst) l
+    complemented = fmap (\(x, y) -> (x <> (replicate (maxL - length x) ' ') <> y <> "\n")) l
 
 prettyDeps :: [PackageName] -> String
 prettyDeps list =
