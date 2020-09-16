@@ -1,7 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main (main) where
 
+import qualified Colourista as C
+import qualified Control.Exception as CE
+import qualified Data.Text as T
 import Distribution.ArchHs.Hackage (parseCabalFile)
 import Distribution.PackageDescription.PrettyPrint (showGenericPackageDescription)
 import Distribution.Types.CondTree
@@ -24,7 +28,7 @@ import Distribution.Types.Lens
 import Distribution.Types.VersionRange (anyVersion)
 import Lens.Micro
 import Options.Applicative
-import System.Directory (getTemporaryDirectory, removeFile)
+import System.Directory
 import System.IO (hClose, hFlush, hPutStr, openTempFile)
 import System.Process (readCreateProcessWithExitCode, shell)
 
@@ -48,24 +52,39 @@ runArgsParser =
 -----------------------------------------------------------------------------
 
 main :: IO ()
-main = do
-  Options {..} <- runArgsParser
-  uusiCabal optPath >>= putStrLn
+main = CE.catch @CE.IOException
+  ( do
+      Options {..} <- runArgsParser
+      C.infoMessage "Start running..."
+      uusiCabal optPath >>= putStrLn
+  )
+  $ \e -> C.errorMessage $ "IOException: " <> (T.pack . show $ e)
 
 genPatch :: FilePath -> FilePath -> IO String
 genPatch a b = (^. _2) <$> readCreateProcessWithExitCode (shell $ "diff -u " <> a <> " " <> b) ""
 
 uusiCabal :: FilePath -> IO String
-uusiCabal origin = do
-  cabal <- parseCabalFile origin
+uusiCabal originPath = do
+  C.infoMessage $ "Parsing cabal file from " <> T.pack originPath <> "..."
+
+  cabal <- parseCabalFile originPath
   temp <- getTemporaryDirectory
-  (path, handle) <- openTempFile temp "arch-hs-uusi"
-  let uusied = showGenericPackageDescription $ uusiGenericPackageDescription cabal
-  hPutStr handle uusied
-  hFlush handle
-  hClose handle
-  result <- genPatch origin path
-  removeFile path
+  (oldPath, oldHandle) <- openTempFile temp "arch-hs-uusi"
+
+  let old = showGenericPackageDescription cabal
+      uusied = showGenericPackageDescription $ uusiGenericPackageDescription cabal
+
+  hPutStr oldHandle old
+  writeFile originPath uusied
+
+  C.infoMessage $ "Write file: " <> T.pack originPath
+
+  hFlush oldHandle
+  hClose oldHandle
+
+  result <- genPatch oldPath originPath
+  removeFile oldPath
+
   return result
 
 -----------------------------------------------------------------------------
