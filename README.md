@@ -287,7 +287,7 @@ file patches, loose of version constraints, etc. are need to be done manually, s
 
 - [ ] A watchdog during dependency calculation.
 
-- [x] Working with given `.cabal` files which havn't been released to hackage.
+- [x] Working with given `.cabal` files which haven't been released to hackage.
 
 - [ ] Using `hackage-security` to manage hackage index tarball.
 
