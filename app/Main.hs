@@ -27,11 +27,11 @@ import Distribution.Hackage.DB (HackageDB)
 import Distribution.PackageDescription
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (mkUnqualComponentName)
-import Lens.Micro
+import Distribution.Version (VersionRange)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName, (</>))
 
-app :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr] r => String -> FilePath -> Bool -> [String] -> Sem r ()
+app :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, DependencyRecord, Aur, WithMyErr] r => String -> FilePath -> Bool -> [String] -> Sem r ()
 app name path aurSupport skip = do
   let target = mkPackageName name
   deps <- getDependencies Set.empty (fmap mkUnqualComponentName skip) True target
@@ -107,13 +107,14 @@ runApp ::
   HackageDB ->
   CommunityDB ->
   Map.Map PackageName FlagAssignment ->
-  Sem '[CommunityEnv, HackageEnv, FlagAssignmentEnv, Aur, WithMyErr, Embed IO, Final IO] a ->
+  Sem '[CommunityEnv, HackageEnv, FlagAssignmentEnv, DependencyRecord, Aur, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
 runApp hackage community flags =
   runFinal
     . embedToFinal
     . errorToIOFinal
     . aurToIO
+    . evalState Map.empty
     . runReader flags
     . runReader hackage
     . runReader community

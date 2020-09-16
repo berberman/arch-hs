@@ -9,6 +9,8 @@ module Distribution.ArchHs.Utils
     toLower',
     dependencyTypeToKind,
     unExe,
+    unExeV,
+    unDepV,
     fixName,
     getUrl,
   )
@@ -18,17 +20,24 @@ import Control.Applicative (Alternative ((<|>)))
 import Control.Monad ((<=<))
 import Data.Char (toLower)
 import Data.List.Split (splitOn)
+import Distribution.ArchHs.Types
 import Distribution.PackageDescription (GenericPackageDescription, PackageDescription, homepage, package, packageDescription, repoLocation, sourceRepos)
+import Distribution.Types.Dependency
 import Distribution.Types.ExeDependency (ExeDependency (..))
 import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Utils.ShortText (fromShortText)
-import Distribution.Version (Version)
-import Distribution.ArchHs.Types
+import Distribution.Version (Version, VersionRange)
 
 -- | Extract the name from a 'ExeDependency'.
 unExe :: ExeDependency -> PackageName
 unExe (ExeDependency name _ _) = name
+
+unExeV :: ExeDependency -> (PackageName, VersionRange)
+unExeV (ExeDependency name _ v) = (name, v)
+
+unDepV :: Dependency -> (PackageName, VersionRange)
+unDepV dep = (depPkgName dep, depVerRange dep)
 
 -- | Extract the package name from 'PackageDescription'.
 getPkgName :: PackageDescription -> PackageName

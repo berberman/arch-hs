@@ -9,7 +9,7 @@ where
 
 import qualified Colourista as C
 import qualified Control.Exception as CE
-import Data.List (intercalate, nub, sort, sortBy, (\\))
+import Data.List (intercalate, nub, sortBy, (\\))
 import qualified Data.Text as T
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Types
@@ -20,12 +20,10 @@ import Distribution.Parsec (simpleParsec)
 import Distribution.Pretty (prettyShow)
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.Dependency
-import Distribution.Types.ExeDependency (ExeDependency (ExeDependency))
 import Distribution.Types.PackageName
 import Distribution.Types.UnqualComponentName
 import Distribution.Utils.ShortText (fromShortText)
 import Distribution.Version
-import Lens.Micro
 import Network.HTTP.Req hiding (header)
 import Options.Applicative
 
@@ -71,16 +69,13 @@ type VersionedList = [(PackageName, VersionRange)]
 
 type VersionedComponentList = [(UnqualComponentName, VersionedList)]
 
-unExe' :: ExeDependency -> (PackageName, VersionRange)
-unExe' (ExeDependency name _ v) = (name, v)
-
 collectLibDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
       bInfo <- evalConditionTree (getPkgName' cabal) lib
-      let libDeps = fmap (\x -> (depPkgName x, depVerRange x)) $ targetBuildDepends bInfo
-          toolDeps = fmap unExe' $ buildToolDepends bInfo
+      let libDeps = fmap unDepV $ targetBuildDepends bInfo
+          toolDeps = fmap unExeV $ buildToolDepends bInfo
       return (libDeps, toolDeps)
     Nothing -> return ([], [])
 
@@ -93,8 +88,8 @@ collectRunnableDeps ::
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
   bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName' cabal) . snd) exes
-  let runnableDeps = bInfo <&> ((_2 %~) $ fmap (\x -> (depPkgName x, depVerRange x)) . targetBuildDepends)
-      toolDeps = bInfo <&> ((_2 %~) $ fmap unExe' . buildToolDepends)
+  let runnableDeps = bInfo <&> ((_2 %~) $ fmap  unDepV . targetBuildDepends)
+      toolDeps = bInfo <&> ((_2 %~) $ fmap unExeV . buildToolDepends)
   return (runnableDeps, toolDeps)
 
 collectExeDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)

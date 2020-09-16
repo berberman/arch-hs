@@ -31,16 +31,19 @@ module Distribution.ArchHs.Types
     pkgDeps,
     depName,
     depType,
+    DependencyRecord,
     module Polysemy,
     module Polysemy.Error,
     module Polysemy.Reader,
+    module Polysemy.State,
+    module Lens.Micro
   )
 where
 
 import Control.DeepSeq (NFData)
 import Data.Map.Strict (Map)
-import qualified Data.Set as S
-import qualified Distribution.Hackage.DB as DB
+import Data.Set ( Set )
+import Distribution.Hackage.DB  ( HackageDB )
 import Distribution.PackageDescription (FlagAssignment)
 import Distribution.Pretty (prettyShow)
 import Distribution.Types.PackageName (PackageName, unPackageName)
@@ -51,7 +54,9 @@ import Lens.Micro.TH (makeLenses)
 import Polysemy
 import Polysemy.Error
 import Polysemy.Reader
-
+import Polysemy.State
+import Distribution.Version (VersionRange)
+import Lens.Micro
 -- | A list of 'PackageName'.
 type PkgList = [PackageName]
 
@@ -59,16 +64,18 @@ type PkgList = [PackageName]
 type ComponentPkgList = [(UnqualComponentName, PkgList)]
 
 -- | Representation of @cummunity.db@.
-type CommunityDB = S.Set String
+type CommunityDB = Set String
 
--- | Reader effect of 'DB.HackageDB'.
-type HackageEnv = Reader DB.HackageDB
+-- | Reader effect of 'HackageDB'.
+type HackageEnv = Reader HackageDB
 
 -- | Reader effect of 'CommunityDB'.
 type CommunityEnv = Reader CommunityDB
 
 -- | Reader effect of a map, associating 'PackageName' with its 'FlagAssignment'.
 type FlagAssignmentEnv = Reader (Map PackageName FlagAssignment)
+
+type DependencyRecord = State (Map PackageName [(PackageName,VersionRange)])
 
 -- | Error effect of 'MyException'.
 type WithMyErr = Error MyException

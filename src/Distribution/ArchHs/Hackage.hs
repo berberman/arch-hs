@@ -26,7 +26,6 @@ import Distribution.Types.Flag (Flag)
 import Distribution.Types.GenericPackageDescription (GenericPackageDescription, genPackageFlags, packageDescription)
 import Distribution.Types.PackageName (PackageName)
 import Distribution.Version (Version, nullVersion)
-import Lens.Micro
 import System.Directory
 import System.FilePath ((</>))
 

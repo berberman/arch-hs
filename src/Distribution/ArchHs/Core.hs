@@ -14,7 +14,8 @@ where
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Data.List (intercalate, stripPrefix)
 import qualified Data.Map as Map
-import qualified Data.Set as S
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Local
 import Distribution.ArchHs.PkgBuild
@@ -27,13 +28,12 @@ import Distribution.SPDX
 import Distribution.System (Arch (X86_64), OS (Windows))
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
-import Distribution.Types.Dependency (Dependency, depPkgName)
-import Distribution.Types.PackageName (PackageName, unPackageName)
+import Distribution.Types.Dependency (Dependency)
+import Distribution.Types.PackageName (mkPackageName, PackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName)
 import Distribution.Types.Version (mkVersion)
 import Distribution.Types.VersionRange
 import Distribution.Utils.ShortText (fromShortText)
-import Lens.Micro
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Windows) = Right True
@@ -66,16 +66,16 @@ evalConditionTree name cond = do
 -- All version constraints will be discarded,
 -- and only packages depended by executables, libraries, and test suits will be collected.
 getDependencies ::
-  Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r =>
+  Members [HackageEnv, FlagAssignmentEnv, WithMyErr, DependencyRecord] r =>
   -- | Resolved
-  S.Set PackageName ->
+  Set PackageName ->
   -- | Skipped
   [UnqualComponentName] ->
   -- | Whether recursive
   Bool ->
   -- | Target
   PackageName ->
-  Sem r (G.AdjacencyMap (S.Set DependencyType) PackageName)
+  Sem r (G.AdjacencyMap (Set DependencyType) PackageName)
 getDependencies resolved skip recursive name = do
   cabal <- getLatestCabal name
   -- Ignore subLibraries
@@ -96,10 +96,10 @@ getDependencies resolved skip recursive name = do
       ignored = filter (\x -> not $ x `elem` ignoreList || x == name || x `elem` resolved)
       filterNot p = filter (not . p)
 
-      currentLib = G.edges $ zip3 (repeat $ S.singleton CLib) (repeat name) $ filterNot (`elem` ignoreList) libDeps
-      currentLibDeps = G.edges $ zip3 (repeat $ S.singleton CLibBuildTools) (repeat name) $ filterNot (`elem` ignoreList) libToolsDeps
+      currentLib = G.edges $ zip3 (repeat $ Set.singleton CLib) (repeat name) $ filterNot (`elem` ignoreList) libDeps
+      currentLibDeps = G.edges $ zip3 (repeat $ Set.singleton CLibBuildTools) (repeat name) $ filterNot (`elem` ignoreList) libToolsDeps
 
-      runnableEdges k l = G.edges $ fmap (\(x, y, z) -> (S.singleton x, y, z)) . withThisName . filterNot (\(_, x) -> x `elem` ignoreList) . flatten . uname k $ l
+      runnableEdges k l = G.edges $ fmap (\(x, y, z) -> (Set.singleton x, y, z)) . withThisName . filterNot (\(_, x) -> x `elem` ignoreList) . flatten . uname k $ l
 
       currentExe = runnableEdges CExe exeDeps
       currentExeTools = runnableEdges CExeBuildTools exeToolsDeps
@@ -111,8 +111,8 @@ getDependencies resolved skip recursive name = do
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies (S.insert name resolved) skip recursive) $ ignored libDeps
-  nextExe <- mapM (getDependencies (S.insert name resolved) skip recursive) $ ignored . fmap snd . flatten . uname CExe $ exeDeps
+  nextLib <- mapM (getDependencies (Set.insert name resolved) skip recursive) $ ignored libDeps
+  nextExe <- mapM (getDependencies (Set.insert name resolved) skip recursive) $ ignored . fmap snd . flatten . uname CExe $ exeDeps
   return $
     currentLib
       <+> currentLibDeps
@@ -126,34 +126,44 @@ getDependencies resolved skip recursive name = do
         then (G.overlays nextLib) <+> (G.overlays nextExe)
         else G.empty
 
-collectLibDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
+collectLibDeps :: Members [HackageEnv, FlagAssignmentEnv, DependencyRecord] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
-      info <- evalConditionTree (getPkgName' cabal) lib
-      let libDeps = fmap depPkgName $ targetBuildDepends info
-          toolDeps = fmap unExe $ buildToolDepends info
-      return (libDeps, toolDeps)
+      let name = getPkgName' cabal
+      info <- evalConditionTree name lib
+      let libDeps = fmap unDepV $ targetBuildDepends info
+          toolDeps = fmap unExeV $ buildToolDepends info
+      updateDependencyRecord name libDeps
+      updateDependencyRecord name toolDeps
+      return (fmap fst libDeps, fmap fst toolDeps)
     Nothing -> return ([], [])
 
 collectRunnableDeps ::
-  (Semigroup k, L.HasBuildInfo k, Members [HackageEnv, FlagAssignmentEnv] r) =>
+  (Semigroup k, L.HasBuildInfo k, Members [HackageEnv, FlagAssignmentEnv, DependencyRecord] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
   Sem r (ComponentPkgList, ComponentPkgList)
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
-  info <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName' cabal) . snd) exes
-  let runnableDeps = info <&> ((_2 %~) $ fmap depPkgName . targetBuildDepends)
-      toolDeps = info <&> ((_2 %~) $ fmap unExe . buildToolDepends)
-  return (runnableDeps, toolDeps)
+      name = getPkgName' cabal
+  info <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree name . snd) exes
+  let runnableDeps = info <&> ((_2 %~) $ fmap unDepV . targetBuildDepends)
+      toolDeps = info <&> ((_2 %~) $ fmap unExeV . buildToolDepends)
+      k = fmap (\(c, l) -> (c, fmap fst l))
+  mapM_ (updateDependencyRecord name) $ fmap snd runnableDeps
+  mapM_ (updateDependencyRecord name) $ fmap snd toolDeps
+  return (k runnableDeps, k toolDeps)
 
-collectExeDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectExeDeps :: Members [HackageEnv, FlagAssignmentEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectExeDeps = collectRunnableDeps condExecutables
 
-collectTestDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectTestDeps :: Members [HackageEnv, FlagAssignmentEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectTestDeps = collectRunnableDeps condTestSuites
+
+updateDependencyRecord :: Member DependencyRecord r => PackageName -> [(PackageName, VersionRange)] -> Sem r ()
+updateDependencyRecord parent deps = modify' $ Map.insertWith (<>)  parent deps
 
 -- collectBenchMarkDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 -- collectBenchMarkDeps = collectRunnableDeps condBenchmarks
