@@ -9,7 +9,7 @@ where
 
 import qualified Colourista as C
 import qualified Control.Exception as CE
-import Data.List (intercalate, nub, (\\))
+import Data.List (intercalate, nub, sort, sortBy, (\\))
 import qualified Data.Text as T
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Types
@@ -189,6 +189,6 @@ dep s a b =
     diffNew = b \\ a
     diffOld = a \\ b
     joinToString [] = "[]"
-    joinToString xs = intercalate "\n    " xs
+    joinToString xs = intercalate "\n    " $ sortBy (\x y -> head (toLower' x) `compare` head (toLower' y)) xs
     red p x = if p then C.formatWith [C.red] x else x
     green p x = if p then C.formatWith [C.green] x else x

@@ -212,16 +212,18 @@ prettySolvedPkgs =
     . fmap
       ( \case
           SolvedPackage {..} ->
-            C.formatWith [C.bold, C.yellow] ("⊢ " <> unPackageName _pkgName <> "\n")
+            C.formatWith [C.bold, C.yellow] (unPackageName _pkgName <> "\n")
               <> mconcat
                 ( fmap
-                    ( \SolvedDependency {..} -> case _depProvider of
-                        (Just x) -> (C.formatWith [C.green] $ "    ⊢ " <> unPackageName _depName <> " " <> show _depType <> " ✔ ") <> (C.formatWith [C.cyan] $ "[" <> show x <> "]\n")
-                        _ -> C.formatWith [C.bold, C.yellow] $ "    ⊢ " <> unPackageName _depName <> " " <> show _depType <> "\n"
+                    ( \(i :: Int, SolvedDependency {..}) ->
+                        let prefix = if i == length _pkgDeps then " └─" else " ├─"
+                         in case _depProvider of
+                              (Just x) -> (C.formatWith [C.green] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType <> " ✔ ") <> (C.formatWith [C.cyan] $ "[" <> show x <> "]\n")
+                              _ -> C.formatWith [C.bold, C.yellow] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType <> "\n"
                     )
-                    _pkgDeps
+                    (zip [1 ..] _pkgDeps)
                 )
-          ProvidedPackage {..} -> (C.formatWith [C.green] $ "⊢ " <> unPackageName _pkgName <> " ✔ ") <> (C.formatWith [C.cyan] $ "[" <> show _pkgProvider <> "]\n")
+          ProvidedPackage {..} -> (C.formatWith [C.green] $ unPackageName _pkgName <> " ✔ ") <> (C.formatWith [C.cyan] $ "[" <> show _pkgProvider <> "]\n")
       )
 
 prettyDeps :: [PackageName] -> String
