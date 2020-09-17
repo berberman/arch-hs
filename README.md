@@ -7,6 +7,8 @@
 
 A program generating PKGBUILD for hackage packages. Special thanks to [felixonmars](https://github.com/felixonmars/).
 
+**Notice that version bounds of dependencies are assigned `-any` intentionally, and `arch-hs` will always support only the latest GHC version.**
+
 
 ## Introduction
 
@@ -24,8 +26,6 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 * Hackage database tarball (`01-index.tar`, or `00-index.tar` previously), usually provided by `cabal-install`.
 
 ## Installation
-
-`arch-hs` only supports the latest GHC version.
 
 ### Install the latest release
 
