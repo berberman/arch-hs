@@ -30,36 +30,36 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 ### Install the latest release
 
 ```
-❯ yay -S arch-hs
+# pacman -S arch-hs
 ```
 
-Install directly using `pacman`. 
+Install it directly using `pacman`. 
 
 ### Install the development version
 
 ```
-❯ yay -S arch-hs-git
+$ yay -S arch-hs-git
 ```
 
-Pre-built binary is available in [archlinxcn](https://github.com/archlinuxcn/repo), which follows the latest git commit.
+Install it using your AUR helper, or just `pacman` with [archlinxcn](https://github.com/archlinuxcn/repo), which provides pre-built binary, following the latest git commit.
 
 ### Build from source (for development)
 
 ```
-❯ git clone https://github.com/berberman/arch-hs
+$ git clone https://github.com/berberman/arch-hs
 ```
 
 Then build and install it via stack or cabal.
 
 #### Stack
 ```
-❯ stack install
+$ stack install
 ```
 
 #### Cabal (dynamic)
 ```
-❯ cabal configure --disable-library-vanilla --enable-shared --enable-executable-dynamic --ghc-options=-dynamic 
-❯ cabal install
+$ cabal configure --disable-library-vanilla --enable-shared --enable-executable-dynamic --ghc-options=-dynamic 
+$ cabal install
 ```
 
 ## Usage
@@ -68,7 +68,7 @@ Just run `arch-hs` in command line with options and a target. Here is an example
 we will create the archlinux package of `dhall-lsp-server`:
 
 ```
-❯ arch-hs -o "/home/berberman/Desktop/test/" dhall-lsp-server
+$ arch-hs -o "/home/berberman/Desktop/test/" dhall-lsp-server
 
 ......
 
@@ -170,28 +170,28 @@ hence some patchs may be required in `prepare()`.
 
 ### Output
 ```
-❯ arch-hs -o "/home/berberman/Desktop/test/" termonad
+$ arch-hs -o "/home/berberman/Desktop/test/" termonad
 ```
 
 This will generate a series of PKGBUILD including `termonad` with its dependencies into the output dir.
 
 ### Flag Assignments
 ```
-❯ arch-hs -f inline-c:gsl-example:true termonad
+$ arch-hs -f inline-c:gsl-example:true termonad
 ```
 
 Using `-f` can pass flags, which may affect the results of rsolving.  
 
 ### AUR Searching
 ```
-❯ arch-hs -a termonad
+$ arch-hs -a termonad
 ```
 
 Using `-a` can regard AUR as another package provider. `arch-hs` will try to search missing packages in AUR.
 
 ### Skipping Components
 ```
-❯ arch-hs -s termonad-test termonad
+$ arch-hs -s termonad-test termonad
 ```
 
 Using `-s` can force skip runnable components in dependency rsolving.
@@ -201,7 +201,7 @@ Notice that this only makes sense in the lifetime of `arch-hs`, whereas generate
 ### Extra Cabal Files
 
 ```
-❯ arch-hs -e /home/berberman/arch-hs/arch-hs.cabal arch-hs
+$ arch-hs -e /home/berberman/arch-hs/arch-hs.cabal arch-hs
 ```
 
 Using `-e` can can include extra `.cabal` files as supplementary. Useful when the target like `arch-hs` hasn't been released to hackage. 
@@ -209,7 +209,7 @@ Using `-e` can can include extra `.cabal` files as supplementary. Useful when th
 ### Help
 
 ```
-❯ arch-hs --help
+$ arch-hs --help
 arch-hs - a program generating PKGBUILD for hackage packages.
 
 Usage: arch-hs [-h|--hackage PATH] [-c|--community PATH] [-o|--output PATH] 
@@ -246,7 +246,7 @@ For all available options, have a look at the help message.
 This is useful in the subsequent maintenance of a package. Example:
 
 ```
-❯ arch-hs-diff HTTP 4000.3.14 4000.3.15
+$ arch-hs-diff HTTP 4000.3.14 4000.3.15
   ▶ You didn't pass -f, different flag values may make difference in dependency resolving.
   ⓘ Start running...
   ⓘ Downloading cabal file from https://hackage.haskell.org/package/HTTP-4000.3.14/revision/0.cabal...
