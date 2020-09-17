@@ -22,7 +22,7 @@ import Distribution.ArchHs.Core
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Local
 import Distribution.ArchHs.PP
-import Distribution.ArchHs.PkgBuild
+import qualified Distribution.ArchHs.PkgBuild as N
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (getTwo)
 import Distribution.Hackage.DB (HackageDB)
@@ -102,10 +102,11 @@ app target path aurSupport skip = do
   when (not dry) $
     mapM_
       ( \solved -> do
-          txt <- applyTemplate <$> cabalToPkgBuild solved
-          let pName = solved ^. pkgName & unPackageName
+          pkgBuild <- cabalToPkgBuild solved
+          let pName = "haskell-" <> N._pkgName pkgBuild
               dir = path </> pName
               fileName = dir </> "PKGBUILD"
+              txt = N.applyTemplate pkgBuild
           embed $ createDirectoryIfMissing True dir
           embed $ writeFile fileName txt
           embed $ C.infoMessage $ "Write file: " <> T.pack fileName
