@@ -24,16 +24,23 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 
 ## Installation
 
-`arch-hs` has not been released currently, and it only supports the latest GHC version.
+`arch-hs` only supports the latest GHC version.
 
-### Install development version
+### Install the latest release
+
+```
+❯ yay -S arch-hs
+```
+
+Install directly using `pacman`. 
+
+### Install the development version
 
 ```
 ❯ yay -S arch-hs-git
 ```
 
-Pre-built binary is available in [archlinxcn](https://github.com/archlinuxcn/repo). 
-This is the **recommended** way, since it doesn't require `cabal` or `stack`, using system level ghc and haskell packages instead.
+Pre-built binary is available in [archlinxcn](https://github.com/archlinuxcn/repo), which follows the latest git commit.
 
 ### Build from source (for development)
 
@@ -316,8 +323,6 @@ file patches, loose of version constraints, etc. are need to be done manually, s
 - [ ] **Standardized pretty printing**.
 
 - [ ] Structuralized PKGBUILD template.
-
-- [x] ~~Ability to switch *buildable* of a component in the beginning.~~ Skipping specific components as alternative.
 
 - [x] AUR support.
 
