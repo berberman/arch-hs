@@ -73,8 +73,8 @@ collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
       bInfo <- evalConditionTree cabal lib
-      let libDeps = fmap unDepV $ targetBuildDepends bInfo
-          toolDeps = fmap unExeV $ buildToolDepends bInfo
+      let libDeps = fmap unDepV $ buildDependsIfBuild bInfo
+          toolDeps = fmap unExeV $ buildToolDependsIfBuild bInfo
       return (libDeps, toolDeps)
     Nothing -> return ([], [])
 
@@ -87,8 +87,8 @@ collectRunnableDeps ::
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
   bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree cabal . snd) exes
-  let runnableDeps = bInfo <&> ((_2 %~) $ fmap unDepV . targetBuildDepends)
-      toolDeps = bInfo <&> ((_2 %~) $ fmap unExeV . buildToolDepends)
+  let runnableDeps = bInfo <&> ((_2 %~) $ fmap unDepV . buildDependsIfBuild)
+      toolDeps = bInfo <&> ((_2 %~) $ fmap unExeV . buildToolDependsIfBuild)
   return (runnableDeps, toolDeps)
 
 collectExeDeps :: Member FlagAssignmentsEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)

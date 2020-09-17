@@ -14,6 +14,8 @@ module Distribution.ArchHs.Utils
     fixName,
     getUrl,
     getTwo,
+    buildDependsIfBuild,
+    buildToolDependsIfBuild,
   )
 where
 
@@ -31,6 +33,7 @@ import Distribution.PackageDescription
     repoLocation,
     sourceRepos,
   )
+import Distribution.Types.BuildInfo
 import Distribution.Types.Dependency
 import Distribution.Types.ExeDependency (ExeDependency (..))
 import qualified Distribution.Types.PackageId as I
@@ -104,3 +107,9 @@ dependencyTypeToKind (CBenchmarkBuildTools _) = BenchmarkBuildTools
 
 getTwo :: Getting b s b -> s -> s -> (b, b)
 getTwo l a b = (a, b) & both %~ (^. l)
+
+buildDependsIfBuild :: BuildInfo -> [Dependency]
+buildDependsIfBuild info = if buildable info then targetBuildDepends info else []
+
+buildToolDependsIfBuild :: BuildInfo -> [ExeDependency]
+buildToolDependsIfBuild info = if buildable info then buildToolDepends info else []
