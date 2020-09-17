@@ -74,11 +74,13 @@ type HackageEnv = Reader HackageDB
 -- | Reader effect of 'CommunityDB'.
 type CommunityEnv = Reader CommunityDB
 
+-- | A map of packages with their 'FlagAssignment'.
 type FlagAssignments = Map PackageName FlagAssignment
 
 -- | Reader effect of a map, associating 'PackageName' with its 'FlagAssignment'.
 type FlagAssignmentsEnv = Reader FlagAssignments
 
+-- | Unused state effect.
 type DependencyRecord = State (Map PackageName [(PackageName, VersionRange)])
 
 -- | Error effect of 'MyException'.

@@ -179,13 +179,6 @@ main = CE.catch @CE.IOException
 
 -----------------------------------------------------------------------------
 
--- TODO
--- rev :: Map.Map PackageName [(PackageName,VersionRange)] -> [(PackageName,[(PackageName ,VersionRange)])]
--- rev m = _
---   where
---     l = Map.toList m
---     n = fmap (\(name, deps)-> unzip deps)l
-
 groupDeps :: G.AdjacencyMap (Set.Set DependencyType) PackageName -> [SolvedPackage]
 groupDeps =
   fmap (\(name, deps) -> SolvedPackage name $ fmap (uncurry . flip $ SolvedDependency Nothing) deps)

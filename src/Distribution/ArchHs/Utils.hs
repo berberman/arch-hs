@@ -41,13 +41,15 @@ import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Utils.ShortText (fromShortText)
 import Distribution.Version (Version, VersionRange)
 
--- | Extract the name from a 'ExeDependency'.
+-- | Extract the 'PackageName' of a 'ExeDependency'.
 unExe :: ExeDependency -> PackageName
 unExe (ExeDependency name _ _) = name
 
+-- | Extract the 'PackageName' and 'VersionRange' of a 'ExeDependency'.
 unExeV :: ExeDependency -> (PackageName, VersionRange)
 unExeV (ExeDependency name _ v) = (name, v)
 
+-- | Extract the 'PackageName' and 'VersionRange' of a 'Dependency'.
 unDepV :: Dependency -> (PackageName, VersionRange)
 unDepV dep = (depPkgName dep, depVerRange dep)
 
@@ -105,11 +107,14 @@ dependencyTypeToKind (CLibBuildTools) = LibBuildTools
 dependencyTypeToKind (CTestBuildTools _) = TestBuildTools
 dependencyTypeToKind (CBenchmarkBuildTools _) = BenchmarkBuildTools
 
+-- | Apply a @Getting@ to two values respectively, and get the result as a pair.
 getTwo :: Getting b s b -> s -> s -> (b, b)
 getTwo l a b = (a, b) & both %~ (^. l)
 
+-- | Same as 'targetBuildDepends', but check if this is 'buildable'.
 buildDependsIfBuild :: BuildInfo -> [Dependency]
 buildDependsIfBuild info = if buildable info then targetBuildDepends info else []
 
+-- | Same as 'buildToolDepends', but check if this is 'buildable'.
 buildToolDependsIfBuild :: BuildInfo -> [ExeDependency]
 buildToolDependsIfBuild info = if buildable info then buildToolDepends info else []

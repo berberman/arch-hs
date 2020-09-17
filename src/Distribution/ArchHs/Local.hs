@@ -11,7 +11,7 @@ where
 import Distribution.ArchHs.Types
 import Distribution.Types.PackageName
 
--- | Packages which dependencies shouldn't be expanded any more.
+-- | Packages should be dropped in dependency resolving.
 ignoreList :: PkgList
 ignoreList =
   mkPackageName
