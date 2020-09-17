@@ -50,14 +50,24 @@ archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
 -- | Simplify the condition tree from 'GenericPackageDescription' with given flag assignments and archlinux system assumption.
 evalConditionTree ::
   (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentsEnv r) =>
-  PackageName ->
+  GenericPackageDescription ->
   CondTree ConfVar [Dependency] k ->
   Sem r BuildInfo
-evalConditionTree name cond = do
-  flg <- ask
-  let thisFlag = case Map.lookup name flg of
-        Just f -> f
-        Nothing -> mkFlagAssignment []
+evalConditionTree cabal cond = do
+  flagAssignments <- ask
+  let name = getPkgName' cabal
+      packageFlags = genPackageFlags cabal
+      defaultFlagAssignments =
+        foldr (\f acc -> insertFlagAssignment (flagName f) (flagDefault f) acc) (mkFlagAssignment []) packageFlags
+      flagAssignment = case Map.lookup name flagAssignments of
+        Just f -> unFlagAssignment f
+        _ -> []
+      flagNames = fmap fst flagAssignment
+      thisFlag =
+        mkFlagAssignment
+          . (<> flagAssignment)
+          . filter (\(fName, _) -> fName `notElem` flagNames)
+          $ (unFlagAssignment defaultFlagAssignments)
   return $ (^. L.buildInfo) . snd $ simplifyCondTree (archEnv thisFlag) cond
 
 -----------------------------------------------------------------------------
@@ -126,12 +136,12 @@ getDependencies resolved skip recursive name = do
         then (G.overlays nextLib) <+> (G.overlays nextExe)
         else G.empty
 
-collectLibDeps :: Members [HackageEnv, FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
+collectLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
       let name = getPkgName' cabal
-      info <- evalConditionTree name lib
+      info <- evalConditionTree cabal lib
       let libDeps = fmap unDepV $ targetBuildDepends info
           toolDeps = fmap unExeV $ buildToolDepends info
       updateDependencyRecord name libDeps
@@ -140,7 +150,7 @@ collectLibDeps cabal = do
     Nothing -> return ([], [])
 
 collectRunnableDeps ::
-  (Semigroup k, L.HasBuildInfo k, Members [HackageEnv, FlagAssignmentsEnv, DependencyRecord] r) =>
+  (Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, DependencyRecord] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
@@ -148,7 +158,7 @@ collectRunnableDeps ::
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
       name = getPkgName' cabal
-  info <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree name . snd) exes
+  info <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree cabal . snd) exes
   let runnableDeps = info <&> ((_2 %~) $ fmap unDepV . targetBuildDepends)
       toolDeps = info <&> ((_2 %~) $ fmap unExeV . buildToolDepends)
       k = fmap (\(c, l) -> (c, fmap fst l))
@@ -156,10 +166,10 @@ collectRunnableDeps f cabal skip = do
   mapM_ (updateDependencyRecord name) $ fmap snd toolDeps
   return (k runnableDeps, k toolDeps)
 
-collectExeDeps :: Members [HackageEnv, FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectExeDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectExeDeps = collectRunnableDeps condExecutables
 
-collectTestDeps :: Members [HackageEnv, FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectTestDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> [(PackageName, VersionRange)] -> Sem r ()

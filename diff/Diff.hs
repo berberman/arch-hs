@@ -72,7 +72,7 @@ collectLibDeps :: Member FlagAssignmentsEnv r => GenericPackageDescription -> Se
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
-      bInfo <- evalConditionTree (getPkgName' cabal) lib
+      bInfo <- evalConditionTree cabal lib
       let libDeps = fmap unDepV $ targetBuildDepends bInfo
           toolDeps = fmap unExeV $ buildToolDepends bInfo
       return (libDeps, toolDeps)
@@ -86,7 +86,7 @@ collectRunnableDeps ::
   Sem r (VersionedComponentList, VersionedComponentList)
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
-  bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName' cabal) . snd) exes
+  bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree cabal . snd) exes
   let runnableDeps = bInfo <&> ((_2 %~) $ fmap unDepV . targetBuildDepends)
       toolDeps = bInfo <&> ((_2 %~) $ fmap unExeV . buildToolDepends)
   return (runnableDeps, toolDeps)
@@ -192,7 +192,7 @@ dep s a b =
 
 flags :: PackageName -> [Flag] -> [Flag] -> String
 flags name a b =
-  (C.formatWith [C.magenta] "Flags:\n") <>"  "<> case (diffOld <> diffNew) of
+  (C.formatWith [C.magenta] "Flags:\n") <> "  " <> case (diffOld <> diffNew) of
     [] -> joinToString a
     _ ->
       (joinToString a)
