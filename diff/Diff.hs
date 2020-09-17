@@ -10,13 +10,14 @@ where
 import qualified Colourista as C
 import qualified Control.Exception as CE
 import Data.List (intercalate, nub, sortBy, (\\))
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Distribution.ArchHs.Core
+import Distribution.ArchHs.PP (prettyFlags)
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import Distribution.Parsec (simpleParsec)
 import Distribution.Pretty (prettyShow)
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.Dependency
@@ -25,10 +26,11 @@ import Distribution.Types.UnqualComponentName
 import Distribution.Utils.ShortText (fromShortText)
 import Distribution.Version
 import Network.HTTP.Req hiding (header)
-import Options.Applicative
+import OptionParse
 
 data Options = Options
-  { optPackageName :: PackageName,
+  { optFlags :: FlagAssignments,
+    optPackageName :: PackageName,
     optVersionA :: Version,
     optVersionB :: Version
   }
@@ -36,20 +38,17 @@ data Options = Options
 cmdOptions :: Parser Options
 cmdOptions =
   Options
-    <$> argument optPackageNameReader (metavar "TARGET")
+    <$> option
+      optFlagReader
+      ( long "flags"
+          <> metavar "package_name:flag_name:true|false,..."
+          <> short 'f'
+          <> help "Flag assignments for packages - e.g. inline-c:gsl-example:true (separated by ',')"
+          <> value Map.empty
+      )
+    <*> argument optPackageNameReader (metavar "TARGET")
     <*> argument optVersionReader (metavar "VERSION_A")
     <*> argument optVersionReader (metavar "VERSION_B")
-
-optVersionReader :: ReadM Version
-optVersionReader =
-  eitherReader
-    ( \s -> case simpleParsec s of
-        Just v -> Right v
-        _ -> Left $ "Failed to parse version: " <> s
-    )
-
-optPackageNameReader :: ReadM PackageName
-optPackageNameReader = eitherReader $ Right . mkPackageName
 
 runArgsParser :: IO Options
 runArgsParser =
@@ -69,7 +68,7 @@ type VersionedList = [(PackageName, VersionRange)]
 
 type VersionedComponentList = [(UnqualComponentName, VersionedList)]
 
-collectLibDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
+collectLibDeps :: Member FlagAssignmentsEnv r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
@@ -80,7 +79,7 @@ collectLibDeps cabal = do
     Nothing -> return ([], [])
 
 collectRunnableDeps ::
-  (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentEnv r) =>
+  (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentsEnv r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
@@ -88,14 +87,14 @@ collectRunnableDeps ::
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
   bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree (getPkgName' cabal) . snd) exes
-  let runnableDeps = bInfo <&> ((_2 %~) $ fmap  unDepV . targetBuildDepends)
+  let runnableDeps = bInfo <&> ((_2 %~) $ fmap unDepV . targetBuildDepends)
       toolDeps = bInfo <&> ((_2 %~) $ fmap unExeV . buildToolDepends)
   return (runnableDeps, toolDeps)
 
-collectExeDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectExeDeps :: Member FlagAssignmentsEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectExeDeps = collectRunnableDeps condExecutables
 
-collectTestDeps :: Member FlagAssignmentEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectTestDeps :: Member FlagAssignmentsEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
 getCabalFromHackage :: Members [Embed IO, WithMyErr] r => PackageName -> Version -> Sem r GenericPackageDescription
@@ -114,12 +113,14 @@ getCabalFromHackage name version = do
 
 -----------------------------------------------------------------------------
 
-diffCabal :: Members [FlagAssignmentEnv, WithMyErr, Embed IO] r => PackageName -> Version -> Version -> Sem r String
+diffCabal :: Members [FlagAssignmentsEnv, WithMyErr, Embed IO] r => PackageName -> Version -> Version -> Sem r String
 diffCabal name a b = do
   ga <- getCabalFromHackage name a
   gb <- getCabalFromHackage name b
   let pa = packageDescription ga
       pb = packageDescription gb
+      fa = genPackageFlags ga
+      fb = genPackageFlags ga
   (ba, ma) <- directDependencies ga
   (bb, mb) <- directDependencies gb
   return $
@@ -129,11 +130,12 @@ diffCabal name a b = do
         desc pa pb,
         url pa pb,
         dep "Depends: \n" ba bb,
-        dep "MakeDepends: \n" ma mb
+        dep "MakeDepends: \n" ma mb,
+        flags name fa fb
       ]
 
 directDependencies ::
-  Member FlagAssignmentEnv r =>
+  Member FlagAssignmentsEnv r =>
   GenericPackageDescription ->
   Sem r ([String], [String])
 directDependencies cabal = do
@@ -176,7 +178,7 @@ dep s a b =
     _ ->
       (joinToString $ fmap (\x -> red (x `elem` diffOld) x) a)
         <> "\n"
-        <> replicate 28 '-'
+        <> replicate 38 '-'
         <> "\n"
         <> "    "
         <> (joinToString $ fmap (\x -> green (x `elem` diffNew) x) b)
@@ -187,3 +189,20 @@ dep s a b =
     joinToString xs = intercalate "\n    " $ sortBy (\x y -> head (toLower' x) `compare` head (toLower' y)) xs
     red p x = if p then C.formatWith [C.red] x else x
     green p x = if p then C.formatWith [C.green] x else x
+
+flags :: PackageName -> [Flag] -> [Flag] -> String
+flags name a b =
+  (C.formatWith [C.magenta] "Flags:\n") <>"  "<> case (diffOld <> diffNew) of
+    [] -> joinToString a
+    _ ->
+      (joinToString a)
+        <> "\n"
+        <> replicate 38 '-'
+        <> "\n"
+        <> "    "
+        <> (joinToString b)
+  where
+    diffNew = b \\ a
+    diffOld = a \\ b
+    joinToString [] = "[]"
+    joinToString xs = prettyFlags [(name, xs)]

@@ -13,6 +13,7 @@ module Distribution.ArchHs.Utils
     unDepV,
     fixName,
     getUrl,
+    getTwo,
   )
 where
 
@@ -21,7 +22,15 @@ import Control.Monad ((<=<))
 import Data.Char (toLower)
 import Data.List.Split (splitOn)
 import Distribution.ArchHs.Types
-import Distribution.PackageDescription (GenericPackageDescription, PackageDescription, homepage, package, packageDescription, repoLocation, sourceRepos)
+import Distribution.PackageDescription
+  ( GenericPackageDescription,
+    PackageDescription,
+    homepage,
+    package,
+    packageDescription,
+    repoLocation,
+    sourceRepos,
+  )
 import Distribution.Types.Dependency
 import Distribution.Types.ExeDependency (ExeDependency (..))
 import qualified Distribution.Types.PackageId as I
@@ -92,3 +101,6 @@ dependencyTypeToKind (CBenchmark _) = Benchmark
 dependencyTypeToKind (CLibBuildTools) = LibBuildTools
 dependencyTypeToKind (CTestBuildTools _) = TestBuildTools
 dependencyTypeToKind (CBenchmarkBuildTools _) = BenchmarkBuildTools
+
+getTwo :: Getting b s b -> s -> s -> (b, b)
+getTwo l a b = (a, b) & both %~ (^. l)

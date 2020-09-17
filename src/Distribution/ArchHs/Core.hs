@@ -25,18 +25,18 @@ import Distribution.Compiler (CompilerFlavor (..))
 import Distribution.PackageDescription
 import Distribution.Pretty (prettyShow)
 import Distribution.SPDX
-import Distribution.System (Arch (X86_64), OS (Windows))
+import Distribution.System (Arch (X86_64), OS (Linux))
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
 import Distribution.Types.Dependency (Dependency)
-import Distribution.Types.PackageName (mkPackageName, PackageName, unPackageName)
+import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName)
 import Distribution.Types.Version (mkVersion)
 import Distribution.Types.VersionRange
 import Distribution.Utils.ShortText (fromShortText)
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
-archEnv _ (OS Windows) = Right True
+archEnv _ (OS Linux) = Right True
 archEnv _ (OS _) = Right False
 archEnv _ (Arch X86_64) = Right True
 archEnv _ (Arch _) = Right False
@@ -49,7 +49,7 @@ archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
 
 -- | Simplify the condition tree from 'GenericPackageDescription' with given flag assignments and archlinux system assumption.
 evalConditionTree ::
-  (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentEnv r) =>
+  (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentsEnv r) =>
   PackageName ->
   CondTree ConfVar [Dependency] k ->
   Sem r BuildInfo
@@ -66,7 +66,7 @@ evalConditionTree name cond = do
 -- All version constraints will be discarded,
 -- and only packages depended by executables, libraries, and test suits will be collected.
 getDependencies ::
-  Members [HackageEnv, FlagAssignmentEnv, WithMyErr, DependencyRecord] r =>
+  Members [HackageEnv, FlagAssignmentsEnv, WithMyErr, DependencyRecord] r =>
   -- | Resolved
   Set PackageName ->
   -- | Skipped
@@ -126,7 +126,7 @@ getDependencies resolved skip recursive name = do
         then (G.overlays nextLib) <+> (G.overlays nextExe)
         else G.empty
 
-collectLibDeps :: Members [HackageEnv, FlagAssignmentEnv, DependencyRecord] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
+collectLibDeps :: Members [HackageEnv, FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
@@ -140,7 +140,7 @@ collectLibDeps cabal = do
     Nothing -> return ([], [])
 
 collectRunnableDeps ::
-  (Semigroup k, L.HasBuildInfo k, Members [HackageEnv, FlagAssignmentEnv, DependencyRecord] r) =>
+  (Semigroup k, L.HasBuildInfo k, Members [HackageEnv, FlagAssignmentsEnv, DependencyRecord] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
@@ -156,14 +156,14 @@ collectRunnableDeps f cabal skip = do
   mapM_ (updateDependencyRecord name) $ fmap snd toolDeps
   return (k runnableDeps, k toolDeps)
 
-collectExeDeps :: Members [HackageEnv, FlagAssignmentEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectExeDeps :: Members [HackageEnv, FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectExeDeps = collectRunnableDeps condExecutables
 
-collectTestDeps :: Members [HackageEnv, FlagAssignmentEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectTestDeps :: Members [HackageEnv, FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> [(PackageName, VersionRange)] -> Sem r ()
-updateDependencyRecord parent deps = modify' $ Map.insertWith (<>)  parent deps
+updateDependencyRecord parent deps = modify' $ Map.insertWith (<>) parent deps
 
 -- collectBenchMarkDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 -- collectBenchMarkDeps = collectRunnableDeps condBenchmarks
@@ -171,7 +171,7 @@ updateDependencyRecord parent deps = modify' $ Map.insertWith (<>)  parent deps
 -----------------------------------------------------------------------------
 
 -- | Generate 'PkgBuild' for a 'SolvedPackage'.
-cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentEnv, WithMyErr] r => SolvedPackage -> Sem r PkgBuild
+cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> Sem r PkgBuild
 cabalToPkgBuild pkg = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> (getLatestCabal name)

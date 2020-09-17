@@ -7,23 +7,20 @@ module Args
   )
 where
 
-import Data.List (intercalate)
-import Data.List.Split (splitOn)
-import Data.Void (Void)
-import Options.Applicative
-import System.FilePath (takeExtension)
-import qualified Text.Megaparsec as M
-import qualified Text.Megaparsec.Char as M
+import qualified Data.Map.Strict as Map
+import Distribution.ArchHs.Types (FlagAssignments)
+import Distribution.Types.PackageName (PackageName)
+import OptionParse
 
 data Options = Options
   { optHackagePath :: FilePath,
     optCommunityPath :: FilePath,
     optOutputDir :: FilePath,
-    optFlags :: [(String, String, Bool)],
+    optFlags :: FlagAssignments,
     optSkip :: [String],
     optExtraCabalPath :: [FilePath],
     optAur :: Bool,
-    optTarget :: String
+    optTarget :: PackageName
   }
   deriving stock (Show)
 
@@ -59,7 +56,7 @@ cmdOptions =
             <> metavar "package_name:flag_name:true|false,..."
             <> short 'f'
             <> help "Flag assignments for packages - e.g. inline-c:gsl-example:true (separated by ',')"
-            <> value []
+            <> value Map.empty
         )
       <*> option
         optSkippedReader
@@ -82,43 +79,7 @@ cmdOptions =
             <> short 'a'
             <> help "Enable AUR searching"
         )
-      <*> strArgument (metavar "TARGET")
-
-optFlagReader :: ReadM [(String, String, Bool)]
-optFlagReader =
-  eitherReader
-    ( \s -> case M.parse optFlagParser "" s of
-        Right x -> Right x
-        Left err -> Left $ M.errorBundlePretty err
-    )
-
-optFlagParser :: M.Parsec Void String [(String, String, Bool)]
-optFlagParser =
-  ( do
-      pkg <- M.manyTill M.anySingle $ M.single ':'
-      flg <- M.manyTill M.anySingle $ M.single ':'
-      b <- bool
-      return (pkg, flg, b)
-  )
-    `M.sepBy` ","
-  where
-    bool = do
-      s <- M.string "true" <|> M.string "false"
-      case s of
-        "true" -> return True
-        "false" -> return False
-        _ -> fail $ "unknown bool: " <> s
-
-optSkippedReader :: ReadM [String]
-optSkippedReader = eitherReader $ Right . splitOn ","
-
-optExtraCabalReader :: ReadM [FilePath]
-optExtraCabalReader = eitherReader $ \x ->
-  let splitted = splitOn "," x
-      check = map (\e -> if takeExtension x == ".cabal" then (e, True) else (e, False)) splitted
-      failed = map fst . filter (not . snd) $ check
-      successful = map fst . filter snd $ check
-   in if failed /= [] then Left ("Unexpected file name: " <> intercalate ", " failed) else Right successful
+      <*> argument optPackageNameReader (metavar "TARGET")
 
 runArgsParser :: IO Options
 runArgsParser =

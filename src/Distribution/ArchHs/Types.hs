@@ -17,7 +17,7 @@ module Distribution.ArchHs.Types
     CommunityDB,
     HackageEnv,
     CommunityEnv,
-    FlagAssignmentEnv,
+    FlagAssignmentsEnv,
     WithMyErr,
     MyException (..),
     DependencyType (..),
@@ -25,6 +25,7 @@ module Distribution.ArchHs.Types
     DependencyProvider (..),
     SolvedPackage (..),
     SolvedDependency (..),
+    FlagAssignments,
     depProvider,
     pkgProvider,
     pkgName,
@@ -36,27 +37,28 @@ module Distribution.ArchHs.Types
     module Polysemy.Error,
     module Polysemy.Reader,
     module Polysemy.State,
-    module Lens.Micro
+    module Lens.Micro,
   )
 where
 
 import Control.DeepSeq (NFData)
 import Data.Map.Strict (Map)
-import Data.Set ( Set )
-import Distribution.Hackage.DB  ( HackageDB )
+import Data.Set (Set)
+import Distribution.Hackage.DB (HackageDB)
 import Distribution.PackageDescription (FlagAssignment)
 import Distribution.Pretty (prettyShow)
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName, unUnqualComponentName)
 import Distribution.Types.Version (Version)
+import Distribution.Version (VersionRange)
 import GHC.Generics (Generic)
+import Lens.Micro
 import Lens.Micro.TH (makeLenses)
 import Polysemy
 import Polysemy.Error
 import Polysemy.Reader
 import Polysemy.State
-import Distribution.Version (VersionRange)
-import Lens.Micro
+
 -- | A list of 'PackageName'.
 type PkgList = [PackageName]
 
@@ -72,10 +74,12 @@ type HackageEnv = Reader HackageDB
 -- | Reader effect of 'CommunityDB'.
 type CommunityEnv = Reader CommunityDB
 
--- | Reader effect of a map, associating 'PackageName' with its 'FlagAssignment'.
-type FlagAssignmentEnv = Reader (Map PackageName FlagAssignment)
+type FlagAssignments = Map PackageName FlagAssignment
 
-type DependencyRecord = State (Map PackageName [(PackageName,VersionRange)])
+-- | Reader effect of a map, associating 'PackageName' with its 'FlagAssignment'.
+type FlagAssignmentsEnv = Reader FlagAssignments
+
+type DependencyRecord = State (Map PackageName [(PackageName, VersionRange)])
 
 -- | Error effect of 'MyException'.
 type WithMyErr = Error MyException

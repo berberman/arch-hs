@@ -21,19 +21,28 @@ import Distribution.ArchHs.Community
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Local
+import Distribution.ArchHs.PP
 import Distribution.ArchHs.PkgBuild
 import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils (getTwo)
 import Distribution.Hackage.DB (HackageDB)
-import Distribution.PackageDescription
-import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
+import Distribution.PackageDescription (FlagAssignment)
+import Distribution.Types.PackageName
+  ( PackageName,
+    unPackageName,
+  )
 import Distribution.Types.UnqualComponentName (mkUnqualComponentName)
-import Distribution.Version (VersionRange)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName, (</>))
 
-app :: Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentEnv, DependencyRecord, Aur, WithMyErr] r => String -> FilePath -> Bool -> [String] -> Sem r ()
-app name path aurSupport skip = do
-  let target = mkPackageName name
+app ::
+  Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Aur, WithMyErr] r =>
+  PackageName ->
+  FilePath ->
+  Bool ->
+  [String] ->
+  Sem r ()
+app target path aurSupport skip = do
   deps <- getDependencies Set.empty (fmap mkUnqualComponentName skip) True target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
@@ -107,7 +116,7 @@ runApp ::
   HackageDB ->
   CommunityDB ->
   Map.Map PackageName FlagAssignment ->
-  Sem '[CommunityEnv, HackageEnv, FlagAssignmentEnv, DependencyRecord, Aur, WithMyErr, Embed IO, Final IO] a ->
+  Sem '[CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Aur, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
 runApp hackage community flags =
   runFinal
@@ -130,14 +139,13 @@ main = CE.catch @CE.IOException
       when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default places."
       when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default places."
 
-      let isFlagEmpty = optFlags == []
-          cookedFlags = cookFlag optFlags
+      let isFlagEmpty = optFlags == Map.empty
           isSkipEmpty = optSkip == []
 
-      when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag values may make difference in dependency solving."
+      when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag values may make difference in dependency resolving."
       when (not isFlagEmpty) $ do
         C.infoMessage "You assigned flags:"
-        putStrLn . prettyFlagAssignments $ cookedFlags
+        putStrLn . prettyFlagAssignments $ optFlags
 
       when (not isSkipEmpty) $ do
         C.infoMessage "You chose to skip:"
@@ -162,7 +170,7 @@ main = CE.catch @CE.IOException
 
       C.infoMessage "Start running..."
 
-      runApp newHackage community cookedFlags (app optTarget optOutputDir optAur optSkip) >>= \case
+      runApp newHackage community optFlags (app optTarget optOutputDir optAur optSkip) >>= \case
         Left x -> C.errorMessage $ "Runtime Error: " <> (T.pack . show $ x)
         _ -> C.successMessage "Success!"
   )
@@ -170,69 +178,18 @@ main = CE.catch @CE.IOException
 
 -----------------------------------------------------------------------------
 
-prettySkip :: [String] -> String
-prettySkip = C.formatWith [C.magenta] . intercalate ", "
-
-cookFlag :: [(String, String, Bool)] -> Map.Map PackageName FlagAssignment
-cookFlag [] = Map.empty
-cookFlag list =
-  Map.fromList
-    . fmap (\l -> (mkPackageName . (^. _1) . head $ l, foldr (\(_, f, v) acc -> insertFlagAssignment (mkFlagName f) v acc) (mkFlagAssignment []) l))
-    . groupBy (\a b -> a ^. _1 == b ^. _1)
-    $ list
+-- TODO
+-- rev :: Map.Map PackageName [(PackageName,VersionRange)] -> [(PackageName,[(PackageName ,VersionRange)])]
+-- rev m = _
+--   where
+--     l = Map.toList m
+--     n = fmap (\(name, deps)-> unzip deps)l
 
 groupDeps :: G.AdjacencyMap (Set.Set DependencyType) PackageName -> [SolvedPackage]
 groupDeps =
   fmap (\(name, deps) -> SolvedPackage name $ fmap (uncurry . flip $ SolvedDependency Nothing) deps)
     . fmap ((\(a, b, c) -> (head b, zip a c)) . unzip3)
-    . groupBy (\x y -> uncurry (==) ((x, y) & both %~ (^. _2)))
+    . groupBy (\x y -> uncurry (==) (getTwo _2 x y))
     . fmap (_1 %~ Set.toList)
     . Set.toList
     . G.edgeSet
-
-prettyFlags :: [(PackageName, [Flag])] -> String
-prettyFlags = mconcat . fmap (\(name, flags) -> (C.formatWith [C.magenta] $ unPackageName name <> "\n") <> mconcat (fmap (C.formatWith [C.indent 4] . prettyFlag) flags))
-
-prettyFlag :: Flag -> String
-prettyFlag f = "⚐ " <> C.formatWith [C.yellow] name <> ":\n" <> mconcat (fmap (C.formatWith [C.indent 6] . (<> "\n")) $ ["description: " <> desc, "default: " <> def, "isManual: " <> manual])
-  where
-    name = unFlagName . flagName $ f
-    desc = flagDescription f
-    def = show $ flagDefault f
-    manual = show $ flagManual f
-
-prettyFlagAssignments :: Map.Map PackageName FlagAssignment -> String
-prettyFlagAssignments m = mconcat $ fmap (fmap (\(n, a) -> C.formatWith [C.magenta] (unPackageName n) <> "\n" <> C.formatWith [C.indent 4] (prettyFlagAssignment a))) Map.toList m
-
-prettyFlagAssignment :: FlagAssignment -> String
-prettyFlagAssignment m = mconcat $ fmap (\(n, v) -> "⚐ " <> C.formatWith [C.yellow] (unFlagName n) <> " : " <> C.formatWith [C.cyan] (show v) <> "\n") $ unFlagAssignment m
-
-prettySolvedPkgs :: [SolvedPackage] -> String
-prettySolvedPkgs = con . mconcat . fmap prettySolvedPkg
-
-prettySolvedPkg :: SolvedPackage -> [(String, String)]
-prettySolvedPkg SolvedPackage {..} =
-  (C.formatWith [C.bold, C.yellow] (unPackageName _pkgName), C.formatWith [C.red] "    ✘") :
-  ( fmap
-      ( \(i :: Int, SolvedDependency {..}) ->
-          let prefix = if i == length _pkgDeps then " └─" else " ├─"
-           in case _depProvider of
-                (Just x) -> ((C.formatWith [C.green] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType), ((C.formatWith [C.green] "✔ ") <> (C.formatWith [C.cyan] $ "[" <> show x <> "]")))
-                _ -> (C.formatWith [C.bold, C.yellow] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.red] "    ✘")
-      )
-      (zip [1 ..] _pkgDeps)
-  )
-prettySolvedPkg ProvidedPackage {..} = [((C.formatWith [C.green] $ unPackageName _pkgName), ((C.formatWith [C.green] "✔ ") <> (C.formatWith [C.cyan] $ "[" <> show _pkgProvider <> "]")))]
-
-con :: [(String, String)] -> String
-con l = mconcat complemented
-  where
-    maxL = maximum $ fmap (length . fst) l
-    complemented = fmap (\(x, y) -> (x <> (replicate (maxL - length x) ' ') <> y <> "\n")) l
-
-prettyDeps :: [PackageName] -> String
-prettyDeps list =
-  mconcat $
-    fmap (\(i, n) -> show @Int i <> ". " <> unPackageName n <> "\n") $
-      zip [1 ..] $
-        reverse list

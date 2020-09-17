@@ -46,7 +46,8 @@ common common-options
                        polysemy,
                        filepath,
                        colourista ^>= 0.1,
-                       template-haskell
+                       template-haskell,
+                       optparse-applicative
 
   ghc-options:         -Wall
                        -Wcompat
@@ -85,6 +86,8 @@ library
                        Distribution.ArchHs.PkgBuild,
                        Distribution.ArchHs.Types,
                        Distribution.ArchHs.Utils,
+                       Distribution.ArchHs.PP,
+                       OptionParse,
                        Data.Aeson.Ext,
                        Polysemy.Req
 
@@ -93,7 +96,7 @@ executable arch-hs
   hs-source-dirs:      app
   main-is:             Main.hs
   other-modules:       Args
-  build-depends:       arch-hs, optparse-applicative
+  build-depends:       arch-hs
   ghc-options:         -threaded
                        -rtsopts
                        -with-rtsopts=-N
@@ -103,7 +106,7 @@ executable arch-hs-diff
   hs-source-dirs:      diff
   main-is:             Main.hs
   other-modules:       Diff
-  build-depends:       arch-hs, optparse-applicative
+  build-depends:       arch-hs
   ghc-options:         -threaded
                        -rtsopts
                        -with-rtsopts=-N
@@ -112,7 +115,7 @@ executable arch-hs-uusi
   import:              common-options
   hs-source-dirs:      uusi
   main-is:             Main.hs
-  build-depends:       arch-hs, optparse-applicative, process
+  build-depends:       arch-hs, process
   ghc-options:         -threaded
                        -rtsopts
                        -with-rtsopts=-N
