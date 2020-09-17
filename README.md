@@ -2,6 +2,7 @@
 
 [![GitHub CI](https://github.com/berberman/arch-hs/workflows/CI/badge.svg)](https://github.com/berberman/arch-hs/actions)
 [![Build Status](https://travis-ci.com/berberman/arch-hs.svg?branch=master)](https://travis-ci.com/berberman/arch-hs)
+[![Hackage](https://img.shields.io/hackage/v/arch-hs.svg?logo=haskell)](https://hackage.haskell.org/package/arch-hs)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A program generating PKGBUILD for hackage packages. Special thanks to [felixonmars](https://github.com/felixonmars/).
@@ -179,7 +180,7 @@ This will generate a series of PKGBUILD including `termonad` with its dependenci
 ❯ arch-hs -f inline-c:gsl-example:true termonad
 ```
 
-Using `-f` can pass flags, which may affect the results of solving.  
+Using `-f` can pass flags, which may affect the results of rsolving.  
 
 ### AUR Searching
 ```
@@ -193,7 +194,7 @@ Using `-a` can regard AUR as another package provider. `arch-hs` will try to sea
 ❯ arch-hs -s termonad-test termonad
 ```
 
-Using `-s` can force skip runnable components in dependency solving.
+Using `-s` can force skip runnable components in dependency rsolving.
 This is useful when a package doesn't provide flag to disable its runnables, which will be built by default but are trivial in system level packaging.
 Notice that this only makes sense in the lifetime of `arch-hs`, whereas generated PKGBUILD and actual build processes will not be affected.
 
