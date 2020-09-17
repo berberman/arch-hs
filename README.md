@@ -24,24 +24,24 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 
 ## Installation
 
-`arch-hs` has not been released currently, thus it is required to build from source.
-`arch-hs` only supports the latest GHC version.
+`arch-hs` has not been released currently, and it only supports the latest GHC version.
 
-### Install from AUR
+### Install development version
 
 ```
 ❯ yay -S arch-hs-git
 ```
 
+Pre-built binary is available in [archlinxcn](https://github.com/archlinuxcn/repo). 
 This is the **recommended** way, since it doesn't require `cabal` or `stack`, using system level ghc and haskell packages instead.
 
-### Install from source (development)
+### Build from source (for development)
 
 ```
 ❯ git clone https://github.com/berberman/arch-hs
 ```
 
-Then build it via stack or cabal.
+Then build and install it via stack or cabal.
 
 #### Stack
 ```
@@ -238,27 +238,65 @@ For all available options, have a look at the help message.
 This is useful in the subsequent maintenance of a package. Example:
 
 ```
-❯ arch-hs-diff optparse-applicative 0.15.1.0 0.16.0.0
+❯ arch-hs-diff HTTP 4000.3.14 4000.3.15
+  ▶ You didn't pass -f, different flag values may make difference in dependency resolving.
   ⓘ Start running...
-  ⓘ Downloading cabal file from https://hackage.haskell.org/package/optparse-applicative-0.15.1.0/revision/0.cabal...
-  ⓘ Downloading cabal file from https://hackage.haskell.org/package/optparse-applicative-0.16.0.0/revision/0.cabal...
-Package: optparse-applicative
-Version: 0.15.1.0  ⇒  0.16.0.0
-Synopsis: Utilities and combinators for parsing command line options
+  ⓘ Downloading cabal file from https://hackage.haskell.org/package/HTTP-4000.3.14/revision/0.cabal...
+  ⓘ Downloading cabal file from https://hackage.haskell.org/package/HTTP-4000.3.15/revision/0.cabal...
+Package: HTTP
+Version: 4000.3.14  ⇒  4000.3.15
+Synopsis: A library for client-side HTTP
+URL: https://github.com/haskell/HTTP
 Depends: 
-    base  ==4.*
-    transformers  >=0.2 && <0.6
-    transformers-compat  >=0.3 && <0.7
-    process  >=1.0 && <1.7
-    ansi-wl-pprint  >=0.6.8 && <0.7
+    base  >=4.3.0.0 && <4.14
+    time  >=1.1.2.3 && <1.10
+    array  >=0.3.0.2 && <0.6
+    bytestring  >=0.9.1.5 && <0.11
+    mtl  >=2.0 && <2.3
+    network-uri  ==2.6.*
+    network  >=2.6 && <3.2
+    parsec  >=2.0 && <3.2
+--------------------------------------
+    base  >=4.3.0.0 && <4.15
+    time  >=1.1.2.3 && <1.11
+    array  >=0.3.0.2 && <0.6
+    bytestring  >=0.9.1.5 && <0.11
+    mtl  >=2.0 && <2.3
+    network-uri  ==2.6.*
+    network  >=2.6 && <3.2
+    parsec  >=2.0 && <3.2
 MakeDepends: 
-    base  -any
-    bytestring  >=0.9 && <0.11
-    QuickCheck  >=2.8 && <2.14
-----------------------------
-    base  -any
-    bytestring  >=0.9 && <0.11
-    QuickCheck  >=2.8 && <2.15
+    deepseq  >=1.3.0.0 && <1.5
+    HUnit  >=1.2.0.1 && <1.7
+    httpd-shed  >=0.4 && <0.5
+    mtl  >=1.1.1.0 && <2.3
+    pureMD5  >=0.2.4 && <2.2
+    split  >=0.1.3 && <0.3
+    test-framework  >=0.2.0 && <0.9
+    test-framework-hunit  >=0.3.0 && <0.4
+Flags:
+  HTTP
+    ⚐ mtl1:
+      description: Use the old mtl version 1.
+      default: False
+      isManual: False
+    ⚐ warn-as-error:
+      description: Build with warnings-as-errors
+      default: False
+      isManual: True
+    ⚐ conduit10:
+      description: Use version 1.0.x or below of the conduit package (for the test suite)
+      default: False
+      isManual: False
+    ⚐ warp-tests:
+      description: Test against warp
+      default: False
+      isManual: True
+    ⚐ network-uri:
+      description: Get Network.URI from the network-uri package
+      default: True
+      isManual: False
+
 
   ✔ Success!
 ```
