@@ -43,7 +43,7 @@ app ::
   [String] ->
   Sem r ()
 app target path aurSupport skip = do
-  deps <- getDependencies Set.empty (fmap mkUnqualComponentName skip) True target
+  deps <- getDependencies Set.empty (fmap mkUnqualComponentName skip) target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
 

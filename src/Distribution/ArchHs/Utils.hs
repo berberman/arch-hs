@@ -106,6 +106,8 @@ dependencyTypeToKind (CBenchmark _) = Benchmark
 dependencyTypeToKind (CLibBuildTools) = LibBuildTools
 dependencyTypeToKind (CTestBuildTools _) = TestBuildTools
 dependencyTypeToKind (CBenchmarkBuildTools _) = BenchmarkBuildTools
+dependencyTypeToKind (CSubLibs _) = SubLibs
+dependencyTypeToKind (CSubLibsBuildTools _) = SubLibsBuildTools
 
 -- | Apply a @Getting@ to two values respectively, and get the result as a pair.
 getTwo :: Getting b s b -> s -> s -> (b, b)

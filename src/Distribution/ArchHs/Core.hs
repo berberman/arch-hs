@@ -30,7 +30,7 @@ import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
 import Distribution.Types.Dependency (Dependency)
 import Distribution.Types.PackageName (PackageName, unPackageName)
-import Distribution.Types.UnqualComponentName (UnqualComponentName)
+import Distribution.Types.UnqualComponentName (unqualComponentNameToPackageName, UnqualComponentName)
 import Distribution.Types.Version (mkVersion)
 import Distribution.Types.VersionRange
 import Distribution.Utils.ShortText (fromShortText)
@@ -81,15 +81,14 @@ getDependencies ::
   Set PackageName ->
   -- | Skipped
   [UnqualComponentName] ->
-  -- | Whether recursive
-  Bool ->
   -- | Target
   PackageName ->
   Sem r (G.AdjacencyMap (Set DependencyType) PackageName)
-getDependencies resolved skip recursive name = do
+getDependencies resolved skip name = do
   cabal <- getLatestCabal name
   -- Ignore subLibraries
   (libDeps, libToolsDeps) <- collectLibDeps cabal
+  (subLibDeps, subLibToolsDeps) <- collectSubLibDeps cabal skip
   (exeDeps, exeToolsDeps) <- collectExeDeps cabal skip
   (testDeps, testToolsDeps) <- collectTestDeps cabal skip
   -- Ignore benchmarks
@@ -98,31 +97,50 @@ getDependencies resolved skip recursive name = do
       uname cons list = zip (fmap (cons . fst) list) (fmap snd list)
 
       flatten :: [(DependencyType, PkgList)] -> [(DependencyType, PackageName)]
-      flatten list = mconcat $ fmap (\(t, pkgs) -> zip (repeat t) pkgs) list
+      flatten = mconcat . fmap (\(t, pkgs) -> zip (repeat t) pkgs)
 
       withThisName :: [(DependencyType, PackageName)] -> [(DependencyType, PackageName, PackageName)]
       withThisName = fmap (\(t, pkg) -> (t, name, pkg))
 
-      ignored = filter (\x -> not $ x `elem` ignoreList || x == name || x `elem` resolved)
-      filterNot p = filter (not . p)
+      ignoreSingle x = not $ x `elem` ignoreList || x `elem` resolved
+      ignor = filter ignoreSingle
+      ignorFlatten k = filter (\(_, x) -> ignoreSingle x) . flatten . uname k
 
-      currentLib = G.edges $ zip3 (repeat $ Set.singleton CLib) (repeat name) $ filterNot (`elem` ignoreList) libDeps
-      currentLibDeps = G.edges $ zip3 (repeat $ Set.singleton CLibBuildTools) (repeat name) $ filterNot (`elem` ignoreList) libToolsDeps
+      filteredLibDeps = ignor libDeps
+      filteredLibToolsDeps = ignor libToolsDeps
+      filteredExeDeps = ignorFlatten CExe $ exeDeps
+      filteredExeToolsDeps = ignorFlatten CExeBuildTools $ exeToolsDeps
+      filteredTestDeps = ignorFlatten CTest $ testDeps
+      filteredTestToolsDeps = ignorFlatten CTest $ testToolsDeps
+      filteredSubLibDeps = ignorFlatten CSubLibs $ subLibDeps
+      filteredSubLibToolsDeps = ignorFlatten CSubLibsBuildTools $ subLibToolsDeps
 
-      runnableEdges k l = G.edges $ fmap (\(x, y, z) -> (Set.singleton x, y, z)) . withThisName . filterNot (\(_, x) -> x `elem` ignoreList) . flatten . uname k $ l
+      filteredSubLibDepsNames = fmap unqualComponentNameToPackageName . fmap fst $ subLibDeps
+      ignoredSubLibs = filter (`notElem` filteredSubLibDepsNames)
 
-      currentExe = runnableEdges CExe exeDeps
-      currentExeTools = runnableEdges CExeBuildTools exeToolsDeps
-      currentTest = runnableEdges CTest testDeps
-      currentTestTools = runnableEdges CTestBuildTools testToolsDeps
+      currentLib = G.edges $ zip3 (repeat $ Set.singleton CLib) (repeat name) filteredLibDeps
+      currentLibDeps = G.edges $ zip3 (repeat $ Set.singleton CLibBuildTools) (repeat name) filteredLibToolsDeps
 
-      -- currentBench = runnableEdges Types.Benchmark benchDeps
-      -- currentBenchTools = runnableEdges BenchmarkBuildTools benchToolsDeps
+      componentialEdges =
+        G.edges
+          . fmap (\(x, y, z) -> (Set.singleton x, y, z))
+          . withThisName
+
+      currentSubLibs = componentialEdges filteredSubLibDeps
+      currentSubLibsTools = componentialEdges filteredSubLibToolsDeps
+      currentExe = componentialEdges filteredExeDeps
+      currentExeTools = componentialEdges filteredExeToolsDeps
+      currentTest = componentialEdges filteredTestDeps
+      currentTestTools = componentialEdges filteredTestToolsDeps
+
+      -- currentBench = componentialEdges Types.Benchmark benchDeps
+      -- currentBenchTools = componentialEdges BenchmarkBuildTools benchToolsDeps
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies (Set.insert name resolved) skip recursive) $ ignored libDeps
-  nextExe <- mapM (getDependencies (Set.insert name resolved) skip recursive) $ ignored . fmap snd . flatten . uname CExe $ exeDeps
+  nextLib <- mapM (getDependencies (Set.insert name resolved) skip) $ ignoredSubLibs $ filteredLibDeps
+  nextExe <- mapM (getDependencies (Set.insert name resolved) skip) $ ignoredSubLibs $ fmap snd filteredExeDeps
+  nextSubLibs <- mapM (getDependencies (Set.insert name resolved) skip) $ fmap snd filteredSubLibDeps
   return $
     currentLib
       <+> currentLibDeps
@@ -130,11 +148,13 @@ getDependencies resolved skip recursive name = do
       <+> currentExeTools
       <+> currentTest
       <+> currentTestTools
+      <+> currentSubLibs
+      <+> currentSubLibsTools
       -- <+> currentBench
       -- <+> currentBenchTools
-      <+> if recursive
-        then (G.overlays nextLib) <+> (G.overlays nextExe)
-        else G.empty
+      <+> (G.overlays nextLib)
+      <+> (G.overlays nextExe)
+      <+> (G.overlays nextSubLibs)
 
 collectLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
 collectLibDeps cabal = do
@@ -149,34 +169,37 @@ collectLibDeps cabal = do
       return (fmap fst libDeps, fmap fst toolDeps)
     Nothing -> return ([], [])
 
-collectRunnableDeps ::
+collectComponentialDeps ::
   (Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, DependencyRecord] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
   Sem r (ComponentPkgList, ComponentPkgList)
-collectRunnableDeps f cabal skip = do
-  let exes = cabal & f
+collectComponentialDeps f cabal skip = do
+  let conds = cabal & f
       name = getPkgName' cabal
-  info <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree cabal . snd) exes
-  let runnableDeps = info <&> ((_2 %~) $ fmap unDepV . buildDependsIfBuild)
+  info <- filter (not . (`elem` skip) . fst) . zip (conds <&> fst) <$> mapM (evalConditionTree cabal . snd) conds
+  let deps = info <&> ((_2 %~) $ fmap unDepV . buildDependsIfBuild)
       toolDeps = info <&> ((_2 %~) $ fmap unExeV . buildToolDependsIfBuild)
       k = fmap (\(c, l) -> (c, fmap fst l))
-  mapM_ (updateDependencyRecord name) $ fmap snd runnableDeps
+  mapM_ (updateDependencyRecord name) $ fmap snd deps
   mapM_ (updateDependencyRecord name) $ fmap snd toolDeps
-  return (k runnableDeps, k toolDeps)
+  return (k deps, k toolDeps)
 
 collectExeDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
-collectExeDeps = collectRunnableDeps condExecutables
+collectExeDeps = collectComponentialDeps condExecutables
 
 collectTestDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
-collectTestDeps = collectRunnableDeps condTestSuites
+collectTestDeps = collectComponentialDeps condTestSuites
+
+collectSubLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectSubLibDeps = collectComponentialDeps condSubLibraries
 
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> [(PackageName, VersionRange)] -> Sem r ()
 updateDependencyRecord parent deps = modify' $ Map.insertWith (<>) parent deps
 
 -- collectBenchMarkDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
--- collectBenchMarkDeps = collectRunnableDeps condBenchmarks
+-- collectBenchMarkDeps = collectComponentialDeps condBenchmarks
 
 -----------------------------------------------------------------------------
 

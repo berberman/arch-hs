@@ -118,6 +118,10 @@ data DependencyType
     CTestBuildTools UnqualComponentName
   | -- | By the /build tools/ of a /benchmark/.
     CBenchmarkBuildTools UnqualComponentName
+  | -- |  By a /sub-library/.
+    CSubLibs UnqualComponentName
+  | -- |  By the /build tools/ of a /sub-library/.
+    CSubLibsBuildTools UnqualComponentName
   deriving stock (Eq, Ord, Generic)
   deriving anyclass (NFData)
 
@@ -131,6 +135,8 @@ data DependencyKind
   | LibBuildTools
   | TestBuildTools
   | BenchmarkBuildTools
+  | SubLibs
+  | SubLibsBuildTools
   deriving stock (Eq)
 
 instance Show DependencyType where
@@ -140,6 +146,8 @@ instance Show DependencyType where
   show (CBenchmark x) = unUnqualComponentName x <> " :: Benchmark"
   show (CTestBuildTools x) = unUnqualComponentName x <> " :: TestBuildTools"
   show (CBenchmarkBuildTools x) = unUnqualComponentName x <> " :: BenchmarkBuildTools"
+  show (CSubLibs x) = unUnqualComponentName x <> " :: SubLibs"
+  show (CSubLibsBuildTools x) = unUnqualComponentName x <> " :: SubLibsBuildTools"
   show CLib = "Lib"
   show CLibBuildTools = "LibBuildTools"
 
