@@ -7,7 +7,7 @@
 
 A program generating PKGBUILD for hackage packages. Special thanks to [felixonmars](https://github.com/felixonmars/).
 
-**Notice that version bounds of dependencies are assigned `-any` intentionally, and `arch-hs` will always support only the latest GHC version.**
+**Notice that `arch-hs` will always support only the latest GHC version.**
 
 
 ## Introduction
