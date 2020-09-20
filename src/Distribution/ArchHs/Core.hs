@@ -103,17 +103,17 @@ getDependencies resolved skip name = do
       withThisName = fmap (\(t, pkg) -> (t, name, pkg))
 
       ignoreSingle x = not $ x `elem` ignoreList || x `elem` resolved
-      ignor = filter ignoreSingle
-      ignorFlatten k = filter (\(_, x) -> ignoreSingle x) . flatten . uname k
+      ignore = filter ignoreSingle
+      ignoreFlatten k = filter (\(_, x) -> ignoreSingle x) . flatten . uname k
 
-      filteredLibDeps = ignor libDeps
-      filteredLibToolsDeps = ignor libToolsDeps
-      filteredExeDeps = ignorFlatten CExe $ exeDeps
-      filteredExeToolsDeps = ignorFlatten CExeBuildTools $ exeToolsDeps
-      filteredTestDeps = ignorFlatten CTest $ testDeps
-      filteredTestToolsDeps = ignorFlatten CTest $ testToolsDeps
-      filteredSubLibDeps = ignorFlatten CSubLibs $ subLibDeps
-      filteredSubLibToolsDeps = ignorFlatten CSubLibsBuildTools $ subLibToolsDeps
+      filteredLibDeps = ignore libDeps
+      filteredLibToolsDeps = ignore libToolsDeps
+      filteredExeDeps = ignoreFlatten CExe $ exeDeps
+      filteredExeToolsDeps = ignoreFlatten CExeBuildTools $ exeToolsDeps
+      filteredTestDeps = ignoreFlatten CTest $ testDeps
+      filteredTestToolsDeps = ignoreFlatten CTest $ testToolsDeps
+      filteredSubLibDeps = ignoreFlatten CSubLibs $ subLibDeps
+      filteredSubLibToolsDeps = ignoreFlatten CSubLibsBuildTools $ subLibToolsDeps
 
       filteredSubLibDepsNames = fmap unqualComponentNameToPackageName . fmap fst $ subLibDeps
       ignoredSubLibs = filter (`notElem` filteredSubLibDepsNames)
@@ -138,8 +138,8 @@ getDependencies resolved skip name = do
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies (Set.insert name resolved) skip) $ ignoredSubLibs $ filteredLibDeps
-  nextExe <- mapM (getDependencies (Set.insert name resolved) skip) $ ignoredSubLibs $ fmap snd filteredExeDeps
+  nextLib <- mapM (getDependencies (Set.insert name resolved) skip) $ filter (\x -> x /= name) $ ignoredSubLibs $ filteredLibDeps
+  nextExe <- mapM (getDependencies (Set.insert name resolved) skip) $ filter (\x -> x /= name) $ ignoredSubLibs $ fmap snd filteredExeDeps
   nextSubLibs <- mapM (getDependencies (Set.insert name resolved) skip) $ fmap snd filteredSubLibDeps
   let temp = [nextLib, nextExe, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
