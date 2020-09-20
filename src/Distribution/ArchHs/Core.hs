@@ -30,7 +30,7 @@ import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
 import Distribution.Types.Dependency (Dependency)
 import Distribution.Types.PackageName (PackageName, unPackageName)
-import Distribution.Types.UnqualComponentName (unqualComponentNameToPackageName, UnqualComponentName)
+import Distribution.Types.UnqualComponentName (UnqualComponentName, unqualComponentNameToPackageName)
 import Distribution.Types.Version (mkVersion)
 import Distribution.Types.VersionRange
 import Distribution.Utils.ShortText (fromShortText)
@@ -83,7 +83,7 @@ getDependencies ::
   [UnqualComponentName] ->
   -- | Target
   PackageName ->
-  Sem r (G.AdjacencyMap (Set DependencyType) PackageName)
+  Sem r ((G.AdjacencyMap (Set DependencyType) PackageName), Set PackageName)
 getDependencies resolved skip name = do
   cabal <- getLatestCabal name
   -- Ignore subLibraries
@@ -141,20 +141,23 @@ getDependencies resolved skip name = do
   nextLib <- mapM (getDependencies (Set.insert name resolved) skip) $ ignoredSubLibs $ filteredLibDeps
   nextExe <- mapM (getDependencies (Set.insert name resolved) skip) $ ignoredSubLibs $ fmap snd filteredExeDeps
   nextSubLibs <- mapM (getDependencies (Set.insert name resolved) skip) $ fmap snd filteredSubLibDeps
+  let temp = [nextLib, nextExe, nextSubLibs]
+      nexts = G.overlays $ temp ^. each ^.. each . _1
+      subsubs = temp ^. each ^.. each . _2 ^. each
   return $
-    currentLib
-      <+> currentLibDeps
-      <+> currentExe
-      <+> currentExeTools
-      <+> currentTest
-      <+> currentTestTools
-      <+> currentSubLibs
-      <+> currentSubLibsTools
-      -- <+> currentBench
-      -- <+> currentBenchTools
-      <+> (G.overlays nextLib)
-      <+> (G.overlays nextExe)
-      <+> (G.overlays nextSubLibs)
+    ( currentLib
+        <+> currentLibDeps
+        <+> currentExe
+        <+> currentExeTools
+        <+> currentTest
+        <+> currentTestTools
+        <+> currentSubLibs
+        <+> currentSubLibsTools
+        -- <+> currentBench
+        -- <+> currentBenchTools
+        <+> nexts,
+      Set.fromList filteredSubLibDepsNames <> subsubs
+    )
 
 collectLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
 collectLibDeps cabal = do
@@ -204,8 +207,8 @@ updateDependencyRecord parent deps = modify' $ Map.insertWith (<>) parent deps
 -----------------------------------------------------------------------------
 
 -- | Generate 'PkgBuild' for a 'SolvedPackage'.
-cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> Sem r PkgBuild
-cabalToPkgBuild pkg = do
+cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> PkgList -> Sem r PkgBuild
+cabalToPkgBuild pkg ignored = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> (getLatestCabal name)
   let _hkgName = pkg ^. pkgName & unPackageName
@@ -223,7 +226,7 @@ cabalToPkgBuild pkg = do
 
       _license = getL . license $ cabal
       _enableCheck = any id $ pkg ^. pkgDeps & mapped %~ (\dep -> selectDepKind Test dep && dep ^. depName == pkg ^. pkgName)
-      depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepKind Lib x || selectDepKind Exe x))
+      depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepKind Lib x || selectDepKind Exe x) && notIgnore x)
       makeDepends =
         pkg ^. pkgDeps
           ^.. each
@@ -236,6 +239,7 @@ cabalToPkgBuild pkg = do
                            || selectDepKind Test x
                            || selectDepKind TestBuildTools x
                        )
+                    && notIgnore x
               )
       depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
       _depends = depsToString depends
@@ -244,5 +248,6 @@ cabalToPkgBuild pkg = do
       wrap s = '\'' : s <> "\'"
       notInGHCLib x = (x ^. depName) `notElem` ghcLibList
       notMyself x = x ^. depName /= name
+      notIgnore x = x ^. depName `notElem` ignored
       selectDepKind k x = k `elem` (x ^. depType & mapped %~ dependencyTypeToKind)
   return PkgBuild {..}

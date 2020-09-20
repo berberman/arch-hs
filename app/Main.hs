@@ -43,7 +43,7 @@ app ::
   [String] ->
   Sem r ()
 app target path aurSupport skip = do
-  deps <- getDependencies Set.empty (fmap mkUnqualComponentName skip) target
+  (deps, ignored) <- getDependencies Set.empty (fmap mkUnqualComponentName skip) target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
 
@@ -102,7 +102,7 @@ app target path aurSupport skip = do
   when (not dry) $
     mapM_
       ( \solved -> do
-          pkgBuild <- cabalToPkgBuild solved
+          pkgBuild <- cabalToPkgBuild solved $ Set.toList ignored
           let pName = "haskell-" <> N._pkgName pkgBuild
               dir = path </> pName
               fileName = dir </> "PKGBUILD"
