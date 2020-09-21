@@ -226,7 +226,19 @@ cabalToPkgBuild pkg ignored = do
 
       _license = getL . license $ cabal
       _enableCheck = any id $ pkg ^. pkgDeps & mapped %~ (\dep -> selectDepKind Test dep && dep ^. depName == pkg ^. pkgName)
-      depends = pkg ^. pkgDeps ^.. each . filtered (\x -> notMyself x && notInGHCLib x && (selectDepKind Lib x || selectDepKind Exe x) && notIgnore x)
+      depends =
+        pkg ^. pkgDeps
+          ^.. each
+            . filtered
+              ( \x ->
+                  notMyself x
+                    && notInGHCLib x
+                    && ( selectDepKind Lib x
+                           || selectDepKind Exe x
+                           || selectDepKind SubLibs x
+                       )
+                    && notIgnore x
+              )
       makeDepends =
         pkg ^. pkgDeps
           ^.. each
@@ -238,6 +250,7 @@ cabalToPkgBuild pkg ignored = do
                     && ( selectDepKind LibBuildTools x
                            || selectDepKind Test x
                            || selectDepKind TestBuildTools x
+                           || selectDepKind SubLibsBuildTools x
                        )
                     && notIgnore x
               )
