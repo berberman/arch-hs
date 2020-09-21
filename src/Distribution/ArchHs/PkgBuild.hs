@@ -169,7 +169,7 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends che
   }
 
   build() {
-    cd $$_hkgname-$$pkgver    
+    cd $$_hkgname-$$pkgver
 
     runhaskell Setup configure -O --enable-shared --enable-executable-dynamic --disable-library-vanilla \
       --prefix=/usr --docdir=/usr/share/doc/$$pkgname --enable-tests \
