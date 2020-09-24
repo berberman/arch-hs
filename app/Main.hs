@@ -225,10 +225,21 @@ main = CE.catch @CE.IOException
 -----------------------------------------------------------------------------
 
 groupDeps :: G.AdjacencyMap (Set.Set DependencyType) PackageName -> [SolvedPackage]
-groupDeps =
-  fmap (\(name, deps) -> SolvedPackage name $ fmap (uncurry . flip $ SolvedDependency Nothing) deps)
-    . fmap ((\(a, b, c) -> (head b, zip a c)) . unzip3)
-    . groupBy (\x y -> uncurry (==) (getTwo _2 x y))
-    . fmap (_1 %~ Set.toList)
-    . Set.toList
-    . G.edgeSet
+groupDeps graph =
+  fmap
+    ( \(name, deps) ->
+        SolvedPackage name $ fmap (uncurry . flip $ SolvedDependency Nothing) deps
+    )
+    $ result <> aloneChildren
+  where
+    result =
+      fmap ((\(a, b, c) -> (head b, zip a c)) . unzip3)
+        . groupBy (\x y -> uncurry (==) (getTwo _2 x y))
+        . fmap (_1 %~ Set.toList)
+        . Set.toList
+        . G.edgeSet
+        $ graph
+    parents = fmap fst result
+    children = mconcat $ fmap (\(_, ds) -> fmap snd ds) result
+    -- Maybe 'G.vertexSet' is a better choice
+    aloneChildren = nub $ zip (filter (`notElem` parents) children) (repeat [])

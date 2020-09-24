@@ -142,8 +142,8 @@ getDependencies skip parent name = do
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies skip (Just name)) $ filter (\x -> x /= name) $ ignoredSubLibs $ filteredLibDeps
-  nextExe <- mapM (getDependencies skip (Just name)) $ filter (\x -> x /= name) $ ignoredSubLibs $ fmap snd filteredExeDeps
+  nextLib <- mapM (getDependencies skip (Just name)) $ ignoredSubLibs $ filteredLibDeps
+  nextExe <- mapM (getDependencies skip (Just name)) $ ignoredSubLibs $ fmap snd filteredExeDeps
   nextSubLibs <- mapM (getDependencies skip (Just name)) $ fmap snd filteredSubLibDeps
   let temp = [nextLib, nextExe, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
