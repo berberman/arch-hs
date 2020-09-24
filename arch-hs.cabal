@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                arch-hs
-version:             0.0.0.0
+version:             0.1.0.0
 synopsis:            A program generating PKGBUILD for hackage packages.
 description:         
     @arch-hs@ is a command-line program, which simplifies the process of producing
@@ -107,15 +107,6 @@ executable arch-hs-diff
   main-is:             Main.hs
   other-modules:       Diff
   build-depends:       arch-hs
-  ghc-options:         -threaded
-                       -rtsopts
-                       -with-rtsopts=-N
-                       
-executable arch-hs-uusi
-  import:              common-options
-  hs-source-dirs:      uusi
-  main-is:             Main.hs
-  build-depends:       arch-hs, process
   ghc-options:         -threaded
                        -rtsopts
                        -with-rtsopts=-N

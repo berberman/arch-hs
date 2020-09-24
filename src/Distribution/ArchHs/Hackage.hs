@@ -19,14 +19,14 @@ import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils
-import Distribution.Hackage.DB
+import Distribution.ArchHs.Utils (getPkgName, getPkgVersion)
+import Distribution.Hackage.DB (HackageDB, VersionData (VersionData, cabalFile), readTarball)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import Distribution.Types.Flag (Flag)
 import Distribution.Types.GenericPackageDescription (GenericPackageDescription, genPackageFlags, packageDescription)
 import Distribution.Types.PackageName (PackageName)
 import Distribution.Version (Version, nullVersion)
-import System.Directory
+import System.Directory (findFile, getHomeDirectory, listDirectory)
 import System.FilePath ((</>))
 
 -- | Look up hackage tarball path from @~/.cabal@.

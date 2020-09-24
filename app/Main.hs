@@ -36,14 +36,14 @@ import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName, (</>))
 
 app ::
-  Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Aur, WithMyErr] r =>
+  Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
   PackageName ->
   FilePath ->
   Bool ->
   [String] ->
   Sem r ()
 app target path aurSupport skip = do
-  (deps, ignored) <- getDependencies Set.empty (fmap mkUnqualComponentName skip) target
+  (deps, ignored) <- getDependencies Set.empty (fmap mkUnqualComponentName skip) Nothing target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
 
@@ -113,26 +113,43 @@ app target path aurSupport skip = do
       )
       toBePackedAgain
 
+-----------------------------------------------------------------------------
+
 runApp ::
   HackageDB ->
   CommunityDB ->
   Map.Map PackageName FlagAssignment ->
-  Sem '[CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Aur, WithMyErr, Embed IO, Final IO] a ->
+  Bool ->
+  FilePath ->
+  Sem '[CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runApp hackage community flags =
+runApp hackage community flags stdout path =
   runFinal
     . embedToFinal
     . errorToIOFinal
     . aurToIO
+    . runTrace stdout path
     . evalState Map.empty
     . runReader flags
     . runReader hackage
     . runReader community
 
+runTrace :: Member (Embed IO) r => Bool -> FilePath -> Sem (Trace ': r) a -> Sem r a
+runTrace stdout path = interpret $ \case
+  Trace m -> do
+    when stdout (embed $ putStrLn m)
+    when (not $ null path) (embed $ appendFile path (m ++ "\n"))
+
+-----------------------------------------------------------------------------
+
 main :: IO ()
 main = CE.catch @CE.IOException
   ( do
       Options {..} <- runArgsParser
+
+      let traceToFile = not $ null optFileTrace
+      when (traceToFile) $ do
+        C.infoMessage $ "Trace will be appended to " <> (T.pack optFileTrace)
 
       let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
           useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
@@ -171,7 +188,7 @@ main = CE.catch @CE.IOException
 
       C.infoMessage "Start running..."
 
-      runApp newHackage community optFlags (app optTarget optOutputDir optAur optSkip) >>= \case
+      runApp newHackage community optFlags optStdoutTrace optFileTrace (app optTarget optOutputDir optAur optSkip) >>= \case
         Left x -> C.errorMessage $ "Runtime Error: " <> (T.pack . show $ x)
         _ -> C.successMessage "Success!"
   )

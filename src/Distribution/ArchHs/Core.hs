@@ -16,9 +16,9 @@ import Data.List (intercalate, stripPrefix)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Distribution.ArchHs.Hackage
-import Distribution.ArchHs.Local
-import Distribution.ArchHs.PkgBuild
+import Distribution.ArchHs.Hackage (getLatestCabal)
+import Distribution.ArchHs.Local (ghcLibList, ignoreList)
+import Distribution.ArchHs.PkgBuild (PkgBuild (..), mapLicense)
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import Distribution.Compiler (CompilerFlavor (..))
@@ -32,7 +32,7 @@ import Distribution.Types.Dependency (Dependency)
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Types.UnqualComponentName (UnqualComponentName, unqualComponentNameToPackageName)
 import Distribution.Types.Version (mkVersion)
-import Distribution.Types.VersionRange
+import Distribution.Types.VersionRange (VersionRange, withinRange)
 import Distribution.Utils.ShortText (fromShortText)
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
@@ -76,15 +76,18 @@ evalConditionTree cabal cond = do
 -- All version constraints will be discarded,
 -- and only packages depended by executables, libraries, and test suits will be collected.
 getDependencies ::
-  Members [HackageEnv, FlagAssignmentsEnv, WithMyErr, DependencyRecord] r =>
+  Members [HackageEnv, FlagAssignmentsEnv, WithMyErr, DependencyRecord, Trace] r =>
   -- | Resolved
   Set PackageName ->
   -- | Skipped
   [UnqualComponentName] ->
+  Maybe PackageName ->
   -- | Target
   PackageName ->
   Sem r ((G.AdjacencyMap (Set DependencyType) PackageName), Set PackageName)
-getDependencies resolved skip name = do
+getDependencies resolved skip parent name = do
+  trace' $ "Getting all dependencies of (" <> show name <> "), parent: (" <> show parent <> ")"
+  trace' $ "Already resolved: " <> show resolved
   cabal <- getLatestCabal name
   -- Ignore subLibraries
   (libDeps, libToolsDeps) <- collectLibDeps cabal
@@ -138,9 +141,9 @@ getDependencies resolved skip name = do
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies (Set.insert name resolved) skip) $ filter (\x -> x /= name) $ ignoredSubLibs $ filteredLibDeps
-  nextExe <- mapM (getDependencies (Set.insert name resolved) skip) $ filter (\x -> x /= name) $ ignoredSubLibs $ fmap snd filteredExeDeps
-  nextSubLibs <- mapM (getDependencies (Set.insert name resolved) skip) $ fmap snd filteredSubLibDeps
+  nextLib <- mapM (getDependencies (Set.insert name resolved) skip (Just name)) $ filter (\x -> x /= name) $ ignoredSubLibs $ filteredLibDeps
+  nextExe <- mapM (getDependencies (Set.insert name resolved) skip (Just name)) $ filter (\x -> x /= name) $ ignoredSubLibs $ fmap snd filteredExeDeps
+  nextSubLibs <- mapM (getDependencies (Set.insert name resolved) skip (Just name)) $ fmap snd filteredSubLibDeps
   let temp = [nextLib, nextExe, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
       subsubs = temp ^. each ^.. each . _2 ^. each
@@ -159,21 +162,25 @@ getDependencies resolved skip name = do
       Set.fromList filteredSubLibDepsNames <> subsubs
     )
 
-collectLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
+collectLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord, Trace] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
       let name = getPkgName' cabal
+      trace' $ "Getting componential dependencies of " <> show name
       info <- evalConditionTree cabal lib
       let libDeps = fmap unDepV $ buildDependsIfBuild info
           toolDeps = fmap unExeV $ buildToolDependsIfBuild info
       updateDependencyRecord name libDeps
       updateDependencyRecord name toolDeps
-      return (fmap fst libDeps, fmap fst toolDeps)
+      let result = (fmap fst libDeps, fmap fst toolDeps)
+      trace' $ "Found: " <> show result
+      traceCallStack
+      return result
     Nothing -> return ([], [])
 
 collectComponentialDeps ::
-  (Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, DependencyRecord] r) =>
+  (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
@@ -181,21 +188,25 @@ collectComponentialDeps ::
 collectComponentialDeps f cabal skip = do
   let conds = cabal & f
       name = getPkgName' cabal
+  trace' $ "Getting componential dependencies of " <> show name
   info <- filter (not . (`elem` skip) . fst) . zip (conds <&> fst) <$> mapM (evalConditionTree cabal . snd) conds
   let deps = info <&> ((_2 %~) $ fmap unDepV . buildDependsIfBuild)
       toolDeps = info <&> ((_2 %~) $ fmap unExeV . buildToolDependsIfBuild)
       k = fmap (\(c, l) -> (c, fmap fst l))
   mapM_ (updateDependencyRecord name) $ fmap snd deps
   mapM_ (updateDependencyRecord name) $ fmap snd toolDeps
-  return (k deps, k toolDeps)
+  let result = (k deps, k toolDeps)
+  trace' $ "Found: " <> show result
+  traceCallStack
+  return result
 
-collectExeDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectExeDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectExeDeps = collectComponentialDeps condExecutables
 
-collectTestDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectTestDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectTestDeps = collectComponentialDeps condTestSuites
 
-collectSubLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectSubLibDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectSubLibDeps = collectComponentialDeps condSubLibraries
 
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> [(PackageName, VersionRange)] -> Sem r ()

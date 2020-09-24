@@ -20,6 +20,8 @@ data Options = Options
     optSkip :: [String],
     optExtraCabalPath :: [FilePath],
     optAur :: Bool,
+    optStdoutTrace :: Bool,
+    optFileTrace :: FilePath,
     optTarget :: PackageName
   }
   deriving stock (Show)
@@ -78,6 +80,16 @@ cmdOptions =
         ( long "aur"
             <> short 'a'
             <> help "Enable AUR searching"
+        )
+      <*> switch
+        ( long "trace"
+            <> help "Print trace to stdout"
+        )
+      <*> strOption
+        ( long "trace-file"
+            <> metavar "PATH"
+            <> help "Path to trace file (empty means do not write trace to file)"
+            <> value ""
         )
       <*> argument optPackageNameReader (metavar "TARGET")
 

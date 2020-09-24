@@ -16,6 +16,8 @@ module Distribution.ArchHs.Utils
     getTwo,
     buildDependsIfBuild,
     buildToolDependsIfBuild,
+    traceCallStack,
+    trace',
   )
 where
 
@@ -40,6 +42,7 @@ import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Utils.ShortText (fromShortText)
 import Distribution.Version (Version, VersionRange)
+import GHC.Stack
 
 -- | Extract the 'PackageName' of a 'ExeDependency'.
 unExe :: ExeDependency -> PackageName
@@ -120,3 +123,14 @@ buildDependsIfBuild info = if buildable info then targetBuildDepends info else [
 -- | Same as 'buildToolDepends', but check if this is 'buildable'.
 buildToolDependsIfBuild :: BuildInfo -> [ExeDependency]
 buildToolDependsIfBuild info = if buildable info then buildToolDepends info else []
+
+-- | Trace with prefix @[TRACE]@.
+trace' :: MemberWithError Trace r => String -> Sem r ()
+trace' s = trace $ "[TRACE]  " <> s
+
+-- | Trace 'CallStack'.
+traceCallStack :: (HasCallStack, MemberWithError Trace r) => Sem r ()
+traceCallStack = do
+  trace . prefix $ prettyCallStack callStack
+  where
+    prefix = unlines . fmap ("[TRACE]  " ++) . lines

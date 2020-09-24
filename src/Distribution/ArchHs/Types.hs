@@ -33,10 +33,12 @@ module Distribution.ArchHs.Types
     depName,
     depType,
     DependencyRecord,
+    HasCallStack,
     module Polysemy,
     module Polysemy.Error,
     module Polysemy.Reader,
     module Polysemy.State,
+    module Polysemy.Trace,
     module Lens.Micro,
   )
 where
@@ -52,12 +54,14 @@ import Distribution.Types.UnqualComponentName (UnqualComponentName, unUnqualComp
 import Distribution.Types.Version (Version)
 import Distribution.Version (VersionRange)
 import GHC.Generics (Generic)
+import GHC.Stack (HasCallStack)
 import Lens.Micro
 import Lens.Micro.TH (makeLenses)
 import Polysemy
 import Polysemy.Error
 import Polysemy.Reader
 import Polysemy.State
+import Polysemy.Trace
 
 -- | A list of 'PackageName'.
 type PkgList = [PackageName]

@@ -33,15 +33,15 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 # pacman -S arch-hs
 ```
 
-Install it directly using `pacman`. 
+`arch-hs` is available in [community](https://www.archlinux.org/packages/community/x86_64/arch-hs/), so you can install it using `pacman`.
 
 ### Install the development version
 
 ```
-$ yay -S arch-hs-git
+# pacman -S arch-hs-git
 ```
 
-Install it using your AUR helper, or just `pacman` with [archlinxcn](https://github.com/archlinuxcn/repo), which provides pre-built binary, following the latest git commit.
+The `-git` version is available in [archlinxcn](https://github.com/archlinuxcn/repo), following the latest git commit.
 
 ### Build from source (for development)
 
@@ -53,13 +53,13 @@ Then build and install it via stack or cabal.
 
 #### Stack
 ```
-$ stack install
+$ stack build
 ```
 
 #### Cabal (dynamic)
 ```
 $ cabal configure --disable-library-vanilla --enable-shared --enable-executable-dynamic --ghc-options=-dynamic 
-$ cabal install
+$ cabal build
 ```
 
 ## Usage
