@@ -180,13 +180,13 @@ main = CE.catch @CE.IOException
       let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
           useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
 
-      when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default places."
-      when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default places."
+      when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
+      when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
 
       let isFlagEmpty = optFlags == Map.empty
           isSkipEmpty = optSkip == []
 
-      when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag values may make difference in dependency resolving."
+      when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag assignments may make difference in dependency resolving."
       when (not isFlagEmpty) $ do
         C.infoMessage "You assigned flags:"
         putStrLn . prettyFlagAssignments $ optFlags

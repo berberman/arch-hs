@@ -204,7 +204,21 @@ Notice that this only makes sense in the lifetime of `arch-hs`, whereas generate
 $ arch-hs -e /home/berberman/arch-hs/arch-hs.cabal arch-hs
 ```
 
-Using `-e` can can include extra `.cabal` files as supplementary. Useful when the target like `arch-hs` hasn't been released to hackage. 
+Using `-e` can include extra `.cabal` files as supplementary. Useful when the target like `arch-hs` hasn't been released to hackage. 
+
+### Trace
+
+```
+$ arch-hs --trace termonad
+```
+
+Using `--trace` can print the process of dependency resolving into stdout.
+
+```
+$ arch-hs --trace-file foo.log termonad
+```
+
+Similar to `--trace`, but the log will be written into a file.
 
 ### Help
 
@@ -215,7 +229,7 @@ arch-hs - a program generating PKGBUILD for hackage packages.
 Usage: arch-hs [-h|--hackage PATH] [-c|--community PATH] [-o|--output PATH] 
                [-f|--flags package_name:flag_name:true|false,...] 
                [-s|--skip component_name,...] [-e|--extra PATH_1,...] [-a|--aur]
-               TARGET
+               [--trace] [--trace-file PATH] TARGET
   Try to reach the TARGET QAQ.
 
 Available options:
@@ -234,6 +248,9 @@ Available options:
   -e,--extra PATH_1,...    Extra cabal files' path - e.g.
                            /home/berberman/arch-hs/arch-hs.cabal
   -a,--aur                 Enable AUR searching
+  --trace                  Print trace to stdout
+  --trace-file PATH        Path to trace file (empty means do not write trace to
+                           file)
   -h,--help                Show this help text
 
 ```
@@ -313,8 +330,9 @@ Flags:
 
 ## Limitations
 
-* The dependency solver will **ONLY** expand the dependencies of *executables* and *libraries* recursively, because
-circular dependency lies ubiquitously involving *test suites*, *benchmarks*, and their *buildTools*.
+* The dependency solver will **ONLY** expand the dependencies of *executables* , *libraries* and *sub-libraries* recursively, because
+circular dependency lies ubiquitously involving *test suites* and their *buildTools*. `arch-hs` is not able to handle with complicated situations:
+the libraries of a package partially exist in hackage, some libraries include external sources, etc. 
 
 * Currently, `arch-hs`'s functionality is limited to dependency processing, whereas necessary procedures like
 file patches, loose of version constraints, etc. are need to be done manually, so **DO NOT** give too much trust in generated PKGBUILD files.
@@ -326,8 +344,6 @@ file patches, loose of version constraints, etc. are need to be done manually, s
 - [ ] Structuralized PKGBUILD template.
 
 - [x] AUR support.
-
-- [ ] Logging system.
 
 - [ ] A watchdog during dependency calculation.
 
