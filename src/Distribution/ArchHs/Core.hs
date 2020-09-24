@@ -106,7 +106,7 @@ getDependencies skip parent name = do
       withThisName :: [(DependencyType, PackageName)] -> [(DependencyType, PackageName, PackageName)]
       withThisName = fmap (\(t, pkg) -> (t, name, pkg))
 
-      ignoreSingle x = not $ x `elem` ignoreList || x `elem` resolved
+      ignoreSingle x = x `notElem` ignoreList
       ignore = filter ignoreSingle
       ignoreFlatten k = filter (\(_, x) -> ignoreSingle x) . flatten . uname k
 
@@ -120,7 +120,8 @@ getDependencies skip parent name = do
       filteredSubLibToolsDeps = ignoreFlatten CSubLibsBuildTools $ subLibToolsDeps
 
       filteredSubLibDepsNames = fmap unqualComponentNameToPackageName . fmap fst $ subLibDeps
-      ignoredSubLibs = filter (`notElem` filteredSubLibDepsNames)
+      ignoreSubLibs = filter (`notElem` filteredSubLibDepsNames)
+      ignoreResolved = filter (`notElem` resolved)
 
       currentLib = G.edges $ zip3 (repeat $ Set.singleton CLib) (repeat name) filteredLibDeps
       currentLibDeps = G.edges $ zip3 (repeat $ Set.singleton CLibBuildTools) (repeat name) filteredLibToolsDeps
@@ -142,8 +143,8 @@ getDependencies skip parent name = do
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies skip (Just name)) $ ignoredSubLibs $ filteredLibDeps
-  nextExe <- mapM (getDependencies skip (Just name)) $ ignoredSubLibs $ fmap snd filteredExeDeps
+  nextLib <- mapM (getDependencies skip (Just name)) . ignoreResolved . ignoreSubLibs $ filteredLibDeps
+  nextExe <- mapM (getDependencies skip (Just name)) . ignoreResolved . ignoreSubLibs $ fmap snd filteredExeDeps
   nextSubLibs <- mapM (getDependencies skip (Just name)) $ fmap snd filteredSubLibDeps
   let temp = [nextLib, nextExe, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
