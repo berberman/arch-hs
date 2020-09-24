@@ -47,10 +47,10 @@ prettyFlags :: [(PackageName, [Flag])] -> String
 prettyFlags = mconcat . fmap (\(name, flags) -> (C.formatWith [C.magenta] $ unPackageName name <> "\n") <> mconcat (fmap (C.formatWith [C.indent 4] . prettyFlag) flags))
 
 prettyFlag :: Flag -> String
-prettyFlag f = "⚐ " <> C.formatWith [C.yellow] name <> ":\n" <> mconcat (fmap (C.formatWith [C.indent 6] . (<> "\n")) $ ["description: " <> desc, "default: " <> def, "isManual: " <> manual])
+prettyFlag f = "⚐ " <> C.formatWith [C.yellow] name <> ":\n" <> mconcat (fmap (C.formatWith [C.indent 6]) $ ["description:\n" <> desc, "default: " <> def <> "\n", "isManual: " <> manual <> "\n"])
   where
     name = unFlagName . flagName $ f
-    desc = flagDescription f
+    desc = unlines . fmap (C.formatWith [C.indent 8]) . lines $ flagDescription f
     def = show $ flagDefault f
     manual = show $ flagManual f
 
