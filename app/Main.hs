@@ -12,16 +12,36 @@ import qualified Colourista as C
 import Conduit
 import qualified Control.Exception as CE
 import Control.Monad (filterM, when)
+import Data.IORef (IORef, newIORef)
 import Data.List (groupBy, intercalate, isInfixOf, nub)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import Distribution.ArchHs.Aur
+import Distribution.ArchHs.Aur (Aur, aurToIO, isInAur)
 import Distribution.ArchHs.Community
+  ( defaultCommunityPath,
+    isInCommunity,
+    loadProcessedCommunity,
+  )
 import Distribution.ArchHs.Core
+  ( cabalToPkgBuild,
+    getDependencies,
+  )
 import Distribution.ArchHs.Hackage
+  ( getPackageFlag,
+    insertDB,
+    loadHackageDB,
+    lookupHackagePath,
+    parseCabalFile,
+  )
 import Distribution.ArchHs.Local
 import Distribution.ArchHs.PP
+  ( prettyDeps,
+    prettyFlagAssignments,
+    prettyFlags,
+    prettySkip,
+    prettySolvedPkgs,
+  )
 import qualified Distribution.ArchHs.PkgBuild as N
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (getTwo)
@@ -32,18 +52,18 @@ import Distribution.Types.PackageName
     unPackageName,
   )
 import Distribution.Types.UnqualComponentName (mkUnqualComponentName)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, doesFileExist, removeFile)
 import System.FilePath (takeFileName, (</>))
 
 app ::
-  Members '[Embed IO, CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
+  Members '[Embed IO, State (Set.Set PackageName), CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
   PackageName ->
   FilePath ->
   Bool ->
   [String] ->
   Sem r ()
 app target path aurSupport skip = do
-  (deps, ignored) <- getDependencies Set.empty (fmap mkUnqualComponentName skip) Nothing target
+  (deps, ignored) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
 
@@ -121,13 +141,15 @@ runApp ::
   Map.Map PackageName FlagAssignment ->
   Bool ->
   FilePath ->
-  Sem '[CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr, Embed IO, Final IO] a ->
+  IORef (Set.Set PackageName) ->
+  Sem '[CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, State (Set.Set PackageName), Aur, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runApp hackage community flags stdout path =
+runApp hackage community flags stdout path ref =
   runFinal
     . embedToFinal
     . errorToIOFinal
     . aurToIO
+    . runStateIORef ref
     . runTrace stdout path
     . evalState Map.empty
     . runReader flags
@@ -149,7 +171,11 @@ main = CE.catch @CE.IOException
 
       let traceToFile = not $ null optFileTrace
       when (traceToFile) $ do
-        C.infoMessage $ "Trace will be appended to " <> (T.pack optFileTrace)
+        C.infoMessage $ "Trace will be write to " <> (T.pack optFileTrace) <> "."
+        exist <- doesFileExist optFileTrace
+        when exist $ do
+          C.warningMessage $ "File " <> (T.pack optFileTrace) <> " already existed, delete it."
+          removeFile optFileTrace
 
       let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
           useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
@@ -188,7 +214,9 @@ main = CE.catch @CE.IOException
 
       C.infoMessage "Start running..."
 
-      runApp newHackage community optFlags optStdoutTrace optFileTrace (app optTarget optOutputDir optAur optSkip) >>= \case
+      empty <- newIORef Set.empty
+
+      runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip) >>= \case
         Left x -> C.errorMessage $ "Runtime Error: " <> (T.pack . show $ x)
         _ -> C.successMessage "Success!"
   )

@@ -76,16 +76,17 @@ evalConditionTree cabal cond = do
 -- All version constraints will be discarded,
 -- and only packages depended by executables, libraries, and test suits will be collected.
 getDependencies ::
-  Members [HackageEnv, FlagAssignmentsEnv, WithMyErr, DependencyRecord, Trace] r =>
-  -- | Resolved
-  Set PackageName ->
+  Members [HackageEnv, FlagAssignmentsEnv, WithMyErr, DependencyRecord, State (Set PackageName), Trace] r =>
   -- | Skipped
   [UnqualComponentName] ->
+  -- | Parent
   Maybe PackageName ->
   -- | Target
   PackageName ->
   Sem r ((G.AdjacencyMap (Set DependencyType) PackageName), Set PackageName)
-getDependencies resolved skip parent name = do
+getDependencies skip parent name = do
+  resolved <- get @(Set PackageName)
+  modify' $ Set.insert name
   trace' $ "Getting all dependencies of (" <> show name <> "), parent: (" <> show parent <> ")"
   trace' $ "Already resolved: " <> show resolved
   cabal <- getLatestCabal name
@@ -141,9 +142,9 @@ getDependencies resolved skip parent name = do
 
       (<+>) = G.overlay
   -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies (Set.insert name resolved) skip (Just name)) $ filter (\x -> x /= name) $ ignoredSubLibs $ filteredLibDeps
-  nextExe <- mapM (getDependencies (Set.insert name resolved) skip (Just name)) $ filter (\x -> x /= name) $ ignoredSubLibs $ fmap snd filteredExeDeps
-  nextSubLibs <- mapM (getDependencies (Set.insert name resolved) skip (Just name)) $ fmap snd filteredSubLibDeps
+  nextLib <- mapM (getDependencies skip (Just name)) $ filter (\x -> x /= name) $ ignoredSubLibs $ filteredLibDeps
+  nextExe <- mapM (getDependencies skip (Just name)) $ filter (\x -> x /= name) $ ignoredSubLibs $ fmap snd filteredExeDeps
+  nextSubLibs <- mapM (getDependencies skip (Just name)) $ fmap snd filteredSubLibDeps
   let temp = [nextLib, nextExe, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
       subsubs = temp ^. each ^.. each . _2 ^. each
