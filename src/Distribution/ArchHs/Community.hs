@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_HADDOCK prune, ignore-exports #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
@@ -20,7 +19,7 @@ import Data.List (intercalate)
 import Data.List.Split (splitOn)
 import qualified Data.Set as Set
 import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils
+import Distribution.ArchHs.Utils (toLower')
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import System.FilePath ((</>))
 

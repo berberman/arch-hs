@@ -20,14 +20,14 @@ module Distribution.ArchHs.Aur
 where
 
 import Data.Aeson
-import Data.Aeson.Ext
+import Data.Aeson.Ext (generateJSONInstance)
 import Data.Text (Text, pack)
-import Distribution.ArchHs.Utils
+import Distribution.ArchHs.Utils (fixName)
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import GHC.Generics (Generic)
 import Network.HTTP.Req
 import Polysemy
-import Polysemy.Req
+import Polysemy.Req (reqToIO)
 
 -- | AUR response
 data AurReply a = AurReply

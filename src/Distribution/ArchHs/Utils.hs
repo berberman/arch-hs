@@ -35,20 +35,24 @@ import Distribution.PackageDescription
     repoLocation,
     sourceRepos,
   )
-import Distribution.Types.BuildInfo
+import Distribution.Types.BuildInfo (BuildInfo (..))
 import Distribution.Types.Dependency
+  ( Dependency,
+    depPkgName,
+    depVerRange,
+  )
 import Distribution.Types.ExeDependency (ExeDependency (..))
 import qualified Distribution.Types.PackageId as I
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import Distribution.Utils.ShortText (fromShortText)
 import Distribution.Version (Version, VersionRange)
-import GHC.Stack
+import GHC.Stack (callStack, prettyCallStack)
 
--- | Extract the 'PackageName' of a 'ExeDependency'.
+-- | Extract the package name from a 'ExeDependency'.
 unExe :: ExeDependency -> PackageName
 unExe (ExeDependency name _ _) = name
 
--- | Extract the 'PackageName' and 'VersionRange' of a 'ExeDependency'.
+-- | Extract the package name and the version range from a 'ExeDependency'.
 unExeV :: ExeDependency -> (PackageName, VersionRange)
 unExeV (ExeDependency name _ v) = (name, v)
 
@@ -60,7 +64,7 @@ unDepV dep = (depPkgName dep, depVerRange dep)
 getPkgName :: PackageDescription -> PackageName
 getPkgName = I.pkgName . package
 
--- | Extract the package from 'GenericPackageDescription'.
+-- | Extract the package name from 'GenericPackageDescription'.
 getPkgName' :: GenericPackageDescription -> PackageName
 getPkgName' = I.pkgName . package . packageDescription
 

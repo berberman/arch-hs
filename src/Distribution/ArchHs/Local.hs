@@ -9,7 +9,7 @@ module Distribution.ArchHs.Local
 where
 
 import Distribution.ArchHs.Types
-import Distribution.Types.PackageName
+import Distribution.Types.PackageName (mkPackageName)
 
 -- | Packages should be dropped in dependency resolving.
 ignoreList :: PkgList
@@ -29,10 +29,10 @@ ignoreList =
           "base",
           "ghc",
           "ghc-prim",
-          "ghcjs-prim",
           "ghc-bignum",
           "hans",
-          "Win32"
+          "Win32",
+          "ghc-heap"
         ]
 
 -- | Packages already provided by <https://www.archlinux.org/packages/community/x86_64/ghc-libs/ ghc-libs>.

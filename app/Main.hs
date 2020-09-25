@@ -112,7 +112,7 @@ app target path aurSupport skip = do
   let vertexsToBeRemoved = filledByBoth ^.. each . filtered (\case ProvidedPackage _ _ -> True; _ -> False) ^.. each . pkgName
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexsToBeRemoved) deps
-  flattened <- case G.topSort . GL.skeleton $ removeSelfCycle $newGraph of
+  flattened <- case G.topSort . GL.skeleton $ removeSelfCycle $ newGraph of
     Left c -> throw . CyclicError $ toList c
     Right x -> return x
   embed $ putStrLn . prettyDeps . reverse $ flattened

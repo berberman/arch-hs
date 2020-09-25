@@ -17,7 +17,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Distribution.ArchHs.Types
 import Distribution.PackageDescription
-  ( Flag (flagDefault, flagDescription, flagManual, flagName),
+  ( Flag (..),
     FlagAssignment,
     unFlagAssignment,
     unFlagName,

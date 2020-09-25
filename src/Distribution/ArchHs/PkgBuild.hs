@@ -29,7 +29,7 @@ data PkgBuild = PkgBuild
     _pkgVer :: String,
     -- | Field @pkgdesc@.
     _pkgDesc :: String,
-    -- | Field @@url.
+    -- | Field @url@.
     _url :: String,
     -- | Field @license@.
     _license :: String,
