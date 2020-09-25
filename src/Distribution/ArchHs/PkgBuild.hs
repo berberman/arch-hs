@@ -178,10 +178,6 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends lic
   source=("https://hackage.haskell.org/packages/archive/$$_hkgname/$$pkgver/$$_hkgname-$$pkgver.tar.gz")
   sha256sums=('SKIP')
 
-  prepare(){
-    cd $$_hkgname-$$pkgver
-  }
-
   build() {
     cd $$_hkgname-$$pkgver
 
