@@ -135,21 +135,19 @@ applyTemplate PkgBuild {..} =
       (pack _depends)
       (pack _makeDepends)
       ( case _licenseFile of
-          Just n -> installLicense $ pack n
+          Just n -> "\n" <> (installLicense $ pack n)
           _ -> "\n"
       )
-      (if _enableCheck then check else "\n")
+      (if _enableCheck then "\n" <> check <> "\n\n" else "\n")
 
 -- | Text of @check()@ function.
 check :: Text
 check =
   [text|
-
   check() {
     cd $$_hkgname-$$pkgver
     runhaskell Setup test
   }
-
 |]
 
 -- | Text of statements which install license.
@@ -205,7 +203,6 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends lic
 
     install -D -m744 register.sh "$$pkgdir"/usr/share/haskell/register/$$pkgname.sh
     install -D -m744 unregister.sh "$$pkgdir"/usr/share/haskell/unregister/$$pkgname.sh
-    runhaskell Setup copy --destdir="$$pkgdir"
-    $licenseF
+    runhaskell Setup copy --destdir="$$pkgdir"$licenseF
   } 
 |]
