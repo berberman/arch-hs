@@ -12,7 +12,7 @@ module Distribution.ArchHs.Core
 where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
-import Data.List (intercalate, stripPrefix)
+import Data.List (stripPrefix)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
