@@ -21,9 +21,9 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 
 `arch-hs` is just a PKGBUILD text file generator, which is not integrated with `pacman`, depending on nothing than:
 
-* Pacman database (`community.db`), ~~i.e., archlinux system.~~ the db file can be specified manually for now. 
+* Pacman database (`community.db`)
 
-* Hackage database tarball (`01-index.tar`, or `00-index.tar` previously), usually provided by `cabal-install`.
+* Hackage database tarball (`01-index.tar`, or `00-index.tar` previously) -- usually provided by `cabal-install`
 
 ## Installation
 
@@ -272,14 +272,14 @@ Package: HTTP
 Version: 4000.3.14  ⇒  4000.3.15
 Synopsis: A library for client-side HTTP
 URL: https://github.com/haskell/HTTP
-Depends: 
+Depends:
     base  >=4.3.0.0 && <4.14
     time  >=1.1.2.3 && <1.10
     array  >=0.3.0.2 && <0.6
     bytestring  >=0.9.1.5 && <0.11
     mtl  >=2.0 && <2.3
-    network-uri  ==2.6.*
     network  >=2.6 && <3.2
+    network-uri  ==2.6.*
     parsec  >=2.0 && <3.2
 --------------------------------------
     base  >=4.3.0.0 && <4.15
@@ -287,12 +287,12 @@ Depends:
     array  >=0.3.0.2 && <0.6
     bytestring  >=0.9.1.5 && <0.11
     mtl  >=2.0 && <2.3
-    network-uri  ==2.6.*
     network  >=2.6 && <3.2
+    network-uri  ==2.6.*
     parsec  >=2.0 && <3.2
-MakeDepends: 
-    deepseq  >=1.3.0.0 && <1.5
+MakeDepends:
     HUnit  >=1.2.0.1 && <1.7
+    deepseq  >=1.3.0.0 && <1.5
     httpd-shed  >=0.4 && <0.5
     mtl  >=1.1.1.0 && <2.3
     pureMD5  >=0.2.4 && <2.2
@@ -302,23 +302,28 @@ MakeDepends:
 Flags:
   HTTP
     ⚐ mtl1:
-      description: Use the old mtl version 1.
+      description:
+        Use the old mtl version 1.
       default: False
       isManual: False
     ⚐ warn-as-error:
-      description: Build with warnings-as-errors
+      description:
+        Build with warnings-as-errors
       default: False
       isManual: True
     ⚐ conduit10:
-      description: Use version 1.0.x or below of the conduit package (for the test suite)
+      description:
+        Use version 1.0.x or below of the conduit package (for the test suite)
       default: False
       isManual: False
     ⚐ warp-tests:
-      description: Test against warp
+      description:
+        Test against warp
       default: False
       isManual: True
     ⚐ network-uri:
-      description: Get Network.URI from the network-uri package
+      description:
+        Get Network.URI from the network-uri package
       default: True
       isManual: False
 
