@@ -173,8 +173,8 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends lic
   url="$url"
   license=("$license")
   arch=('x86_64')
-  depends=('ghc-libs' $depends)
-  makedepends=('ghc' $makedepends)
+  depends=('ghc-libs'$depends)
+  makedepends=('ghc'$makedepends)
   source=("https://hackage.haskell.org/packages/archive/$$_hkgname/$$pkgver/$$_hkgname-$$pkgver.tar.gz")
   sha256sums=('SKIP')
 

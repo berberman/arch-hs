@@ -271,11 +271,11 @@ cabalToPkgBuild pkg ignored = do
                        )
                     && notIgnore x
               )
-      depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & intercalate " "
+      depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & concat
       _depends = depsToString depends
       _makeDepends = depsToString makeDepends
       _url = getUrl cabal
-      wrap s = '\'' : s <> "\'"
+      wrap s = " \'" <> s <> "\'"
       notInGHCLib x = (x ^. depName) `notElem` ghcLibList
       notMyself x = x ^. depName /= name
       notIgnore x = x ^. depName `notElem` ignored
