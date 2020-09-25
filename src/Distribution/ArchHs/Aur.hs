@@ -102,15 +102,22 @@ $(generateJSONInstance ''AurInfo)
 
 -- | AUR Effect
 data Aur m a where
-  -- | Serach a package from AUR
   SearchByName :: String -> Aur m (Maybe AurSearch)
-  -- | Get package info from AUR
   InfoByName :: String -> Aur m (Maybe AurInfo)
-  -- | Check whether a __haskell__ package exists in AUR
   IsInAur :: PackageName -> Aur m Bool
 
-makeSem ''Aur
+-- searchByName
 
+makeSem_ ''Aur
+
+-- | Serach a package from AUR
+searchByName :: Member Aur r => String -> Sem r (Maybe AurSearch)
+
+-- | Get package info from AUR
+infoByName :: Member Aur r => String -> Sem r (Maybe AurInfo)
+
+-- | Check whether a __haskell__ package exists in AUR
+isInAur :: Member Aur r => PackageName -> Sem r Bool
 baseURL :: Url 'Https
 baseURL = https "aur.archlinux.org" /: "rpc"
 

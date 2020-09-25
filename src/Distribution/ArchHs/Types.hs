@@ -63,34 +63,34 @@ import Polysemy.Reader
 import Polysemy.State
 import Polysemy.Trace
 
--- | A list of 'PackageName'.
+-- | A list of 'PackageName'
 type PkgList = [PackageName]
 
--- | A list of component represented by 'UnqualComponentName' and its dependencies collected in a 'PkgList'.
+-- | A list of component represented by 'UnqualComponentName' and its dependencies collected in a 'PkgList'
 type ComponentPkgList = [(UnqualComponentName, PkgList)]
 
--- | Representation of @cummunity.db@.
+-- | Representation of @cummunity.db@
 type CommunityDB = Set String
 
--- | Reader effect of 'HackageDB'.
+-- | Reader effect of 'HackageDB'
 type HackageEnv = Reader HackageDB
 
--- | Reader effect of 'CommunityDB'.
+-- | Reader effect of 'CommunityDB'
 type CommunityEnv = Reader CommunityDB
 
--- | A map of packages with their 'FlagAssignment'.
+-- | A map of packages with their 'FlagAssignment'
 type FlagAssignments = Map PackageName FlagAssignment
 
--- | Reader effect of a map, associating 'PackageName' with its 'FlagAssignment'.
+-- | Reader effect of a map, associating 'PackageName' with its 'FlagAssignment'
 type FlagAssignmentsEnv = Reader FlagAssignments
 
--- | Unused state effect.
-type DependencyRecord = State (Map PackageName [(PackageName, VersionRange)])
+-- | Unused state effect
+type DependencyRecord = State (Map PackageName [VersionRange])
 
--- | Error effect of 'MyException'.
+-- | Error effect of 'MyException'
 type WithMyErr = Error MyException
 
--- | Custom exception used in this project.
+-- | Custom exception used in this project
 data MyException
   = PkgNotFound PackageName
   | VersionError PackageName Version
@@ -106,30 +106,30 @@ instance Show MyException where
 
 -- | The type of a dependency. Who requires this?
 data DependencyType
-  = -- | By a /executable/.
+  = -- | By a /executable/
     CExe UnqualComponentName
-  | -- | By the /build tools/ of a /executable/.
+  | -- | By the /build tools/ of a /executable/
     CExeBuildTools UnqualComponentName
-  | -- | By a /library/.
+  | -- | By a /library/
     CLib
-  | -- | By a /test suit/.
+  | -- | By a /test suit/
     CTest UnqualComponentName
-  | -- | By a /benchmark/.
+  | -- | By a /benchmark/
     CBenchmark UnqualComponentName
-  | -- | By the /build tools/ of a /library/.
+  | -- | By the /build tools/ of a /library/
     CLibBuildTools
-  | -- | By the /build tools/ of a /test suit/.
+  | -- | By the /build tools/ of a /test suit/
     CTestBuildTools UnqualComponentName
-  | -- | By the /build tools/ of a /benchmark/.
+  | -- | By the /build tools/ of a /benchmark/
     CBenchmarkBuildTools UnqualComponentName
-  | -- |  By a /sub-library/.
+  | -- |  By a /sub-library/
     CSubLibs UnqualComponentName
-  | -- |  By the /build tools/ of a /sub-library/.
+  | -- |  By the /build tools/ of a /sub-library/
     CSubLibsBuildTools UnqualComponentName
   deriving stock (Eq, Ord, Generic)
   deriving anyclass (NFData)
 
--- | Tags of data constructors of 'DependencyType'.
+-- | Tags of data constructors of 'DependencyType'
 data DependencyKind
   = Exe
   | ExeBuildTools
@@ -164,13 +164,13 @@ instance Show DependencyProvider where
   show ByCommunity = "community"
   show ByAur = "aur"
 
--- | A solved dependency, holden by 'SolvedPackage'.
+-- | A solved dependency, holden by 'SolvedPackage'
 data SolvedDependency = SolvedDependency
-  { -- | Provider of this dependency.
+  { -- | Provider of this dependency
     _depProvider :: Maybe DependencyProvider,
-    -- | Name of the dependency.
+    -- | Name of the dependency
     _depName :: PackageName,
-    -- | Types of the dependency.
+    -- | Types of the dependency
     _depType :: [DependencyType]
   }
   deriving stock (Show, Eq, Generic)
@@ -179,18 +179,18 @@ data SolvedDependency = SolvedDependency
 -- | A solved package collected from dgraph. This data type is not designed to be recursively,
 -- thus the element type of '_pkgDeps' is 'SolvedDependency', rather than another 'SolvedPackage'.
 data SolvedPackage
-  = -- | A package which has been provided by somebody, so there is no need to expand its dependencies.
+  = -- | A package which has been provided by somebody, so there is no need to expand its dependencies
     ProvidedPackage
-      { -- | Package name.
+      { -- | Package name
         _pkgName :: PackageName,
         -- | Package provider. (The name of 'DependencyProvider' may be confusing...)
         _pkgProvider :: DependencyProvider
       }
-  | -- | A package with its dependencies.
+  | -- | A package with its dependencies
     SolvedPackage
-      { -- | Package name.
+      { -- | Package name
         _pkgName :: PackageName,
-        -- | Package dependencies.
+        -- | Package dependencies
         _pkgDeps :: [SolvedDependency]
       }
   deriving stock (Show, Eq, Generic)

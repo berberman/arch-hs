@@ -177,8 +177,8 @@ collectLibDeps cabal = do
       info <- evalConditionTree cabal lib
       let libDeps = fmap unDepV $ buildDependsIfBuild info
           toolDeps = fmap unExeV $ buildToolDependsIfBuild info
-      updateDependencyRecord name libDeps
-      updateDependencyRecord name toolDeps
+      mapM_ (uncurry updateDependencyRecord) libDeps
+      mapM_ (uncurry updateDependencyRecord) toolDeps
       let result = (fmap fst libDeps, fmap fst toolDeps)
       trace' $ "Found: " <> show result
       traceCallStack
@@ -199,8 +199,8 @@ collectComponentialDeps f cabal skip = do
   let deps = info <&> ((_2 %~) $ fmap unDepV . buildDependsIfBuild)
       toolDeps = info <&> ((_2 %~) $ fmap unExeV . buildToolDependsIfBuild)
       k = fmap (\(c, l) -> (c, fmap fst l))
-  mapM_ (updateDependencyRecord name) $ fmap snd deps
-  mapM_ (updateDependencyRecord name) $ fmap snd toolDeps
+  mapM_ (uncurry updateDependencyRecord) $ deps ^.. each . _2 ^. each
+  mapM_ (uncurry updateDependencyRecord) $ toolDeps ^.. each . _2 ^. each
   let result = (k deps, k toolDeps)
   trace' $ "Found: " <> show result
   traceCallStack
@@ -215,8 +215,8 @@ collectTestDeps = collectComponentialDeps condTestSuites
 collectSubLibDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 collectSubLibDeps = collectComponentialDeps condSubLibraries
 
-updateDependencyRecord :: Member DependencyRecord r => PackageName -> [(PackageName, VersionRange)] -> Sem r ()
-updateDependencyRecord parent deps = modify' $ Map.insertWith (<>) parent deps
+updateDependencyRecord :: Member DependencyRecord r => PackageName -> VersionRange -> Sem r ()
+updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 
 -- collectBenchMarkDeps :: Members [HackageEnv, FlagAssignmentEnv] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
 -- collectBenchMarkDeps = collectComponentialDeps condBenchmarks
