@@ -95,14 +95,14 @@ data MyException
   = PkgNotFound PackageName
   | VersionError PackageName Version
   | TargetExist PackageName DependencyProvider
-  | LicenseError PackageName
+  | CyclicError [PackageName]
   deriving stock (Eq)
 
 instance Show MyException where
   show (PkgNotFound name) = "Unable to find [" <> unPackageName name <> "]"
   show (VersionError name version) = "Unable to find [" <> unPackageName name <> "-" <> prettyShow version <> "]"
   show (TargetExist name provider) = "Target [" <> unPackageName name <> "] has been provided by " <> show provider
-  show (LicenseError name) = "Unable to find the license of [" <> unPackageName name <> "]"
+  show (CyclicError c) = "Graph contains a cycle " <> (show $ fmap unPackageName c)
 
 -- | The type of a dependency. Who requires this?
 data DependencyType

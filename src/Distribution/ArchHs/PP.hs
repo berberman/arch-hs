@@ -37,11 +37,10 @@ prettyFlagAssignment :: FlagAssignment -> String
 prettyFlagAssignment m = mconcat $ fmap (\(n, v) -> "⚐ " <> C.formatWith [C.yellow] (unFlagName n) <> " : " <> C.formatWith [C.cyan] (show v) <> "\n") $ unFlagAssignment m
 
 prettyDeps :: [PackageName] -> String
-prettyDeps list =
-  mconcat $
-    fmap (\(i, n) -> show @Int i <> ". " <> unPackageName n <> "\n") $
-      zip [1 ..] $
-        reverse list
+prettyDeps =
+  mconcat
+    . fmap (\(i, n) -> show @Int i <> ". " <> unPackageName n <> "\n")
+    . zip [1 ..]
 
 prettyFlags :: [(PackageName, [Flag])] -> String
 prettyFlags = mconcat . fmap (\(name, flags) -> (C.formatWith [C.magenta] $ unPackageName name <> "\n") <> mconcat (fmap (C.formatWith [C.indent 4] . prettyFlag) flags))

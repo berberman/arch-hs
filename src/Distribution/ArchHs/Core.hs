@@ -49,7 +49,7 @@ archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
 
 -- | Simplify the condition tree from 'GenericPackageDescription' with given flag assignments and archlinux system assumption.
 evalConditionTree ::
-  (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentsEnv r) =>
+  (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, Trace] r) =>
   GenericPackageDescription ->
   CondTree ConfVar [Dependency] k ->
   Sem r BuildInfo
@@ -68,6 +68,9 @@ evalConditionTree cabal cond = do
           . (<> flagAssignment)
           . filter (\(fName, _) -> fName `notElem` flagNames)
           $ (unFlagAssignment defaultFlagAssignments)
+  trace' $ "Evaluating condition tree of " <> show name
+  trace' $ "Flags: " <> show thisFlag
+  traceCallStack
   return $ (^. L.buildInfo) . snd $ simplifyCondTree (archEnv thisFlag) cond
 
 -----------------------------------------------------------------------------
@@ -76,7 +79,7 @@ evalConditionTree cabal cond = do
 -- All version constraints will be discarded,
 -- and only packages depended by executables, libraries, and test suits will be collected.
 getDependencies ::
-  Members [HackageEnv, FlagAssignmentsEnv, WithMyErr, DependencyRecord, State (Set PackageName), Trace] r =>
+  (HasCallStack, Members [HackageEnv, FlagAssignmentsEnv, WithMyErr, DependencyRecord, State (Set PackageName), Trace] r) =>
   -- | Skipped
   [UnqualComponentName] ->
   -- | Parent
@@ -89,6 +92,7 @@ getDependencies skip parent name = do
   modify' $ Set.insert name
   trace' $ "Getting all dependencies of (" <> show name <> "), parent: (" <> show parent <> ")"
   trace' $ "Already resolved: " <> show resolved
+  traceCallStack
   cabal <- getLatestCabal name
   -- Ignore subLibraries
   (libDeps, libToolsDeps) <- collectLibDeps cabal

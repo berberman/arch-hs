@@ -6,7 +6,7 @@
 module Main (main) where
 
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
-import qualified Algebra.Graph.Labelled.AdjacencyMap as G
+import qualified Algebra.Graph.Labelled.AdjacencyMap as GL
 import Args
 import qualified Colourista as C
 import Conduit
@@ -14,6 +14,7 @@ import qualified Control.Exception as CE
 import Control.Monad (filterM, when)
 import Data.IORef (IORef, newIORef)
 import Data.List (groupBy, intercalate, isInfixOf, nub)
+import Data.List.NonEmpty (toList)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -79,37 +80,42 @@ app target path aurSupport skip = do
   communityProvideList <- (<> ghcLibList) <$> filterM isInCommunity allNames
   let fillProvidedPkgs provideList provider = mapC (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = mapC (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider .~ (Just provider) else y))
-      cooked =
+      filledByCommunity =
         runConduitPure $
           yieldMany grouped
             .| fillProvidedPkgs communityProvideList ByCommunity
             .| fillProvidedDeps communityProvideList ByCommunity
             .| sinkList
-      toBePacked = cooked ^.. each . filtered (\case ProvidedPackage _ _ -> False; _ -> True)
-  (cookedAgain, toBePackedAgain) <- do
+      toBePacked1 = filledByCommunity ^.. each . filtered (\case ProvidedPackage _ _ -> False; _ -> True)
+  (filledByBoth, toBePacked2) <- do
     embed . when aurSupport $ C.infoMessage "Start searching AUR..."
-    aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> (T.pack $ unPackageName n)); isInAur n) $ toBePacked ^.. each . pkgName else return []
-    let cookedAgain =
+    aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> (T.pack $ unPackageName n)); isInAur n) $ toBePacked1 ^.. each . pkgName else return []
+    let filledByBoth =
           if aurSupport
             then
               runConduitPure $
-                yieldMany cooked
+                yieldMany filledByCommunity
                   .| fillProvidedPkgs aurProvideList ByAur
                   .| fillProvidedDeps aurProvideList ByAur
                   .| sinkList
-            else cooked
-        toBePackedAgain =
+            else filledByCommunity
+        toBePacked2 =
           if aurSupport
-            then cookedAgain ^.. each . filtered (\case ProvidedPackage _ _ -> False; _ -> True)
-            else toBePacked
-    return (cookedAgain, toBePackedAgain)
+            then filledByBoth ^.. each . filtered (\case ProvidedPackage _ _ -> False; _ -> True)
+            else toBePacked1
+    return (filledByBoth, toBePacked2)
 
   embed $ C.infoMessage "Solved target:"
-  embed $ putStrLn . prettySolvedPkgs $ cookedAgain
+  embed $ putStrLn . prettySolvedPkgs $ filledByBoth
 
-  let flattened = filter (`elem` (toBePackedAgain ^.. each . pkgName)) $ G.reachable target $ G.skeleton deps
   embed $ C.infoMessage "Recommended package order (from topological sort):"
-  embed $ putStrLn . prettyDeps $ flattened
+  let vertexsToBeRemoved = filledByBoth ^.. each . filtered (\case ProvidedPackage _ _ -> True; _ -> False) ^.. each . pkgName
+      removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
+      newGraph = GL.induce (`notElem` vertexsToBeRemoved) deps
+  flattened <- case G.topSort . GL.skeleton $ removeSelfCycle $newGraph of
+    Left c -> throw . CyclicError $ toList c
+    Right x -> return x
+  embed $ putStrLn . prettyDeps . reverse $ flattened
   flags <- filter (\(_, l) -> length l /= 0) <$> mapM (\n -> (n,) <$> getPackageFlag n) flattened
 
   embed $
@@ -131,7 +137,7 @@ app target path aurSupport skip = do
           embed $ writeFile fileName txt
           embed $ C.infoMessage $ "Write file: " <> T.pack fileName
       )
-      toBePackedAgain
+      toBePacked2
 
 -----------------------------------------------------------------------------
 
@@ -224,7 +230,7 @@ main = CE.catch @CE.IOException
 
 -----------------------------------------------------------------------------
 
-groupDeps :: G.AdjacencyMap (Set.Set DependencyType) PackageName -> [SolvedPackage]
+groupDeps :: GL.AdjacencyMap (Set.Set DependencyType) PackageName -> [SolvedPackage]
 groupDeps graph =
   fmap
     ( \(name, deps) ->
@@ -236,8 +242,7 @@ groupDeps graph =
       fmap ((\(a, b, c) -> (head b, zip a c)) . unzip3)
         . groupBy (\x y -> uncurry (==) (getTwo _2 x y))
         . fmap (_1 %~ Set.toList)
-        . Set.toList
-        . G.edgeSet
+        . GL.edgeList
         $ graph
     parents = fmap fst result
     children = mconcat $ fmap (\(_, ds) -> fmap snd ds) result
