@@ -68,7 +68,7 @@ type VersionedList = [(PackageName, VersionRange)]
 
 type VersionedComponentList = [(UnqualComponentName, VersionedList)]
 
-collectLibDeps :: Member FlagAssignmentsEnv r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
+collectLibDeps :: Members [FlagAssignmentsEnv, Trace] r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
@@ -79,7 +79,7 @@ collectLibDeps cabal = do
     Nothing -> return ([], [])
 
 collectRunnableDeps ::
-  (Semigroup k, L.HasBuildInfo k, Member FlagAssignmentsEnv r) =>
+  (Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, Trace] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
@@ -91,10 +91,10 @@ collectRunnableDeps f cabal skip = do
       toolDeps = bInfo <&> ((_2 %~) $ fmap unExeV . buildToolDependsIfBuild)
   return (runnableDeps, toolDeps)
 
-collectExeDeps :: Member FlagAssignmentsEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectExeDeps :: Members [FlagAssignmentsEnv, Trace] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectExeDeps = collectRunnableDeps condExecutables
 
-collectTestDeps :: Member FlagAssignmentsEnv r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectTestDeps :: Members [FlagAssignmentsEnv, Trace] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
 getCabalFromHackage :: Members [Embed IO, WithMyErr] r => PackageName -> Version -> Sem r GenericPackageDescription
@@ -113,7 +113,7 @@ getCabalFromHackage name version = do
 
 -----------------------------------------------------------------------------
 
-diffCabal :: Members [FlagAssignmentsEnv, WithMyErr, Embed IO] r => PackageName -> Version -> Version -> Sem r String
+diffCabal :: Members [FlagAssignmentsEnv, WithMyErr, Trace, Embed IO] r => PackageName -> Version -> Version -> Sem r String
 diffCabal name a b = do
   ga <- getCabalFromHackage name a
   gb <- getCabalFromHackage name b
@@ -135,7 +135,7 @@ diffCabal name a b = do
       ]
 
 directDependencies ::
-  Member FlagAssignmentsEnv r =>
+  Members [FlagAssignmentsEnv, Trace] r =>
   GenericPackageDescription ->
   Sem r ([String], [String])
 directDependencies cabal = do

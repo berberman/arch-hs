@@ -30,5 +30,5 @@ main = CE.catch @CE.IOException
   )
   $ \e -> C.errorMessage $ "IOException: " <> (T.pack . show $ e)
 
-runDiff :: FlagAssignments -> Sem '[FlagAssignmentsEnv, WithMyErr, Embed IO, Final IO] a -> IO (Either MyException a)
-runDiff flags = runFinal . embedToFinal . errorToIOFinal . (runReader flags)
+runDiff :: FlagAssignments -> Sem '[FlagAssignmentsEnv, Trace, WithMyErr, Embed IO, Final IO] a -> IO (Either MyException a)
+runDiff flags = runFinal . embedToFinal . errorToIOFinal . ignoreTrace . (runReader flags)
