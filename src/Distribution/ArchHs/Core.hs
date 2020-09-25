@@ -280,8 +280,5 @@ cabalToPkgBuild pkg ignored = do
       notMyself x = x ^. depName /= name
       notIgnore x = x ^. depName `notElem` ignored
       selectDepKind k x = k `elem` (x ^. depType & mapped %~ dependencyTypeToKind)
-
-      safeHead [] = "FIXME"
-      safeHead (x : _) = x
-      _licenseFile = safeHead $ licenseFiles cabal
+      _licenseFile = licenseFiles cabal ^? ix 0
   return PkgBuild {..}
