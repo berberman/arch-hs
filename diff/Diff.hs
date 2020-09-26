@@ -62,7 +62,7 @@ runArgsParser =
 
 -----------------------------------------------------------------------------
 
--- This parts are duplicated from Core.hs with modifications.
+--  Duplicated from Core.hs with modifications.
 
 type VersionedList = [(PackageName, VersionRange)]
 

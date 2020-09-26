@@ -10,6 +10,8 @@
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
+-- Stability: experimental
+-- Portability : portable
 -- Types used in this project.
 module Distribution.ArchHs.Types
   ( PkgList,

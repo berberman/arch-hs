@@ -12,10 +12,11 @@ A program generating PKGBUILD for hackage packages. Special thanks to [felixonma
 
 ## Introduction
 
-Given the name of a package in hackage, `arch-hs` can generate its corresponding PKGBUILD draft.
-It has a naive built-in dependency solver, which can fetch all dependencies we need to produce a archlinux package. 
+Given the name of a package in hackage, `arch-hs` can generate PKGBUILD files, not only for the package
+whose name is given, but also for all dependencies missing in [community](https://www.archlinux.org/packages/).
+`arch-hs` has a naive built-in dependency solver, which can fetch those dependencies and find out which are required to be packaged.
 During the dependency calculation, all version constraints will be discarded due to the arch haskell packaging strategy,
-and packages already exist in the [community](https://www.archlinux.org/packages/) will be excluded.
+thus there is no guarantee of dependencies' version consistency.
 
 ## Prerequisite
 
@@ -23,9 +24,12 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 
 * Pacman database (`community.db`)
 
-* Hackage database tarball (`01-index.tar`, or `00-index.tar` previously) -- usually provided by `cabal-install`
+* Hackage index tarball (`01-index.tar`, or `00-index.tar` previously) -- usually provided by `cabal-install`
 
 ## Installation
+
+Both `arch-hs` and `arch-hs-diff` are portable, which means that they are not restricted to Arch Linux.
+However, if you want to run them in other systems, you have to build them from source.
 
 ### Install the latest release
 
@@ -41,15 +45,15 @@ and packages already exist in the [community](https://www.archlinux.org/packages
 # pacman -S arch-hs-git
 ```
 
-The `-git` version is available in [archlinxcn](https://github.com/archlinuxcn/repo), following the latest git commit.
+The `-git` version is available in [archlinuxcn](https://github.com/archlinuxcn/repo), following the latest git commit.
 
-### Build from source (for development)
+## Build
 
 ```
 $ git clone https://github.com/berberman/arch-hs
 ```
 
-Then build and install it via stack or cabal.
+Then build it via stack or cabal.
 
 #### Stack
 ```
@@ -91,7 +95,7 @@ haskell-lsp
 
 ```
 
-This message tells that in order to package `dhall-lsp-server`, we must package `haskell-lsp-types`
+This message tells us that in order to package `dhall-lsp-server`, we must package `haskell-lsp-types`
 and `haskell-lsp` sequentially, because they don't present in archlinux community repo.
 
 ```
@@ -259,7 +263,7 @@ For all available options, have a look at the help message.
 
 ## Diff
 
-`arch-hs` also provides a component called `arch-hs-diff`. `arch-hs-diff` can show differences of information used in PKGBUILD between two versions of a hackage package.
+`arch-hs` also provides a component called `arch-hs-diff`. `arch-hs-diff` can show the differences of package description between two versions of a package.
 This is useful in the subsequent maintenance of a package. Example:
 
 ```

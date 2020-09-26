@@ -1,6 +1,8 @@
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
+-- Stability: experimental
+-- Portability: portable
 -- Miscellaneous functions used crossing modules.
 module Distribution.ArchHs.Utils
   ( getPkgName,

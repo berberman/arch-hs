@@ -6,6 +6,8 @@
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
+-- Stability: experimental
+-- Portability: portable
 -- This module supports <https://aur.archlinux.org/ AUR> searching.
 module Distribution.ArchHs.Aur
   ( AurReply (..),

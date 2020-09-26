@@ -3,6 +3,8 @@
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
+-- Stability: experimental
+-- Portability: portable
 -- This module provides parser of @desc@ file in pacman db.
 module Distribution.ArchHs.PkgDesc
   ( PkgDesc (..),

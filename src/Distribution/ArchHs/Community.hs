@@ -3,6 +3,8 @@
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
+-- Stability: experimental
+-- Portability: portable
 -- This module provides functios operating with @community.db@ of pacman.
 module Distribution.ArchHs.Community
   ( defaultCommunityPath,

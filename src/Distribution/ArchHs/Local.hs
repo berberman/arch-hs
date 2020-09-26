@@ -1,6 +1,8 @@
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
+-- Stability: experimental
+-- Portability: portable
 -- This module maintains names of packages which are need special treatments during dependency resolving or PKGBUILD generating.
 module Distribution.ArchHs.Local
   ( ignoreList,
