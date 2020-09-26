@@ -55,7 +55,7 @@ loadProcessedCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePa
 loadProcessedCommunity path = fmap Set.fromList $ runConduitRes $ loadCommunity path .| cookCommunity .| sinkList
 
 -- | Check if a package from hackage exists in archlinux community repo.
--- A name conversion occurs during the checking to fit 'loadProcessedCommunity'.
+-- The following name conversion occurs during the checking to work with 'loadProcessedCommunity'.
 --
 -- >>> "aeson" --> "aeson"
 -- >>> "Cabal" --> "cabal"

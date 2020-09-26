@@ -134,7 +134,7 @@ buildToolDependsIfBuild info = if buildable info then buildToolDepends info else
 trace' :: MemberWithError Trace r => String -> Sem r ()
 trace' s = trace $ "[TRACE]  " <> s
 
--- | Trace 'CallStack'.
+-- | Trace 'GHC.Stack.CallStack'.
 traceCallStack :: (HasCallStack, MemberWithError Trace r) => Sem r ()
 traceCallStack = do
   trace . prefix $ prettyCallStack callStack
