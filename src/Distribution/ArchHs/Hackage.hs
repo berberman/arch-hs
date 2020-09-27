@@ -79,7 +79,7 @@ withLatestVersion f name = do
 getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
 getLatestCabal = withLatestVersion cabalFile
 
--- | Get the latest 'GenericPackageDescription'.
+-- | Get the latest SHA256 sum of the tarball . 
 getLatestSHA256 :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r String
 getLatestSHA256 = withLatestVersion (\vdata -> tarballHashes vdata Map.! "sha256")
 
