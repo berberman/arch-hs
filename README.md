@@ -91,8 +91,8 @@ $ arch-hs -o ~/test accelerate
 ```
 
 This message tells us that in order to package `accelerate`, we must package `unique`
-and `tasty-kat` first sequentially, because `accelerate` dependens them to build or test,
-whereas they don't present in archlinux community repo.
+and `tasty-kat` first sequentially, because `accelerate` dependens on them to build or test,
+whereas they are not present in archlinux community repo.
 
 ```
 $ tree ~/test
