@@ -62,8 +62,9 @@ app ::
   FilePath ->
   Bool ->
   [String] ->
+  Bool->
   Sem r ()
-app target path aurSupport skip = do
+app target path aurSupport skip uusi= do
   (deps, ignored) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
@@ -109,9 +110,9 @@ app target path aurSupport skip = do
   embed $ putStrLn . prettySolvedPkgs $ filledByBoth
 
   embed $ C.infoMessage "Recommended package order (from topological sort):"
-  let vertexsToBeRemoved = filledByBoth ^.. each . filtered (\case ProvidedPackage _ _ -> True; _ -> False) ^.. each . pkgName
+  let vertexesToBeRemoved = filledByBoth ^.. each . filtered (\case ProvidedPackage _ _ -> True; _ -> False) ^.. each . pkgName
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
-      newGraph = GL.induce (`notElem` vertexsToBeRemoved) deps
+      newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle $ newGraph of
     Left c -> throw . CyclicError $ toList c
     Right x -> return x
@@ -128,7 +129,7 @@ app target path aurSupport skip = do
   when (not dry) $
     mapM_
       ( \solved -> do
-          pkgBuild <- cabalToPkgBuild solved $ Set.toList ignored
+          pkgBuild <- cabalToPkgBuild solved (Set.toList ignored) uusi
           let pName = "haskell-" <> N._pkgName pkgBuild
               dir = path </> pName
               fileName = dir </> "PKGBUILD"
@@ -203,6 +204,8 @@ main = CE.catch @CE.IOException
 
       when optAur $ C.infoMessage "You passed -a, searching AUR may takes a long time."
 
+      when optUusi $ C.infoMessage "You passed --uusi, uusi will become makedepends of each package."
+
       hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
       C.infoMessage "Loading hackage..."
 
@@ -222,7 +225,7 @@ main = CE.catch @CE.IOException
 
       empty <- newIORef Set.empty
 
-      runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip) >>= \case
+      runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi) >>= \case
         Left x -> C.errorMessage $ "Runtime Error: " <> (T.pack . show $ x)
         _ -> C.successMessage "Success!"
   )

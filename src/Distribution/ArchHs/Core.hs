@@ -18,7 +18,7 @@ import Data.List (stripPrefix)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Distribution.ArchHs.Hackage (getLatestCabal)
+import Distribution.ArchHs.Hackage (getLatestCabal, getLatestSHA256)
 import Distribution.ArchHs.Local (ghcLibList, ignoreList)
 import Distribution.ArchHs.PkgBuild (PkgBuild (..), mapLicense)
 import Distribution.ArchHs.Types
@@ -226,10 +226,11 @@ updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 -----------------------------------------------------------------------------
 
 -- | Generate 'PkgBuild' for a 'SolvedPackage'.
-cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> PkgList -> Sem r PkgBuild
-cabalToPkgBuild pkg ignored = do
+cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> PkgList -> Bool -> Sem r PkgBuild
+cabalToPkgBuild pkg ignored uusi = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> (getLatestCabal name)
+  _sha256sums <- (\s -> "'" <> s <> "'") <$> getLatestSHA256 name
   let _hkgName = pkg ^. pkgName & unPackageName
       rawName = toLower' _hkgName
       _pkgName = maybe rawName id $ stripPrefix "haskell-" rawName
@@ -273,14 +274,15 @@ cabalToPkgBuild pkg ignored = do
                        )
                     && notIgnore x
               )
-      depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & concat
+      depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & mconcat
       _depends = depsToString depends
-      _makeDepends = depsToString makeDepends
+      _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString makeDepends
       _url = getUrl cabal
-      wrap s = " \'" <> s <> "\'"
+      wrap s = " '" <> s <> "'"
       notInGHCLib x = (x ^. depName) `notElem` ghcLibList
       notMyself x = x ^. depName /= name
       notIgnore x = x ^. depName `notElem` ignored
       selectDepKind k x = k `elem` (x ^. depType & mapped %~ dependencyTypeToKind)
       _licenseFile = licenseFiles cabal ^? ix 0
+      _enableUusi = uusi
   return PkgBuild {..}

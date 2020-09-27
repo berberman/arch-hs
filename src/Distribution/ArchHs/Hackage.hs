@@ -13,6 +13,7 @@ module Distribution.ArchHs.Hackage
     getCabal,
     getPackageFlag,
     traverseHackage,
+    getLatestSHA256,
   )
 where
 
@@ -22,7 +23,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (getPkgName, getPkgVersion)
-import Distribution.Hackage.DB (HackageDB, VersionData (VersionData, cabalFile), readTarball)
+import Distribution.Hackage.DB (HackageDB, VersionData (VersionData, cabalFile), readTarball, tarballHashes)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import Distribution.Types.Flag (Flag)
 import Distribution.Types.GenericPackageDescription (GenericPackageDescription, genPackageFlags, packageDescription)
@@ -65,15 +66,22 @@ parseCabalFile path = do
     Just x -> return x
     _ -> fail $ "Failed to parse .cabal from " <> path
 
--- | Get the latest 'GenericPackageDescription'.
-getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
-getLatestCabal name = do
+withLatestVersion :: Members [HackageEnv, WithMyErr] r => (VersionData -> a) -> PackageName -> Sem r a
+withLatestVersion f name = do
   db <- ask @HackageDB
   case Map.lookup name db of
     (Just m) -> case Map.lookupMax m of
-      Just (_, vdata) -> return $ vdata & cabalFile
+      Just (_, vdata) -> return $ f vdata
       Nothing -> throw $ VersionError name nullVersion
     Nothing -> throw $ PkgNotFound name
+
+-- | Get the latest 'GenericPackageDescription'.
+getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
+getLatestCabal = withLatestVersion cabalFile
+
+-- | Get the latest 'GenericPackageDescription'.
+getLatestSHA256 :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r String
+getLatestSHA256 = withLatestVersion (\vdata -> tarballHashes vdata Map.! "sha256")
 
 -- | Get 'GenericPackageDescription' with a specific version.
 getCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Version -> Sem r GenericPackageDescription
