@@ -46,8 +46,7 @@ import           Distribution.Types.PackageName         (PackageName,
                                                          unPackageName)
 import           Distribution.Types.UnqualComponentName (mkUnqualComponentName)
 import           System.Directory                       (createDirectoryIfMissing,
-                                                         doesFileExist,
-                                                         removeFile)
+                                                         doesFileExist)
 import           System.FilePath                        (takeFileName, (</>))
 
 app ::
@@ -172,11 +171,10 @@ main = CE.catch @CE.IOException
 
       let traceToFile = not $ null optFileTrace
       when (traceToFile) $ do
-        C.infoMessage $ "Trace will be write to " <> (T.pack optFileTrace) <> "."
+        C.infoMessage $ "Trace will be dumped to " <> (T.pack optFileTrace) <> "."
         exist <- doesFileExist optFileTrace
-        when exist $ do
-          C.warningMessage $ "File " <> (T.pack optFileTrace) <> " already existed, delete it."
-          removeFile optFileTrace
+        when exist $
+          C.warningMessage $ "File " <> (T.pack optFileTrace) <> " already existed, overwrite it."
 
       let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
           useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath

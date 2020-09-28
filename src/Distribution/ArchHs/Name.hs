@@ -11,7 +11,7 @@ module Distribution.ArchHs.Name
     mToHackageName,
     toCommunityName,
     toHackageName,
-    falseList,
+    isHaskellPackage,
   )
 where
 
@@ -83,6 +83,9 @@ toCommunityName = mToCommunityName . toCommunityRep
 toHackageName :: HasMyName n => n -> PackageName
 toHackageName = mToHackageName . toHackageRep
 
+isHaskellPackage :: CommunityName -> Bool
+isHaskellPackage name = let rep = toCommunityRep name in (rep `Map.member` communityPreset || "haskell-" `isPrefixOf` (unMyName rep)) &&  rep `notElem` falseList
+
 falseList :: [MyName 'CommunityRep]
 falseList =
   MyName
@@ -96,6 +99,7 @@ preset =
     ("alex", "alex"),
     ("arch-hs", "arch-hs"),
     ("c2hs", "c2hs"),
+    ("haskell-cabal", "Cabal"),
     ("cabal-install", "cabal-install"),
     ("cgrep", "cgrep"),
     ("cryptol", "cryptol"),
@@ -109,6 +113,7 @@ preset =
     ("git-repair", "git-repair"),
     ("happy", "happy"),
     ("haskell-chasingbottoms", "ChasingBottoms"),
+    ("haskell-ci","haskell-ci"),
     ("haskell-configfile", "ConfigFile"),
     ("haskell-cracknum", "crackNum"),
     ("haskell-dav", "DAV"),

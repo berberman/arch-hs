@@ -113,3 +113,13 @@ executable arch-hs-diff
   ghc-options:         -threaded
                        -rtsopts
                        -with-rtsopts=-N
+                       
+executable arch-hs-submit
+  import:              common-options
+  hs-source-dirs:      submit
+  main-is:             Main.hs
+  other-modules:       Submit
+  build-depends:       arch-hs, csv
+  ghc-options:         -threaded
+                       -rtsopts
+                       -with-rtsopts=-N
