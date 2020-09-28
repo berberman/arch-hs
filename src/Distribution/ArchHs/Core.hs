@@ -14,13 +14,16 @@ module Distribution.ArchHs.Core
 where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap    as G
+import           Data.Char                              (toLower)
 import           Data.List                              (stripPrefix)
 import qualified Data.Map                               as Map
 import           Data.Set                               (Set)
 import qualified Data.Set                               as Set
+import           Distribution.ArchHs.Exception
 import           Distribution.ArchHs.Hackage            (getLatestCabal,
                                                          getLatestSHA256)
 import           Distribution.ArchHs.Local              (ghcLibList, ignoreList)
+import           Distribution.ArchHs.Name
 import           Distribution.ArchHs.PkgBuild           (PkgBuild (..),
                                                          mapLicense)
 import           Distribution.ArchHs.Types
@@ -237,7 +240,7 @@ cabalToPkgBuild pkg ignored uusi = do
   cabal <- packageDescription <$> (getLatestCabal name)
   _sha256sums <- (\s -> "'" <> s <> "'") <$> getLatestSHA256 name
   let _hkgName = pkg ^. pkgName & unPackageName
-      rawName = toLower' _hkgName
+      rawName = toLower <$> _hkgName
       _pkgName = maybe rawName id $ stripPrefix "haskell-" rawName
       _pkgVer = prettyShow $ getPkgVersion cabal
       _pkgDesc = fromShortText $ synopsis cabal
@@ -279,7 +282,7 @@ cabalToPkgBuild pkg ignored uusi = do
                        )
                     && notIgnore x
               )
-      depsToString deps = deps <&> (wrap . fixName . unPackageName . _depName) & mconcat
+      depsToString deps = deps <&> (wrap . unCommunityName . toCommunityName . _depName) & mconcat
       _depends = depsToString depends
       _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString makeDepends
       _url = getUrl cabal

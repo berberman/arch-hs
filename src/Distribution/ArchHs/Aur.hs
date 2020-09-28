@@ -22,14 +22,12 @@ module Distribution.ArchHs.Aur
 where
 
 import           Data.Aeson
-import           Data.Aeson.Ext                 (generateJSONInstance)
-import           Data.Text                      (Text, pack)
-import           Distribution.ArchHs.Utils      (fixName)
-import           Distribution.Types.PackageName (PackageName, unPackageName)
-import           GHC.Generics                   (Generic)
+import           Data.Aeson.Ext            (generateJSONInstance)
+import           Data.Text                 (Text, pack)
+import           Distribution.ArchHs.Name
+import           Distribution.ArchHs.Types
 import           Network.HTTP.Req
-import           Polysemy
-import           Polysemy.Req                   (reqToIO)
+import           Polysemy.Req              (reqToIO)
 
 -- | AUR response
 data AurReply a = AurReply
@@ -106,7 +104,7 @@ $(generateJSONInstance ''AurInfo)
 data Aur m a where
   SearchByName :: String -> Aur m (Maybe AurSearch)
   InfoByName :: String -> Aur m (Maybe AurInfo)
-  IsInAur :: PackageName -> Aur m Bool
+  IsInAur :: HasMyName n => n -> Aur m Bool
 
 -- searchByName
 
@@ -119,7 +117,7 @@ searchByName :: Member Aur r => String -> Sem r (Maybe AurSearch)
 infoByName :: Member Aur r => String -> Sem r (Maybe AurInfo)
 
 -- | Check whether a __haskell__ package exists in AUR
-isInAur :: Member Aur r => PackageName -> Sem r Bool
+isInAur :: (HasMyName n, Member Aur r) => n -> Sem r Bool
 baseURL :: Url 'Https
 baseURL = https "aur.archlinux.org" /: "rpc"
 
@@ -151,7 +149,7 @@ aurToIO = interpret $ \case
       1 -> Just . head $ r_results body
       _ -> Nothing
   (IsInAur name) -> do
-    result <- aurToIO . searchByName . fixName $ unPackageName name
+    result <- aurToIO . searchByName . unCommunityName . toCommunityName $ name
     return $ case result of
       Just _ -> True
       _      -> False

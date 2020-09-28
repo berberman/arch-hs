@@ -25,6 +25,7 @@ import           Distribution.ArchHs.Community          (defaultCommunityPath,
                                                          loadProcessedCommunity)
 import           Distribution.ArchHs.Core               (cabalToPkgBuild,
                                                          getDependencies)
+import           Distribution.ArchHs.Exception
 import           Distribution.ArchHs.Hackage            (getPackageFlag,
                                                          insertDB,
                                                          loadHackageDB,

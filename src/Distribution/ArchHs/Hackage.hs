@@ -40,6 +40,8 @@ import           System.Directory                             (findFile,
                                                                listDirectory)
 import           System.FilePath                              ((</>))
 
+import           Distribution.ArchHs.Exception
+
 -- | Look up hackage tarball path from @~/.cabal@.
 -- Arbitrary hackage mirror is potential to be selected.
 -- Preferred to @01-index.tar@, whereas fallback to @00-index.tar@.

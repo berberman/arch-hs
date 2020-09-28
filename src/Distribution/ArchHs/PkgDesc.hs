@@ -78,7 +78,7 @@ descFieldsParser =
             field <- manyTill anySingle sep
             _ <- newline
             content <- manyTill line (lookAhead sep <|> eof)
-            return (field, content)
+            return (field, filter (/= "") content)
         )
     `manyTill` eof
   where

@@ -16,14 +16,12 @@
 module Distribution.ArchHs.Types
   ( PkgList,
     ComponentPkgList,
-    CommunityName,
+    CommunityName (..),
     CommunityVersion,
     CommunityDB,
     HackageEnv,
     CommunityEnv,
     FlagAssignmentsEnv,
-    WithMyErr,
-    MyException (..),
     DependencyType (..),
     DependencyKind (..),
     DependencyProvider (..),
@@ -38,6 +36,8 @@ module Distribution.ArchHs.Types
     depType,
     DependencyRecord,
     HasCallStack,
+    Generic,
+    NFData,
     module Polysemy,
     module Polysemy.Error,
     module Polysemy.Reader,
@@ -51,12 +51,9 @@ import           Control.DeepSeq                        (NFData)
 import           Data.Map.Strict                        (Map)
 import           Distribution.Hackage.DB                (HackageDB)
 import           Distribution.PackageDescription        (FlagAssignment)
-import           Distribution.Pretty                    (prettyShow)
-import           Distribution.Types.PackageName         (PackageName,
-                                                         unPackageName)
+import           Distribution.Types.PackageName         (PackageName)
 import           Distribution.Types.UnqualComponentName (UnqualComponentName,
                                                          unUnqualComponentName)
-import           Distribution.Types.Version             (Version)
 import           Distribution.Version                   (VersionRange)
 import           GHC.Generics                           (Generic)
 import           GHC.Stack                              (HasCallStack)
@@ -74,8 +71,10 @@ type PkgList = [PackageName]
 -- | A list of component represented by 'UnqualComponentName' and its dependencies collected in a 'PkgList'
 type ComponentPkgList = [(UnqualComponentName, PkgList)]
 
--- Name of packages in archlinux community repo 
-type CommunityName = String
+-- Name of packages in archlinux community repo
+newtype CommunityName = CommunityName {unCommunityName :: String}
+  deriving stock (Show, Read, Eq, Ord, Generic)
+  deriving anyclass (NFData)
 
 -- | Version of packages in archlinux community repo
 type CommunityVersion = String
@@ -97,23 +96,6 @@ type FlagAssignmentsEnv = Reader FlagAssignments
 
 -- | Unused state effect
 type DependencyRecord = State (Map PackageName [VersionRange])
-
--- | Error effect of 'MyException'
-type WithMyErr = Error MyException
-
--- | Custom exception used in this project
-data MyException
-  = PkgNotFound PackageName
-  | VersionError PackageName Version
-  | TargetExist PackageName DependencyProvider
-  | CyclicError [PackageName]
-  deriving stock (Eq)
-
-instance Show MyException where
-  show (PkgNotFound name) = "Unable to find [" <> unPackageName name <> "]"
-  show (VersionError name version) = "Unable to find [" <> unPackageName name <> "-" <> prettyShow version <> "]"
-  show (TargetExist name provider) = "Target [" <> unPackageName name <> "] has been provided by " <> show provider
-  show (CyclicError c) = "Graph contains a cycle " <> (show $ fmap unPackageName c)
 
 -- | The type of a dependency. Who requires this?
 data DependencyType

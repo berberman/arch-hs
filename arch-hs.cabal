@@ -88,6 +88,8 @@ library
                        Distribution.ArchHs.Types,
                        Distribution.ArchHs.Utils,
                        Distribution.ArchHs.PP,
+                       Distribution.ArchHs.Name,
+                       Distribution.ArchHs.Exception,
                        OptionParse,
                        Data.Aeson.Ext,
                        Polysemy.Req

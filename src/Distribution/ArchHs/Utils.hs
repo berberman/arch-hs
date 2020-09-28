@@ -8,12 +8,10 @@ module Distribution.ArchHs.Utils
   ( getPkgName,
     getPkgName',
     getPkgVersion,
-    toLower',
     dependencyTypeToKind,
     unExe,
     unExeV,
     unDepV,
-    fixName,
     getUrl,
     getTwo,
     buildDependsIfBuild,
@@ -25,8 +23,6 @@ where
 
 import           Control.Applicative              (Alternative ((<|>)))
 import           Control.Monad                    ((<=<))
-import           Data.Char                        (toLower)
-import           Data.List.Split                  (splitOn)
 import           Distribution.ArchHs.Types
 import           Distribution.PackageDescription  (GenericPackageDescription,
                                                    PackageDescription, homepage,
@@ -81,21 +77,6 @@ getUrl cabal = fromJust $ home <|> vcs <|> fallback
     vcs = repoLocation <=< safeHead . sourceRepos $ cabal
     fallback = Just $ "https://hackage.haskell.org/package/" <> (unPackageName $ getPkgName cabal)
 
--- | Convert the hackage name into archlinux package name follow the convention.
---
--- >>> fixName "haskell-A"
--- "haskell-a"
---
--- >>> fixName "QuickCheck"
--- "haskell-quickcheck"
-fixName :: String -> String
-fixName s = case splitOn "-" s of
-  ("haskell" : _) -> toLower' s
-  _               -> "haskell-" <> toLower' s
-
--- | Lower each 'Char's in 'String'.
-toLower' :: String -> String
-toLower' = fmap toLower
 
 -- | Map 'DependencyType' with its data constructor tag 'DependencyKind'.
 dependencyTypeToKind :: DependencyType -> DependencyKind
