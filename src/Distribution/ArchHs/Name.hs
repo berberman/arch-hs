@@ -15,6 +15,7 @@ module Distribution.ArchHs.Name
   )
 where
 
+import           Data.Char                      (toLower)
 import           Data.List                      (isPrefixOf)
 import qualified Data.Map.Strict                as Map
 import           Data.String                    (IsString, fromString)
@@ -50,9 +51,11 @@ instance HasMyName PackageName where
       go s = case hackagePreset Map.!? (MyName s) of
         Just x -> x
         _ ->
-          if "haskell-" `isPrefixOf` s
-            then MyName s
-            else MyName $ "haskell-" <> s
+          MyName . fmap toLower $
+            ( if "haskell-" `isPrefixOf` s
+                then s
+                else "haskell-" <> s
+            )
 
 instance HasMyName CommunityName where
   toHackageRep = go . unCommunityName

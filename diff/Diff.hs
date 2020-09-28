@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Diff
   ( diffCabal,
@@ -8,42 +8,38 @@ module Diff
   )
 where
 
-import qualified Colourista as C
-import qualified Control.Exception as CE
-import Data.List
-  ( intercalate,
-    nub,
-    sort,
-    (\\),
-  )
-import qualified Data.Map.Strict as Map
-import Data.Maybe (fromJust)
-import qualified Data.Text as T
-import Distribution.ArchHs.Community
-import Distribution.ArchHs.Core
-import Distribution.ArchHs.Exception
-import Distribution.ArchHs.PP (prettyFlags)
-import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils
-import Distribution.PackageDescription
-import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import Distribution.Parsec (simpleParsec)
-import Distribution.Pretty (prettyShow)
-import qualified Distribution.Types.BuildInfo.Lens as L
-import Distribution.Types.Dependency
-import Distribution.Types.PackageName
-import Distribution.Types.UnqualComponentName
-import Distribution.Utils.ShortText (fromShortText)
-import Distribution.Version
-import Network.HTTP.Req hiding (header)
-import OptionParse
+import qualified Colourista                             as C
+import qualified Control.Exception                      as CE
+import           Data.List                              (intercalate, nub, sort,
+                                                         (\\))
+import qualified Data.Map.Strict                        as Map
+import           Data.Maybe                             (fromJust)
+import qualified Data.Text                              as T
+import           Distribution.ArchHs.Community
+import           Distribution.ArchHs.Core
+import           Distribution.ArchHs.Exception
+import           Distribution.ArchHs.PP                 (prettyFlags)
+import           Distribution.ArchHs.Types
+import           Distribution.ArchHs.Utils
+import           Distribution.PackageDescription
+import           Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
+import           Distribution.Parsec                    (simpleParsec)
+import           Distribution.Pretty                    (prettyShow)
+import qualified Distribution.Types.BuildInfo.Lens      as L
+import           Distribution.Types.Dependency
+import           Distribution.Types.PackageName
+import           Distribution.Types.UnqualComponentName
+import           Distribution.Utils.ShortText           (fromShortText)
+import           Distribution.Version
+import           Network.HTTP.Req                       hiding (header)
+import           OptionParse
 
 data Options = Options
   { optCommunityPath :: FilePath,
-    optFlags :: FlagAssignments,
-    optPackageName :: PackageName,
-    optVersionA :: Version,
-    optVersionB :: Version
+    optFlags         :: FlagAssignments,
+    optPackageName   :: PackageName,
+    optVersionA      :: Version,
+    optVersionB      :: Version
   }
 
 cmdOptions :: Parser Options
@@ -133,7 +129,7 @@ getCabalFromHackage name version = do
   embed $ C.infoMessage $ "Downloading cabal file from " <> renderUrl api <> "..."
   response <- embed $ CE.try @HttpException (runReq defaultHttpConfig r)
   result <- case response of
-    Left _ -> throw $ VersionError name version
+    Left _  -> throw $ VersionError name version
     Right x -> return x
   case parseGenericPackageDescriptionMaybe $ responseBody result of
     Just x -> return x
@@ -217,18 +213,16 @@ lookupDiffCommunity va vb = do
   let diffNew = vb \\ va
       diffOld = va \\ vb
       color b = C.formatWith [if b then C.green else C.red]
-      pp b (name, range, v, r) =
+      pp b (name, range, v, False) =
         "["
           <> color b (unPackageName name)
           <> "] is required to be in range ("
           <> color b (prettyShow range)
           <> "), "
-          <> ( if r
-                 then "and community can provide the package satisfies with it ("
-                 else "but community provides ("
-             )
+          <> "but community provides ("
           <> color b (prettyShow v)
           <> ")."
+      pp _ (_, _, _, _) = ""
 
   new <- fmap (pp True) <$> mapM inRange diffNew
   old <- fmap (pp False) <$> mapM inRange diffOld
