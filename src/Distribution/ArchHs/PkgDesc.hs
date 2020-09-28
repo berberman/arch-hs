@@ -1,4 +1,7 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveAnyClass     #-}
+{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE RecordWildCards    #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
@@ -11,14 +14,17 @@ module Distribution.ArchHs.PkgDesc
     DescParser,
     descParser,
     descFieldsParser,
+    runDescFieldsParser,
     runDescParser,
   )
 where
 
-import qualified Data.Map.Strict as Map
-import Data.Void (Void)
-import Text.Megaparsec
-import Text.Megaparsec.Char
+import           Control.DeepSeq      (NFData)
+import qualified Data.Map.Strict      as Map
+import           Data.Void            (Void)
+import           GHC.Generics         (Generic)
+import           Text.Megaparsec
+import           Text.Megaparsec.Char
 
 -- | A parser takes 'String' as input, without user state.
 type DescParser = Parsec Void String
@@ -26,14 +32,20 @@ type DescParser = Parsec Void String
 -- | Package description file of a installed system package,
 -- which lies in @repo.db@ file.
 data PkgDesc = PkgDesc
-  { name :: String,
-    version :: String,
-    desc :: String,
-    url :: String,
-    license :: String,
-    depends :: [String],
-    makeDepends :: [String]
+  { _name        :: String,
+    _version     :: String,
+    _desc        :: String,
+    _url         :: Maybe String,
+    _license     :: Maybe String,
+    _provides    :: [String],
+    _optDepends  :: [String],
+    _replaces    :: [String],
+    _conflicts   :: [String],
+    _depends     :: [String],
+    _makeDepends :: [String]
   }
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (NFData)
 
 -- Common fields
 {- fieldList =
@@ -63,10 +75,9 @@ descFieldsParser =
   Map.fromList
     <$> ( do
             sep
-            field <- many (upperChar <|> digitChar)
-            sep
+            field <- manyTill anySingle sep
             _ <- newline
-            content <- manyTill line (lookAhead sep <|> () <$ eol <|> eof)
+            content <- manyTill line (lookAhead sep <|> eof)
             return (field, content)
         )
     `manyTill` eof
@@ -79,25 +90,38 @@ descParser :: DescParser PkgDesc
 descParser =
   descFieldsParser
     >>= ( \fields -> do
-            name <- lookupSingle fields "NAME"
-            version <- lookupSingle fields "VERSION"
-            desc <- lookupSingle fields "DESC"
-            url <- lookupSingle fields "URL"
-            license <- lookupSingle fields "LICENSE"
-            depends <- lookupList fields "DEPENDS"
-            makeDepends <- lookupList fields "MAKEDEPENDS"
+            _name <- lookupSingle fields "NAME"
+            _version <- lookupSingle fields "VERSION"
+            _desc <- lookupSingle fields "DESC"
+            _url <- lookupSingleMaybe fields "URL"
+            _license <- lookupSingleMaybe fields "LICENSE"
+            _depends <- lookupList fields "DEPENDS"
+            _makeDepends <- lookupList fields "MAKEDEPENDS"
+            _provides <- lookupList fields "PROVIDES"
+            _optDepends <- lookupList fields "OPTDEPENDS"
+            _replaces <- lookupList fields "REPLACES"
+            _conflicts <- lookupList fields "CONFLICTS"
             return PkgDesc {..}
         )
   where
     lookupSingle fields f = case Map.lookup f fields of
       (Just x) -> case x of
         (e : _) -> return e
-        _ -> fail $ "Expect a singleton " <> f
+        _       -> fail $ "Expect a singleton " <> f
       _ -> fail $ "Unable to find field " <> f
+    lookupSingleMaybe fields f = return $ case Map.lookup f fields of
+      (Just x) -> case x of
+        (e : _) -> Just e
+        _       -> Nothing
+      _ -> Nothing
     lookupList fields f = return $ case Map.lookup f fields of
       (Just x) -> x
-      _ -> []
+      _        -> []
+
+-- | Run the desc fields parser.
+runDescFieldsParser :: String -> String -> Either (ParseErrorBundle String Void) (Map.Map String [String])
+runDescFieldsParser = parse descFieldsParser
 
 -- | Run the desc parser.
-runDescParser :: String -> Either (ParseErrorBundle String Void) PkgDesc
-runDescParser = parse descParser "Desc"
+runDescParser :: String -> String -> Either (ParseErrorBundle String Void) PkgDesc
+runDescParser = parse descParser

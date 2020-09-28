@@ -1,10 +1,10 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# OPTIONS_HADDOCK ignore-exports #-}
 
 -- | Copyright: (c) 2020 berberman
@@ -16,6 +16,8 @@
 module Distribution.ArchHs.Types
   ( PkgList,
     ComponentPkgList,
+    CommunityName,
+    CommunityVersion,
     CommunityDB,
     HackageEnv,
     CommunityEnv,
@@ -45,25 +47,26 @@ module Distribution.ArchHs.Types
   )
 where
 
-import Control.DeepSeq (NFData)
-import Data.Map.Strict (Map)
-import Data.Set (Set)
-import Distribution.Hackage.DB (HackageDB)
-import Distribution.PackageDescription (FlagAssignment)
-import Distribution.Pretty (prettyShow)
-import Distribution.Types.PackageName (PackageName, unPackageName)
-import Distribution.Types.UnqualComponentName (UnqualComponentName, unUnqualComponentName)
-import Distribution.Types.Version (Version)
-import Distribution.Version (VersionRange)
-import GHC.Generics (Generic)
-import GHC.Stack (HasCallStack)
-import Lens.Micro
-import Lens.Micro.TH (makeLenses)
-import Polysemy
-import Polysemy.Error
-import Polysemy.Reader
-import Polysemy.State
-import Polysemy.Trace
+import           Control.DeepSeq                        (NFData)
+import           Data.Map.Strict                        (Map)
+import           Distribution.Hackage.DB                (HackageDB)
+import           Distribution.PackageDescription        (FlagAssignment)
+import           Distribution.Pretty                    (prettyShow)
+import           Distribution.Types.PackageName         (PackageName,
+                                                         unPackageName)
+import           Distribution.Types.UnqualComponentName (UnqualComponentName,
+                                                         unUnqualComponentName)
+import           Distribution.Types.Version             (Version)
+import           Distribution.Version                   (VersionRange)
+import           GHC.Generics                           (Generic)
+import           GHC.Stack                              (HasCallStack)
+import           Lens.Micro
+import           Lens.Micro.TH                          (makeLenses)
+import           Polysemy
+import           Polysemy.Error
+import           Polysemy.Reader
+import           Polysemy.State
+import           Polysemy.Trace
 
 -- | A list of 'PackageName'
 type PkgList = [PackageName]
@@ -71,8 +74,14 @@ type PkgList = [PackageName]
 -- | A list of component represented by 'UnqualComponentName' and its dependencies collected in a 'PkgList'
 type ComponentPkgList = [(UnqualComponentName, PkgList)]
 
+-- Name of packages in archlinux community repo 
+type CommunityName = String
+
+-- | Version of packages in archlinux community repo
+type CommunityVersion = String
+
 -- | Representation of @cummunity.db@
-type CommunityDB = Set String
+type CommunityDB = Map CommunityName CommunityVersion
 
 -- | Reader effect of 'HackageDB'
 type HackageEnv = Reader HackageDB
@@ -164,16 +173,16 @@ data DependencyProvider = ByCommunity | ByAur
 
 instance Show DependencyProvider where
   show ByCommunity = "community"
-  show ByAur = "aur"
+  show ByAur       = "aur"
 
 -- | A solved dependency, holden by 'SolvedPackage'
 data SolvedDependency = SolvedDependency
   { -- | Provider of this dependency
     _depProvider :: Maybe DependencyProvider,
     -- | Name of the dependency
-    _depName :: PackageName,
+    _depName     :: PackageName,
     -- | Types of the dependency
-    _depType :: [DependencyType]
+    _depType     :: [DependencyType]
   }
   deriving stock (Show, Eq, Generic)
   deriving anyclass (NFData)
@@ -184,7 +193,7 @@ data SolvedPackage
   = -- | A package which has been provided by somebody, so there is no need to expand its dependencies
     ProvidedPackage
       { -- | Package name
-        _pkgName :: PackageName,
+        _pkgName     :: PackageName,
         -- | Package provider. (The name of 'DependencyProvider' may be confusing...)
         _pkgProvider :: DependencyProvider
       }
