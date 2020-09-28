@@ -17,20 +17,28 @@ module Distribution.ArchHs.Hackage
   )
 where
 
-import Control.Applicative (Alternative ((<|>)))
-import qualified Data.ByteString as BS
-import qualified Data.Map as Map
-import Data.Maybe (fromJust)
-import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils (getPkgName, getPkgVersion)
-import Distribution.Hackage.DB (HackageDB, VersionData (VersionData, cabalFile), readTarball, tarballHashes)
-import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import Distribution.Types.Flag (Flag)
-import Distribution.Types.GenericPackageDescription (GenericPackageDescription, genPackageFlags, packageDescription)
-import Distribution.Types.PackageName (PackageName)
-import Distribution.Version (Version, nullVersion)
-import System.Directory (findFile, getHomeDirectory, listDirectory)
-import System.FilePath ((</>))
+import           Control.Applicative                          (Alternative ((<|>)))
+import qualified Data.ByteString                              as BS
+import qualified Data.Map                                     as Map
+import           Data.Maybe                                   (fromJust)
+import           Distribution.ArchHs.Types
+import           Distribution.ArchHs.Utils                    (getPkgName,
+                                                               getPkgVersion)
+import           Distribution.Hackage.DB                      (HackageDB, VersionData (VersionData, cabalFile),
+                                                               readTarball,
+                                                               tarballHashes)
+import           Distribution.PackageDescription.Parsec       (parseGenericPackageDescriptionMaybe)
+import           Distribution.Types.Flag                      (Flag)
+import           Distribution.Types.GenericPackageDescription (GenericPackageDescription,
+                                                               genPackageFlags,
+                                                               packageDescription)
+import           Distribution.Types.PackageName               (PackageName)
+import           Distribution.Version                         (Version,
+                                                               nullVersion)
+import           System.Directory                             (findFile,
+                                                               getHomeDirectory,
+                                                               listDirectory)
+import           System.FilePath                              ((</>))
 
 -- | Look up hackage tarball path from @~/.cabal@.
 -- Arbitrary hackage mirror is potential to be selected.
@@ -64,7 +72,7 @@ parseCabalFile path = do
   bs <- BS.readFile path
   case parseGenericPackageDescriptionMaybe bs of
     Just x -> return x
-    _ -> fail $ "Failed to parse .cabal from " <> path
+    _      -> fail $ "Failed to parse .cabal from " <> path
 
 withLatestVersion :: Members [HackageEnv, WithMyErr] r => (VersionData -> a) -> PackageName -> Sem r a
 withLatestVersion f name = do
@@ -72,14 +80,14 @@ withLatestVersion f name = do
   case Map.lookup name db of
     (Just m) -> case Map.lookupMax m of
       Just (_, vdata) -> return $ f vdata
-      Nothing -> throw $ VersionError name nullVersion
+      Nothing         -> throw $ VersionError name nullVersion
     Nothing -> throw $ PkgNotFound name
 
 -- | Get the latest 'GenericPackageDescription'.
 getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
 getLatestCabal = withLatestVersion cabalFile
 
--- | Get the latest SHA256 sum of the tarball . 
+-- | Get the latest SHA256 sum of the tarball .
 getLatestSHA256 :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r String
 getLatestSHA256 = withLatestVersion (\vdata -> tarballHashes vdata Map.! "sha256")
 
@@ -90,7 +98,7 @@ getCabal name version = do
   case Map.lookup name db of
     (Just m) -> case Map.lookup version m of
       Just vdata -> return $ vdata & cabalFile
-      Nothing -> throw $ VersionError name version
+      Nothing    -> throw $ VersionError name version
     Nothing -> throw $ PkgNotFound name
 
 -- | Get flags of a package.

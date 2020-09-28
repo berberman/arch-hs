@@ -13,29 +13,34 @@ module Distribution.ArchHs.Core
   )
 where
 
-import qualified Algebra.Graph.Labelled.AdjacencyMap as G
-import Data.List (stripPrefix)
-import qualified Data.Map as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Distribution.ArchHs.Hackage (getLatestCabal, getLatestSHA256)
-import Distribution.ArchHs.Local (ghcLibList, ignoreList)
-import Distribution.ArchHs.PkgBuild (PkgBuild (..), mapLicense)
-import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils
-import Distribution.Compiler (CompilerFlavor (..))
-import Distribution.PackageDescription
-import Distribution.Pretty (prettyShow)
-import Distribution.SPDX
-import Distribution.System (Arch (X86_64), OS (Linux))
-import qualified Distribution.Types.BuildInfo.Lens as L
-import Distribution.Types.CondTree (simplifyCondTree)
-import Distribution.Types.Dependency (Dependency)
-import Distribution.Types.PackageName (PackageName, unPackageName)
-import Distribution.Types.UnqualComponentName (UnqualComponentName, unqualComponentNameToPackageName)
-import Distribution.Types.Version (mkVersion)
-import Distribution.Types.VersionRange (VersionRange, withinRange)
-import Distribution.Utils.ShortText (fromShortText)
+import qualified Algebra.Graph.Labelled.AdjacencyMap    as G
+import           Data.List                              (stripPrefix)
+import qualified Data.Map                               as Map
+import           Data.Set                               (Set)
+import qualified Data.Set                               as Set
+import           Distribution.ArchHs.Hackage            (getLatestCabal,
+                                                         getLatestSHA256)
+import           Distribution.ArchHs.Local              (ghcLibList, ignoreList)
+import           Distribution.ArchHs.PkgBuild           (PkgBuild (..),
+                                                         mapLicense)
+import           Distribution.ArchHs.Types
+import           Distribution.ArchHs.Utils
+import           Distribution.Compiler                  (CompilerFlavor (..))
+import           Distribution.PackageDescription
+import           Distribution.Pretty                    (prettyShow)
+import           Distribution.SPDX
+import           Distribution.System                    (Arch (X86_64),
+                                                         OS (Linux))
+import qualified Distribution.Types.BuildInfo.Lens      as L
+import           Distribution.Types.CondTree            (simplifyCondTree)
+import           Distribution.Types.Dependency          (Dependency)
+import           Distribution.Types.PackageName         (PackageName,
+                                                         unPackageName)
+import           Distribution.Types.UnqualComponentName (UnqualComponentName, unqualComponentNameToPackageName)
+import           Distribution.Types.Version             (mkVersion)
+import           Distribution.Types.VersionRange        (VersionRange,
+                                                         withinRange)
+import           Distribution.Utils.ShortText           (fromShortText)
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Linux) = Right True
@@ -47,7 +52,7 @@ archEnv _ (Impl _ _) = Right False
 archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
   where
     go _ (Just r) = Right r
-    go x Nothing = Left x
+    go x Nothing  = Left x
 
 -- | Simplify the condition tree from 'GenericPackageDescription' with given flag assignments and archlinux system assumption.
 evalConditionTree ::
@@ -63,7 +68,7 @@ evalConditionTree cabal cond = do
         foldr (\f acc -> insertFlagAssignment (flagName f) (flagDefault f) acc) (mkFlagAssignment []) packageFlags
       flagAssignment = case Map.lookup name flagAssignments of
         Just f -> unFlagAssignment f
-        _ -> []
+        _      -> []
       flagNames = fmap fst flagAssignment
       thisFlag =
         mkFlagAssignment
@@ -236,13 +241,13 @@ cabalToPkgBuild pkg ignored uusi = do
       _pkgName = maybe rawName id $ stripPrefix "haskell-" rawName
       _pkgVer = prettyShow $ getPkgVersion cabal
       _pkgDesc = fromShortText $ synopsis cabal
-      getL (NONE) = ""
+      getL (NONE)      = ""
       getL (License e) = getE e
-      getE (ELicense (ELicenseId x) _) = show . mapLicense $ x
+      getE (ELicense (ELicenseId x) _)     = show . mapLicense $ x
       getE (ELicense (ELicenseIdPlus x) _) = show . mapLicense $ x
-      getE (ELicense (ELicenseRef x) _) = "custom:" <> licenseRef x
-      getE (EAnd x y) = getE x <> " " <> getE y
-      getE (EOr x y) = getE x <> " " <> getE y
+      getE (ELicense (ELicenseRef x) _)    = "custom:" <> licenseRef x
+      getE (EAnd x y)                      = getE x <> " " <> getE y
+      getE (EOr x y)                       = getE x <> " " <> getE y
 
       _license = getL . license $ cabal
       _enableCheck = any id $ pkg ^. pkgDeps & mapped %~ (\dep -> selectDepKind Test dep && dep ^. depName == pkg ^. pkgName)

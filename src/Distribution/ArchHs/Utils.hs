@@ -23,32 +23,24 @@ module Distribution.ArchHs.Utils
   )
 where
 
-import Control.Applicative (Alternative ((<|>)))
-import Control.Monad ((<=<))
-import Data.Char (toLower)
-import Data.List.Split (splitOn)
-import Distribution.ArchHs.Types
-import Distribution.PackageDescription
-  ( GenericPackageDescription,
-    PackageDescription,
-    homepage,
-    package,
-    packageDescription,
-    repoLocation,
-    sourceRepos,
-  )
-import Distribution.Types.BuildInfo (BuildInfo (..))
-import Distribution.Types.Dependency
-  ( Dependency,
-    depPkgName,
-    depVerRange,
-  )
-import Distribution.Types.ExeDependency (ExeDependency (..))
-import qualified Distribution.Types.PackageId as I
-import Distribution.Types.PackageName (PackageName, unPackageName)
-import Distribution.Utils.ShortText (fromShortText)
-import Distribution.Version (Version, VersionRange)
-import GHC.Stack (callStack, prettyCallStack)
+import           Control.Applicative              (Alternative ((<|>)))
+import           Control.Monad                    ((<=<))
+import           Data.Char                        (toLower)
+import           Data.List.Split                  (splitOn)
+import           Distribution.ArchHs.Types
+import           Distribution.PackageDescription  (GenericPackageDescription,
+                                                   PackageDescription, homepage,
+                                                   package, packageDescription,
+                                                   repoLocation, sourceRepos)
+import           Distribution.Types.BuildInfo     (BuildInfo (..))
+import           Distribution.Types.Dependency    (Dependency, depPkgName,
+                                                   depVerRange)
+import           Distribution.Types.ExeDependency (ExeDependency (..))
+import qualified Distribution.Types.PackageId     as I
+import           Distribution.Types.PackageName   (PackageName, unPackageName)
+import           Distribution.Utils.ShortText     (fromShortText)
+import           Distribution.Version             (Version, VersionRange)
+import           GHC.Stack                        (callStack, prettyCallStack)
 
 -- | Extract the package name from a 'ExeDependency'.
 unExe :: ExeDependency -> PackageName
@@ -80,10 +72,10 @@ getUrl :: PackageDescription -> String
 getUrl cabal = fromJust $ home <|> vcs <|> fallback
   where
     f "" = Nothing
-    f x = Just x
+    f x  = Just x
     fromJust (Just x) = x
-    fromJust _ = fail "Impossible."
-    safeHead [] = Nothing
+    fromJust _        = fail "Impossible."
+    safeHead []      = Nothing
     safeHead (x : _) = Just x
     home = f . fromShortText . homepage $ cabal
     vcs = repoLocation <=< safeHead . sourceRepos $ cabal
@@ -99,7 +91,7 @@ getUrl cabal = fromJust $ home <|> vcs <|> fallback
 fixName :: String -> String
 fixName s = case splitOn "-" s of
   ("haskell" : _) -> toLower' s
-  _ -> "haskell-" <> toLower' s
+  _               -> "haskell-" <> toLower' s
 
 -- | Lower each 'Char's in 'String'.
 toLower' :: String -> String
@@ -107,16 +99,16 @@ toLower' = fmap toLower
 
 -- | Map 'DependencyType' with its data constructor tag 'DependencyKind'.
 dependencyTypeToKind :: DependencyType -> DependencyKind
-dependencyTypeToKind (CExe _) = Exe
-dependencyTypeToKind (CExeBuildTools _) = ExeBuildTools
-dependencyTypeToKind (CLib) = Lib
-dependencyTypeToKind (CTest _) = Test
-dependencyTypeToKind (CBenchmark _) = Benchmark
-dependencyTypeToKind (CLibBuildTools) = LibBuildTools
-dependencyTypeToKind (CTestBuildTools _) = TestBuildTools
+dependencyTypeToKind (CExe _)                 = Exe
+dependencyTypeToKind (CExeBuildTools _)       = ExeBuildTools
+dependencyTypeToKind (CLib)                   = Lib
+dependencyTypeToKind (CTest _)                = Test
+dependencyTypeToKind (CBenchmark _)           = Benchmark
+dependencyTypeToKind (CLibBuildTools)         = LibBuildTools
+dependencyTypeToKind (CTestBuildTools _)      = TestBuildTools
 dependencyTypeToKind (CBenchmarkBuildTools _) = BenchmarkBuildTools
-dependencyTypeToKind (CSubLibs _) = SubLibs
-dependencyTypeToKind (CSubLibsBuildTools _) = SubLibsBuildTools
+dependencyTypeToKind (CSubLibs _)             = SubLibs
+dependencyTypeToKind (CSubLibsBuildTools _)   = SubLibsBuildTools
 
 -- | Apply a 'Getting' to two values respectively, and get the result as a pair.
 getTwo :: Getting b s b -> s -> s -> (b, b)

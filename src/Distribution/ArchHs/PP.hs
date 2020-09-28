@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards   #-}
 {-# OPTIONS_HADDOCK hide #-}
 
 module Distribution.ArchHs.PP
@@ -11,21 +11,14 @@ module Distribution.ArchHs.PP
   )
 where
 
-import qualified Colourista as C
-import Data.List (intercalate)
-import qualified Data.Map.Strict as Map
-import qualified Data.Text as T
-import Distribution.ArchHs.Types
-import Distribution.PackageDescription
-  ( Flag (..),
-    FlagAssignment,
-    unFlagAssignment,
-    unFlagName,
-  )
-import Distribution.Types.PackageName
-  ( PackageName,
-    unPackageName,
-  )
+import qualified Colourista                      as C
+import           Data.List                       (intercalate)
+import qualified Data.Map.Strict                 as Map
+import qualified Data.Text                       as T
+import           Distribution.ArchHs.Types
+import           Distribution.PackageDescription (Flag (..), FlagAssignment,
+                                                  unFlagAssignment, unFlagName)
+import           Distribution.Types.PackageName  (PackageName, unPackageName)
 
 prettySkip :: [String] -> String
 prettySkip = C.formatWith [C.magenta] . intercalate ", "

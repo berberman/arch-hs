@@ -10,8 +10,8 @@ module Distribution.ArchHs.Local
   )
 where
 
-import Distribution.ArchHs.Types
-import Distribution.Types.PackageName (mkPackageName)
+import           Distribution.ArchHs.Types
+import           Distribution.Types.PackageName (mkPackageName)
 
 -- | Packages should be dropped in dependency resolving.
 ignoreList :: PkgList

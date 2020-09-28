@@ -13,20 +13,22 @@ module OptionParse
   )
 where
 
-import Data.List (groupBy, intercalate)
-import Data.List.Split (splitOn)
-import qualified Data.Map.Strict as Map
-import Data.Void (Void)
-import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils
-import Distribution.Parsec (simpleParsec)
-import Distribution.Types.Flag (FlagAssignment, insertFlagAssignment, mkFlagAssignment, mkFlagName)
-import Distribution.Types.PackageName (PackageName, mkPackageName)
-import Distribution.Version (Version)
-import Options.Applicative
-import System.FilePath (takeExtension)
-import qualified Text.Megaparsec as M
-import qualified Text.Megaparsec.Char as M
+import           Data.List                      (groupBy, intercalate)
+import           Data.List.Split                (splitOn)
+import qualified Data.Map.Strict                as Map
+import           Data.Void                      (Void)
+import           Distribution.ArchHs.Types
+import           Distribution.ArchHs.Utils
+import           Distribution.Parsec            (simpleParsec)
+import           Distribution.Types.Flag        (FlagAssignment,
+                                                 insertFlagAssignment,
+                                                 mkFlagAssignment, mkFlagName)
+import           Distribution.Types.PackageName (PackageName, mkPackageName)
+import           Distribution.Version           (Version)
+import           Options.Applicative
+import           System.FilePath                (takeExtension)
+import qualified Text.Megaparsec                as M
+import qualified Text.Megaparsec.Char           as M
 
 readFlag :: [(String, String, Bool)] -> Map.Map PackageName FlagAssignment
 readFlag [] = Map.empty
@@ -40,7 +42,7 @@ optFlagReader :: ReadM (Map.Map PackageName FlagAssignment)
 optFlagReader =
   eitherReader
     ( \s -> case M.parse optFlagParser "" s of
-        Right x -> Right x
+        Right x  -> Right x
         Left err -> Left $ M.errorBundlePretty err
     )
 
@@ -58,9 +60,9 @@ optFlagParser =
     bool = do
       s <- M.string "true" <|> M.string "false"
       case s of
-        "true" -> return True
+        "true"  -> return True
         "false" -> return False
-        _ -> fail $ "unknown bool: " <> s
+        _       -> fail $ "unknown bool: " <> s
 
 optSkippedReader :: ReadM [String]
 optSkippedReader = eitherReader $ Right . splitOn ","
@@ -78,7 +80,7 @@ optVersionReader =
   eitherReader
     ( \s -> case simpleParsec s of
         Just v -> Right v
-        _ -> Left $ "Failed to parse version: " <> s
+        _      -> Left $ "Failed to parse version: " <> s
     )
 
 optPackageNameReader :: ReadM PackageName
