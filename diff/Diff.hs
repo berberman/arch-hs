@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Diff
   ( diffCabal,
@@ -7,36 +8,42 @@ module Diff
   )
 where
 
-import qualified Colourista                             as C
-import qualified Control.Exception                      as CE
-import           Data.List                              (intercalate, nub, sort,
-                                                         (\\))
-import qualified Data.Map.Strict                        as Map
-import qualified Data.Text                              as T
-import           Distribution.ArchHs.Community
-import           Distribution.ArchHs.Core
-import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.PP                 (prettyFlags)
-import           Distribution.ArchHs.Types
-import           Distribution.ArchHs.Utils
-import           Distribution.PackageDescription
-import           Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import           Distribution.Pretty                    (prettyShow)
-import qualified Distribution.Types.BuildInfo.Lens      as L
-import           Distribution.Types.Dependency
-import           Distribution.Types.PackageName
-import           Distribution.Types.UnqualComponentName
-import           Distribution.Utils.ShortText           (fromShortText)
-import           Distribution.Version
-import           Network.HTTP.Req                       hiding (header)
-import           OptionParse
+import qualified Colourista as C
+import qualified Control.Exception as CE
+import Data.List
+  ( intercalate,
+    nub,
+    sort,
+    (\\),
+  )
+import qualified Data.Map.Strict as Map
+import Data.Maybe (fromJust)
+import qualified Data.Text as T
+import Distribution.ArchHs.Community
+import Distribution.ArchHs.Core
+import Distribution.ArchHs.Exception
+import Distribution.ArchHs.PP (prettyFlags)
+import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils
+import Distribution.PackageDescription
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
+import Distribution.Parsec (simpleParsec)
+import Distribution.Pretty (prettyShow)
+import qualified Distribution.Types.BuildInfo.Lens as L
+import Distribution.Types.Dependency
+import Distribution.Types.PackageName
+import Distribution.Types.UnqualComponentName
+import Distribution.Utils.ShortText (fromShortText)
+import Distribution.Version
+import Network.HTTP.Req hiding (header)
+import OptionParse
 
 data Options = Options
   { optCommunityPath :: FilePath,
-    optFlags         :: FlagAssignments,
-    optPackageName   :: PackageName,
-    optVersionA      :: Version,
-    optVersionB      :: Version
+    optFlags :: FlagAssignments,
+    optPackageName :: PackageName,
+    optVersionA :: Version,
+    optVersionB :: Version
   }
 
 cmdOptions :: Parser Options
@@ -126,7 +133,7 @@ getCabalFromHackage name version = do
   embed $ C.infoMessage $ "Downloading cabal file from " <> renderUrl api <> "..."
   response <- embed $ CE.try @HttpException (runReq defaultHttpConfig r)
   result <- case response of
-    Left _  -> throw $ VersionError name version
+    Left _ -> throw $ VersionError name version
     Right x -> return x
   case parseGenericPackageDescriptionMaybe $ responseBody result of
     Just x -> return x
@@ -165,7 +172,8 @@ diffCabal name a b = do
       fb = genPackageFlags ga
   (ba, ma) <- directDependencies ga
   (bb, mb) <- directDependencies gb
-  lookupDiffCommunity ma mb
+  queryb <- lookupDiffCommunity ba bb
+  querym <- lookupDiffCommunity ma mb
   return $
     unlines
       [ C.formatWith [C.magenta] "Package: " <> unPackageName name,
@@ -173,7 +181,11 @@ diffCabal name a b = do
         desc pa pb,
         url pa pb,
         dep "Depends: \n" ba bb,
+        "",
+        queryb,
         dep "MakeDepends: \n" ma mb,
+        "",
+        querym,
         flags name fa fb
       ]
 
@@ -195,16 +207,33 @@ url = diffTerm "URL: " getUrl
 splitLine :: String
 splitLine = "\n" <> replicate 38 '-' <> "\n"
 
-lookupDiffCommunity :: Members [CommunityEnv, WithMyErr, Embed IO] r => VersionedList -> VersionedList -> Sem r String
+inRange :: Members [CommunityEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (PackageName, VersionRange, Version, Bool)
+inRange (name, hRange) =
+  (versionInCommunity name)
+    >>= \y -> let version = fromJust . simpleParsec $ y in return $ (name, hRange, version, withinRange version hRange)
+
+lookupDiffCommunity :: Members [CommunityEnv, WithMyErr] r => VersionedList -> VersionedList -> Sem r String
 lookupDiffCommunity va vb = do
   let diffNew = vb \\ va
       diffOld = va \\ vb
-  -- inRange =
-  embed $ print diffNew
-  embed $ print diffOld
-  mapM (versionInCommunity . fst) diffNew >>= embed . print
-  mapM (versionInCommunity . fst) diffOld >>= embed . print
-  return ""
+      color b = C.formatWith [if b then C.green else C.red]
+      pp b (name, range, v, r) =
+        "["
+          <> color b (unPackageName name)
+          <> "] is required to be in range ("
+          <> color b (prettyShow range)
+          <> "), "
+          <> ( if r
+                 then "and community can provide the package satisfies with it ("
+                 else "but community provides ("
+             )
+          <> color b (prettyShow v)
+          <> ")."
+
+  new <- fmap (pp True) <$> mapM inRange diffNew
+  old <- fmap (pp False) <$> mapM inRange diffOld
+  let join = unlines . filter (not . null)
+  return $ join old <> join new
 
 dep :: String -> VersionedList -> VersionedList -> String
 dep s va vb =
