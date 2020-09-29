@@ -10,7 +10,6 @@ import qualified Algebra.Graph.Labelled.AdjacencyMap  as GL
 import           Args
 import qualified Colourista                           as C
 import           Conduit
-import qualified Control.Exception                    as CE
 import           Control.Monad                        (filterM)
 import           Data.IORef                           (IORef, newIORef)
 import           Data.List.NonEmpty                   (toList)
@@ -158,63 +157,59 @@ runTrace stdout path = interpret $ \case
 -----------------------------------------------------------------------------
 
 main :: IO ()
-main = CE.catch @CE.IOException
-  ( do
-      Options {..} <- runArgsParser
+main = printHandledIOException $
+  do
+    Options {..} <- runArgsParser
 
-      let traceToFile = not $ null optFileTrace
-      when (traceToFile) $ do
-        C.infoMessage $ "Trace will be dumped to " <> (T.pack optFileTrace) <> "."
-        exist <- doesFileExist optFileTrace
-        when exist $
-          C.warningMessage $ "File " <> (T.pack optFileTrace) <> " already existed, overwrite it."
+    let traceToFile = not $ null optFileTrace
+    when (traceToFile) $ do
+      C.infoMessage $ "Trace will be dumped to " <> (T.pack optFileTrace) <> "."
+      exist <- doesFileExist optFileTrace
+      when exist $
+        C.warningMessage $ "File " <> (T.pack optFileTrace) <> " already existed, overwrite it."
 
-      let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
-          useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
+    let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
+        useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
 
-      when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
-      when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
+    when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
+    when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
 
-      let isFlagEmpty = optFlags == Map.empty
-          isSkipEmpty = optSkip == []
+    let isFlagEmpty = optFlags == Map.empty
+        isSkipEmpty = optSkip == []
 
-      when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag assignments may make difference in dependency resolving."
-      when (not isFlagEmpty) $ do
-        C.infoMessage "You assigned flags:"
-        putStrLn . prettyFlagAssignments $ optFlags
+    when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag assignments may make difference in dependency resolving."
+    when (not isFlagEmpty) $ do
+      C.infoMessage "You assigned flags:"
+      putStrLn . prettyFlagAssignments $ optFlags
 
-      when (not isSkipEmpty) $ do
-        C.infoMessage "You chose to skip:"
-        putStrLn $ prettySkip optSkip
+    when (not isSkipEmpty) $ do
+      C.infoMessage "You chose to skip:"
+      putStrLn $ prettySkip optSkip
 
-      when optAur $ C.infoMessage "You passed -a, searching AUR may takes a long time."
+    when optAur $ C.infoMessage "You passed -a, searching AUR may takes a long time."
 
-      when optUusi $ C.infoMessage "You passed --uusi, uusi will become makedepends of each package."
+    when optUusi $ C.infoMessage "You passed --uusi, uusi will become makedepends of each package."
 
-      hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
-      C.infoMessage "Loading hackage..."
+    hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
+    C.infoMessage "Loading hackage..."
 
-      let isExtraEmpty = optExtraCabalPath == []
+    let isExtraEmpty = optExtraCabalPath == []
 
-      when (not isExtraEmpty) $
-        C.infoMessage $ "You added " <> (T.pack . intercalate ", " $ map takeFileName optExtraCabalPath) <> " as extra cabal file(s), starting parsing right now."
+    when (not isExtraEmpty) $
+      C.infoMessage $ "You added " <> (T.pack . intercalate ", " $ map takeFileName optExtraCabalPath) <> " as extra cabal file(s), starting parsing right now."
 
-      parsedExtra <- mapM parseCabalFile optExtraCabalPath
+    parsedExtra <- mapM parseCabalFile optExtraCabalPath
 
-      let newHackage = foldr (\x acc -> x `insertDB` acc) hackage parsedExtra
+    let newHackage = foldr (\x acc -> x `insertDB` acc) hackage parsedExtra
 
-      community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
-      C.infoMessage "Loading community.db..."
+    community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
+    C.infoMessage "Loading community.db..."
 
-      C.infoMessage "Start running..."
+    C.infoMessage "Start running..."
 
-      empty <- newIORef Set.empty
+    empty <- newIORef Set.empty
 
-      runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi) >>= \case
-        Left x -> C.errorMessage $ "Runtime Error: " <> (T.pack . show $ x)
-        _ -> C.successMessage "Success!"
-  )
-  $ \e -> C.errorMessage $ "IOException: " <> (T.pack . show $ e)
+    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi) & printAppResult
 
 -----------------------------------------------------------------------------
 

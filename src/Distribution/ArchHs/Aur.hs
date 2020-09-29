@@ -24,6 +24,7 @@ where
 import           Data.Aeson
 import           Data.Aeson.Ext                       (generateJSONInstance)
 import           Data.Text                            (Text, pack)
+import           Distribution.ArchHs.Exception
 import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Name
 import           Distribution.ArchHs.Types
@@ -122,7 +123,7 @@ baseURL :: Url 'Https
 baseURL = https "aur.archlinux.org" /: "rpc"
 
 -- | Run 'Aur' effect.
-aurToIO :: Member (Embed IO) r => Sem (Aur ': r) a -> Sem r a
+aurToIO :: Members [WithMyErr, Embed IO] r => Sem (Aur ': r) a -> Sem r a
 aurToIO = interpret $ \case
   (SearchByName name) -> do
     let parms =
@@ -131,7 +132,7 @@ aurToIO = interpret $ \case
             <> "by" =: ("name" :: Text)
             <> "arg" =: (pack name)
         r = req GET baseURL NoReqBody jsonResponse parms
-    response <- embed @IO $ runReq defaultHttpConfig r
+    response <- interpretHttpException $ runReq defaultHttpConfig r
     let body :: AurReply AurSearch = responseBody response
     return $ case r_resultcount body of
       1 -> Just . head $ r_results body
@@ -143,7 +144,7 @@ aurToIO = interpret $ \case
             <> "by" =: ("name" :: Text)
             <> "arg[]" =: (pack name)
         r = req GET baseURL NoReqBody jsonResponse parms
-    response <- embed @IO $ runReq defaultHttpConfig r
+    response <- interpretHttpException $ runReq defaultHttpConfig r
     let body :: AurReply AurInfo = responseBody response
     return $ case r_resultcount body of
       1 -> Just . head $ r_results body

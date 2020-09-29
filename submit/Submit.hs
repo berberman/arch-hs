@@ -8,11 +8,11 @@ module Submit
 where
 
 import qualified Colourista                           as C
-import qualified Control.Exception                    as CE
 import qualified Data.ByteString.Char8                as BS
 import qualified Data.Map.Strict                      as Map
 import           Data.Maybe                           (fromJust)
 import qualified Data.Text                            as T
+import           Distribution.ArchHs.Exception
 import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Local
 import           Distribution.ArchHs.Name
@@ -85,26 +85,24 @@ genCSV = do
          in [unPackageName hackageName, version, prefix <> communityName']
   return $ processField <$> fields
 
-submit :: Members [CommunityEnv, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
+submit :: Members [CommunityEnv, WithMyErr, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
 submit token output upload = do
   v <- printCSV <$> genCSV
   embed $
     when (not . null $ output) $ do
       C.infoMessage $ "Write file: " <> T.pack output
       writeFile output v
-  embed $
-    CE.catch @HttpException
-      ( when (token /= Nothing && upload) $ do
-          C.infoMessage "Uploading..."
-          let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages"
-              r =
-                req PUT api (ReqBodyBs . BS.pack $ v) bsResponse $
-                  header "X-ApiKey" (BS.pack . fromJust $ token) <> header "Content-Type" "text/csv"
-          result <- runReq defaultHttpConfig r
-          C.infoMessage $ "StatusCode: " <> (T.pack . show $ responseStatusCode result)
-          C.infoMessage $ "ResponseMessage: " <> (decodeUtf8 $ responseStatusMessage result)
-          C.infoMessage "ResponseBody:"
-          putStrLn . BS.unpack $ responseBody result
-      )
-      $ \e -> C.errorMessage $ "HttpException: " <> (T.pack . show $ e)
+
+  interpretHttpException $
+    when (token /= Nothing && upload) $ do
+      C.infoMessage "Uploading..."
+      let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages"
+          r =
+            req PUT api (ReqBodyBs . BS.pack $ v) bsResponse $
+              header "X-ApiKey" (BS.pack . fromJust $ token) <> header "Content-Type" "text/csv"
+      result <- runReq defaultHttpConfig r
+      C.infoMessage $ "StatusCode: " <> (T.pack . show $ responseStatusCode result)
+      C.infoMessage $ "ResponseMessage: " <> (decodeUtf8 $ responseStatusMessage result)
+      C.infoMessage "ResponseBody:"
+      putStrLn . BS.unpack $ responseBody result
   return ()
