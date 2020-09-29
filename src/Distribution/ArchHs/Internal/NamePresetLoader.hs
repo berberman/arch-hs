@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE TemplateHaskell    #-}
 
-module Distribution.ArchHs.Internal.NameLoader (loadNamePreset) where
+module Distribution.ArchHs.Internal.NamePresetLoader (loadNamePreset) where
 
 import           Data.Aeson
 import qualified Data.ByteString     as BS
@@ -12,7 +12,8 @@ import           Data.Map.Strict     (Map, fromList, keys, toList)
 import           Data.Tuple          (swap)
 import           GHC.Generics        (Generic)
 import           Language.Haskell.TH
-import           Paths_arch_hs       (getDataFileName)
+import System.Directory (getCurrentDirectory)
+import System.FilePath ((</>))
 
 data NamePreset = NamePreset
   { falseList :: [String],
@@ -22,12 +23,10 @@ data NamePreset = NamePreset
 
 instance FromJSON NamePreset
 
-presetFilePath :: IO FilePath
-presetFilePath = getDataFileName "NAME_PRESET.json"
 
 loadNamePreset :: DecsQ
 loadNamePreset = do
-  txt <- runIO $ presetFilePath >>= BS.readFile
+  txt <- runIO $ getCurrentDirectory >>= \dot -> BS.readFile $ dot </> "data" </> "NAME_PRESET.json"
   let NamePreset {..} = case decodeStrict txt of
         Just x -> x
         _      -> error "Failed to parse json"

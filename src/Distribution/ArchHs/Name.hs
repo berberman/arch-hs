@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveAnyClass     #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -22,7 +21,7 @@ where
 
 import           Data.Char                               (toLower)
 import           Data.String                             (IsString, fromString)
-import           Distribution.ArchHs.Internal.NameLoader
+import           Distribution.ArchHs.Internal.NamePresetLoader
 import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Types
 

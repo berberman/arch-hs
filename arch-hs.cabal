@@ -17,10 +17,9 @@ maintainer:          berberman <1793913507@qq.com>
 copyright:           2020 berberman
 category:            Distribution
 build-type:          Simple
+extra-source-files:  data/NAME_PRESET.json
 extra-doc-files:     README.md
                      CHANGELOG.md
-data-dir:            data
-data-files:          NAME_PRESET.json
 tested-with:         GHC == 8.10.2
 
 source-repository head
@@ -95,9 +94,7 @@ library
                        Distribution.ArchHs.Internal.Prelude
                        Distribution.ArchHs.OptionReader
   other-modules:       Data.Aeson.Ext
-                       Paths_arch_hs
-                       Distribution.ArchHs.Internal.NameLoader
-  autogen-modules:     Paths_arch_hs
+                       Distribution.ArchHs.Internal.NamePresetLoader
                        
 
 executable arch-hs
