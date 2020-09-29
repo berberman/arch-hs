@@ -90,9 +90,10 @@ library
                        Distribution.ArchHs.PP,
                        Distribution.ArchHs.Name,
                        Distribution.ArchHs.Exception,
-                       OptionParse,
-                       Data.Aeson.Ext,
-                       Polysemy.Req
+                       Distribution.ArchHs.Internal.Prelude
+                       Distribution.ArchHs.OptionReader
+  other-modules:       Data.Aeson.Ext
+                       
 
 executable arch-hs
   import:              common-options

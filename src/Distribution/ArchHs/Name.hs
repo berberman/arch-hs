@@ -15,13 +15,11 @@ module Distribution.ArchHs.Name
   )
 where
 
-import           Data.Char                      (toLower)
-import           Data.List                      (isPrefixOf)
-import qualified Data.Map.Strict                as Map
-import           Data.String                    (IsString, fromString)
+import           Data.Char                            (toLower)
+import qualified Data.Map.Strict                      as Map
+import           Data.String                          (IsString, fromString)
+import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Types
-import           Distribution.Types.PackageName (PackageName, mkPackageName,
-                                                 unPackageName)
 
 data NameRep = CommunityRep | HackageRep
 

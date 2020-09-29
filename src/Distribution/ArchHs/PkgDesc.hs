@@ -19,10 +19,9 @@ module Distribution.ArchHs.PkgDesc
   )
 where
 
-import           Control.DeepSeq      (NFData)
-import qualified Data.Map.Strict      as Map
-import           Data.Void            (Void)
-import           GHC.Generics         (Generic)
+import qualified Data.Map.Strict                      as Map
+import           Data.Void                            (Void)
+import           Distribution.ArchHs.Internal.Prelude
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 

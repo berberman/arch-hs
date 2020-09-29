@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_HADDOCK hide #-}
 
-module OptionParse
+module Distribution.ArchHs.OptionReader
   ( readFlag,
     optFlagReader,
     optFlagParser,
@@ -13,22 +12,14 @@ module OptionParse
   )
 where
 
-import           Data.List                      (groupBy, intercalate)
-import           Data.List.Split                (splitOn)
-import qualified Data.Map.Strict                as Map
-import           Data.Void                      (Void)
-import           Distribution.ArchHs.Types
+import qualified Data.Map.Strict                      as Map
+import           Data.Void                            (Void)
+import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Utils
-import           Distribution.Parsec            (simpleParsec)
-import           Distribution.Types.Flag        (FlagAssignment,
-                                                 insertFlagAssignment,
-                                                 mkFlagAssignment, mkFlagName)
-import           Distribution.Types.PackageName (PackageName, mkPackageName)
-import           Distribution.Version           (Version)
 import           Options.Applicative
-import           System.FilePath                (takeExtension)
-import qualified Text.Megaparsec                as M
-import qualified Text.Megaparsec.Char           as M
+import           System.FilePath                      (takeExtension)
+import qualified Text.Megaparsec                      as M
+import qualified Text.Megaparsec.Char                 as M
 
 readFlag :: [(String, String, Bool)] -> Map.Map PackageName FlagAssignment
 readFlag [] = Map.empty

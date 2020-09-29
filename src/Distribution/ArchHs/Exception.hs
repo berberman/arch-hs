@@ -9,9 +9,7 @@ where
 
 import           Distribution.ArchHs.Name
 import           Distribution.ArchHs.Types
-import           Distribution.Pretty            (prettyShow)
-import           Distribution.Types.PackageName (PackageName, unPackageName)
-import           Distribution.Types.Version     (Version)
+import Distribution.ArchHs.Internal.Prelude
 
 -- | Error effect of 'MyException'
 type WithMyErr = Error MyException

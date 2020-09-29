@@ -7,22 +7,19 @@ module Submit
   )
 where
 
-import qualified Colourista                     as C
-import qualified Control.Exception              as CE
-import           Control.Monad                  (when)
-import qualified Data.ByteString.Char8          as BS
-import           Data.List                      (sortBy)
-import qualified Data.Map.Strict                as Map
-import           Data.Maybe                     (fromJust)
-import qualified Data.Text                      as T
-import           Data.Text.Encoding             (decodeUtf8)
+import qualified Colourista                           as C
+import qualified Control.Exception                    as CE
+import qualified Data.ByteString.Char8                as BS
+import qualified Data.Map.Strict                      as Map
+import           Data.Maybe                           (fromJust)
+import qualified Data.Text                            as T
+import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Local
 import           Distribution.ArchHs.Name
 import           Distribution.ArchHs.Types
-import           Distribution.Types.PackageName (unPackageName)
 import           Network.HTTP.Req
-import           OptionParse                    hiding (header)
-import qualified OptionParse
+import           Options.Applicative                  hiding (header)
+import qualified Options.Applicative
 import           Text.CSV
 
 data Options = Options
@@ -63,7 +60,7 @@ runArgsParser =
       (cmdOptions <**> helper)
       ( fullDesc
           <> progDesc "Try to reach the TARGET QAQ."
-          <> OptionParse.header "arch-hs-submit - a program submitting haskell packages in community to hackage arch distro."
+          <> Options.Applicative.header "arch-hs-submit - a program submitting haskell packages in community to hackage arch distro."
       )
 
 genCSV :: Member CommunityEnv r => Sem r CSV

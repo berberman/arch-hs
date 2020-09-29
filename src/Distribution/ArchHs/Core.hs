@@ -13,37 +13,30 @@ module Distribution.ArchHs.Core
   )
 where
 
-import qualified Algebra.Graph.Labelled.AdjacencyMap    as G
-import           Data.Char                              (toLower)
-import           Data.List                              (stripPrefix)
-import qualified Data.Map                               as Map
-import           Data.Set                               (Set)
-import qualified Data.Set                               as Set
+import qualified Algebra.Graph.Labelled.AdjacencyMap  as G
+import           Data.Char                            (toLower)
+import qualified Data.Map                             as Map
+import           Data.Set                             (Set)
+import qualified Data.Set                             as Set
 import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.Hackage            (getLatestCabal,
-                                                         getLatestSHA256)
-import           Distribution.ArchHs.Local              (ghcLibList, ignoreList)
+import           Distribution.ArchHs.Hackage          (getLatestCabal,
+                                                       getLatestSHA256)
+import           Distribution.ArchHs.Internal.Prelude
+import           Distribution.ArchHs.Local            (ghcLibList, ignoreList)
 import           Distribution.ArchHs.Name
-import           Distribution.ArchHs.PkgBuild           (PkgBuild (..),
-                                                         mapLicense)
+import           Distribution.ArchHs.PkgBuild         (PkgBuild (..),
+                                                       mapLicense)
 import           Distribution.ArchHs.Types
 import           Distribution.ArchHs.Utils
-import           Distribution.Compiler                  (CompilerFlavor (..))
+import           Distribution.Compiler                (CompilerFlavor (..))
 import           Distribution.PackageDescription
-import           Distribution.Pretty                    (prettyShow)
 import           Distribution.SPDX
-import           Distribution.System                    (Arch (X86_64),
-                                                         OS (Linux))
-import qualified Distribution.Types.BuildInfo.Lens      as L
-import           Distribution.Types.CondTree            (simplifyCondTree)
-import           Distribution.Types.Dependency          (Dependency)
-import           Distribution.Types.PackageName         (PackageName,
-                                                         unPackageName)
-import           Distribution.Types.UnqualComponentName (UnqualComponentName, unqualComponentNameToPackageName)
-import           Distribution.Types.Version             (mkVersion)
-import           Distribution.Types.VersionRange        (VersionRange,
-                                                         withinRange)
-import           Distribution.Utils.ShortText           (fromShortText)
+import           Distribution.System                  (Arch (X86_64),
+                                                       OS (Linux))
+import qualified Distribution.Types.BuildInfo.Lens    as L
+import           Distribution.Types.CondTree          (simplifyCondTree)
+import           Distribution.Types.Dependency        (Dependency)
+import           Distribution.Utils.ShortText         (fromShortText)
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Linux) = Right True

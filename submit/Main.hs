@@ -3,16 +3,16 @@
 
 module Main (main) where
 
-import qualified Colourista                    as C
-import qualified Control.Exception             as CE
-import           Control.Monad                 (when)
-import qualified Data.Text                     as T
+import qualified Colourista                           as C
+import qualified Control.Exception                    as CE
+import qualified Data.Text                            as T
 import           Distribution.ArchHs.Community
 import           Distribution.ArchHs.Exception
+import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Types
 import           Submit
-import           System.Directory              (doesFileExist)
-import           System.Environment            (lookupEnv)
+import           System.Directory                     (doesFileExist)
+import           System.Environment                   (lookupEnv)
 
 main :: IO ()
 main = CE.catch @CE.IOException

@@ -22,12 +22,12 @@ module Distribution.ArchHs.Aur
 where
 
 import           Data.Aeson
-import           Data.Aeson.Ext            (generateJSONInstance)
-import           Data.Text                 (Text, pack)
+import           Data.Aeson.Ext                       (generateJSONInstance)
+import           Data.Text                            (Text, pack)
+import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Name
 import           Distribution.ArchHs.Types
 import           Network.HTTP.Req
-import           Polysemy.Req              (reqToIO)
 
 -- | AUR response
 data AurReply a = AurReply
@@ -131,7 +131,7 @@ aurToIO = interpret $ \case
             <> "by" =: ("name" :: Text)
             <> "arg" =: (pack name)
         r = req GET baseURL NoReqBody jsonResponse parms
-    response <- reqToIO r
+    response <- embed @IO $ runReq defaultHttpConfig r
     let body :: AurReply AurSearch = responseBody response
     return $ case r_resultcount body of
       1 -> Just . head $ r_results body
@@ -143,7 +143,7 @@ aurToIO = interpret $ \case
             <> "by" =: ("name" :: Text)
             <> "arg[]" =: (pack name)
         r = req GET baseURL NoReqBody jsonResponse parms
-    response <- reqToIO r
+    response <- embed @IO $ runReq defaultHttpConfig r
     let body :: AurReply AurInfo = responseBody response
     return $ case r_resultcount body of
       1 -> Just . head $ r_results body

@@ -21,22 +21,18 @@ module Distribution.ArchHs.Utils
   )
 where
 
-import           Control.Applicative              (Alternative ((<|>)))
-import           Control.Monad                    ((<=<))
+import           Control.Monad                        ((<=<))
+import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Types
-import           Distribution.PackageDescription  (GenericPackageDescription,
-                                                   PackageDescription, homepage,
-                                                   package, packageDescription,
-                                                   repoLocation, sourceRepos)
-import           Distribution.Types.BuildInfo     (BuildInfo (..))
-import           Distribution.Types.Dependency    (Dependency, depPkgName,
-                                                   depVerRange)
-import           Distribution.Types.ExeDependency (ExeDependency (..))
-import qualified Distribution.Types.PackageId     as I
-import           Distribution.Types.PackageName   (PackageName, unPackageName)
-import           Distribution.Utils.ShortText     (fromShortText)
-import           Distribution.Version             (Version, VersionRange)
-import           GHC.Stack                        (callStack, prettyCallStack)
+import           Distribution.PackageDescription      (repoLocation)
+import           Distribution.Types.BuildInfo         (BuildInfo (..))
+import           Distribution.Types.Dependency        (Dependency, depPkgName,
+                                                       depVerRange)
+import           Distribution.Types.ExeDependency     (ExeDependency (..))
+import qualified Distribution.Types.PackageId         as I
+import           Distribution.Utils.ShortText         (fromShortText)
+import           GHC.Stack                            (callStack,
+                                                       prettyCallStack)
 
 -- | Extract the package name from a 'ExeDependency'.
 unExe :: ExeDependency -> PackageName
@@ -71,10 +67,8 @@ getUrl cabal = fromJust $ home <|> vcs <|> fallback
     f x  = Just x
     fromJust (Just x) = x
     fromJust _        = fail "Impossible."
-    safeHead []      = Nothing
-    safeHead (x : _) = Just x
     home = f . fromShortText . homepage $ cabal
-    vcs = repoLocation <=< safeHead . sourceRepos $ cabal
+    vcs = repoLocation <=< (^? ix 0) . sourceRepos $ cabal
     fallback = Just $ "https://hackage.haskell.org/package/" <> (unPackageName $ getPkgName cabal)
 
 

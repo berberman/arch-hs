@@ -35,35 +35,14 @@ module Distribution.ArchHs.Types
     depName,
     depType,
     DependencyRecord,
-    HasCallStack,
-    Generic,
-    NFData,
-    module Polysemy,
-    module Polysemy.Error,
-    module Polysemy.Reader,
-    module Polysemy.State,
-    module Polysemy.Trace,
-    module Lens.Micro,
   )
 where
 
-import           Control.DeepSeq                        (NFData)
-import           Data.Map.Strict                        (Map)
-import           Distribution.Hackage.DB                (HackageDB)
-import           Distribution.PackageDescription        (FlagAssignment)
-import           Distribution.Types.PackageName         (PackageName)
-import           Distribution.Types.UnqualComponentName (UnqualComponentName,
-                                                         unUnqualComponentName)
-import           Distribution.Version                   (VersionRange)
-import           GHC.Generics                           (Generic)
-import           GHC.Stack                              (HasCallStack)
-import           Lens.Micro
-import           Lens.Micro.TH                          (makeLenses)
-import           Polysemy
-import           Polysemy.Error
-import           Polysemy.Reader
-import           Polysemy.State
-import           Polysemy.Trace
+import           Data.Map.Strict                      (Map)
+import           Distribution.ArchHs.Internal.Prelude
+import           Distribution.Hackage.DB              (HackageDB)
+import           Lens.Micro.TH                        (makeLenses)
+
 
 -- | A list of 'PackageName'
 type PkgList = [PackageName]

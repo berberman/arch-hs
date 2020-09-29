@@ -10,29 +10,23 @@ where
 
 import qualified Colourista                             as C
 import qualified Control.Exception                      as CE
-import           Data.List                              (intercalate, nub, sort,
-                                                         (\\))
 import qualified Data.Map.Strict                        as Map
 import           Data.Maybe                             (fromJust)
 import qualified Data.Text                              as T
-import           Distribution.ArchHs.Community
-import           Distribution.ArchHs.Core
+import           Distribution.ArchHs.Community          (versionInCommunity)
+import           Distribution.ArchHs.Core               (evalConditionTree)
 import           Distribution.ArchHs.Exception
+import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.PP                 (prettyFlags)
 import           Distribution.ArchHs.Types
 import           Distribution.ArchHs.Utils
-import           Distribution.PackageDescription
+import           Distribution.PackageDescription        (CondTree, ConfVar)
 import           Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import           Distribution.Parsec                    (simpleParsec)
-import           Distribution.Pretty                    (prettyShow)
 import qualified Distribution.Types.BuildInfo.Lens      as L
-import           Distribution.Types.Dependency
-import           Distribution.Types.PackageName
-import           Distribution.Types.UnqualComponentName
+import           Distribution.Types.Dependency          (Dependency)
 import           Distribution.Utils.ShortText           (fromShortText)
-import           Distribution.Version
 import           Network.HTTP.Req                       hiding (header)
-import           OptionParse
+import           Distribution.ArchHs.OptionReader
 
 data Options = Options
   { optCommunityPath :: FilePath,
@@ -187,7 +181,7 @@ diffCabal name a b = do
 
 diffTerm :: String -> (a -> String) -> a -> a -> String
 diffTerm s f a b =
-  let 
+  let
     f' = T.unpack.T.strip.T.pack.f
     (ra, rb) = (f' a, f' b)
    in (C.formatWith [C.magenta] s)

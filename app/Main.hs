@@ -5,49 +5,42 @@
 
 module Main (main) where
 
-import qualified Algebra.Graph.AdjacencyMap.Algorithm   as G
-import qualified Algebra.Graph.Labelled.AdjacencyMap    as GL
+import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
+import qualified Algebra.Graph.Labelled.AdjacencyMap  as GL
 import           Args
-import qualified Colourista                             as C
+import qualified Colourista                           as C
 import           Conduit
-import qualified Control.Exception                      as CE
-import           Control.Monad                          (filterM, when)
-import           Data.IORef                             (IORef, newIORef)
-import           Data.List                              (groupBy, intercalate,
-                                                         isInfixOf, nub)
-import           Data.List.NonEmpty                     (toList)
-import qualified Data.Map.Strict                        as Map
-import qualified Data.Set                               as Set
-import qualified Data.Text                              as T
-import           Distribution.ArchHs.Aur                (Aur, aurToIO, isInAur)
-import           Distribution.ArchHs.Community          (defaultCommunityPath,
-                                                         isInCommunity,
-                                                         loadProcessedCommunity)
-import           Distribution.ArchHs.Core               (cabalToPkgBuild,
-                                                         getDependencies)
+import qualified Control.Exception                    as CE
+import           Control.Monad                        (filterM)
+import           Data.IORef                           (IORef, newIORef)
+import           Data.List.NonEmpty                   (toList)
+import qualified Data.Map.Strict                      as Map
+import qualified Data.Set                             as Set
+import qualified Data.Text                            as T
+import           Distribution.ArchHs.Aur              (Aur, aurToIO, isInAur)
+import           Distribution.ArchHs.Community        (defaultCommunityPath,
+                                                       isInCommunity,
+                                                       loadProcessedCommunity)
+import           Distribution.ArchHs.Core             (cabalToPkgBuild,
+                                                       getDependencies)
 import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.Hackage            (getPackageFlag,
-                                                         insertDB,
-                                                         loadHackageDB,
-                                                         lookupHackagePath,
-                                                         parseCabalFile)
+import           Distribution.ArchHs.Hackage          (getPackageFlag, insertDB,
+                                                       loadHackageDB,
+                                                       lookupHackagePath,
+                                                       parseCabalFile)
+import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Local
-import qualified Distribution.ArchHs.PkgBuild           as N
-import           Distribution.ArchHs.PP                 (prettyDeps,
-                                                         prettyFlagAssignments,
-                                                         prettyFlags,
-                                                         prettySkip,
-                                                         prettySolvedPkgs)
+import qualified Distribution.ArchHs.PkgBuild         as N
+import           Distribution.ArchHs.PP               (prettyDeps,
+                                                       prettyFlagAssignments,
+                                                       prettyFlags, prettySkip,
+                                                       prettySolvedPkgs)
 import           Distribution.ArchHs.Types
-import           Distribution.ArchHs.Utils              (getTwo)
-import           Distribution.Hackage.DB                (HackageDB)
-import           Distribution.PackageDescription        (FlagAssignment)
-import           Distribution.Types.PackageName         (PackageName,
-                                                         unPackageName)
-import           Distribution.Types.UnqualComponentName (mkUnqualComponentName)
-import           System.Directory                       (createDirectoryIfMissing,
-                                                         doesFileExist)
-import           System.FilePath                        (takeFileName, (</>))
+import           Distribution.ArchHs.Utils            (getTwo)
+import           Distribution.Hackage.DB              (HackageDB)
+import           System.Directory                     (createDirectoryIfMissing,
+                                                       doesFileExist)
+import           System.FilePath                      (takeFileName)
 
 app ::
   Members '[Embed IO, State (Set.Set PackageName), CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>

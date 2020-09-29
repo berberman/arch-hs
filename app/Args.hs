@@ -7,10 +7,11 @@ module Args
     )
 where
 
-import qualified Data.Map.Strict                as Map
-import           Distribution.ArchHs.Types      (FlagAssignments)
-import           Distribution.Types.PackageName (PackageName)
-import           OptionParse
+import qualified Data.Map.Strict                      as Map
+import           Distribution.ArchHs.Internal.Prelude
+import           Distribution.ArchHs.Types
+import           Distribution.ArchHs.OptionReader
+
 
 data Options = Options
     { optHackagePath    :: FilePath,
