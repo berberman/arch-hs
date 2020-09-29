@@ -2,6 +2,9 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE OverloadedLists  #-}
+{-# LANGUAGE CPP  #-}
 
 module Distribution.ArchHs.Name
   ( MyName,
@@ -14,9 +17,9 @@ module Distribution.ArchHs.Name
     isHaskellPackage,
   )
 where
-
 import           Data.Char                            (toLower)
 import qualified Data.Map.Strict                      as Map
+import           Data.Map.Strict                      (Map)
 import           Data.String                          (IsString, fromString)
 import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Types
@@ -63,11 +66,11 @@ instance HasMyName CommunityName where
         _      -> MyName $ drop 8 s
   toCommunityRep = MyName . unCommunityName
 
-communityPreset :: Map.Map (MyName 'CommunityRep) (MyName 'HackageRep)
-communityPreset = Map.fromList $ (\(x, y) -> (MyName x, MyName y)) <$> preset
+communityPreset :: Map (MyName 'CommunityRep) (MyName 'HackageRep)
+communityPreset = preset
 
 hackagePreset :: Map.Map (MyName 'HackageRep) (MyName 'CommunityRep)
-hackagePreset = Map.fromList $ (\(x, y) -> (MyName y, MyName x)) <$> preset
+hackagePreset = Map.fromList . (fmap (\(x, y) -> (y, x))) . Map.toList $ preset
 
 mToCommunityName :: MyName 'CommunityRep -> CommunityName
 mToCommunityName = CommunityName . unMyName
@@ -84,95 +87,4 @@ toHackageName = mToHackageName . toHackageRep
 isHaskellPackage :: CommunityName -> Bool
 isHaskellPackage name = let rep = toCommunityRep name in (rep `Map.member` communityPreset || "haskell-" `isPrefixOf` (unMyName rep)) &&  rep `notElem` falseList
 
-falseList :: [MyName 'CommunityRep]
-falseList =
-  MyName
-    <$> [ "haskell-network2.8",
-          "haskell-sbv8.7"
-        ]
-
-preset :: [(String, String)]
-preset =
-  [ ("agda", "Agda"),
-    ("alex", "alex"),
-    ("arch-hs", "arch-hs"),
-    ("c2hs", "c2hs"),
-    ("haskell-cabal", "Cabal"),
-    ("cabal-install", "cabal-install"),
-    ("cgrep", "cgrep"),
-    ("cryptol", "cryptol"),
-    ("darcs", "darcs"),
-    ("dhall", "dhall"),
-    ("dhall-bash", "dhall-bash"),
-    ("dhall-json", "dhall-json"),
-    ("dhall-lsp-server", "dhall-lsp-server"),
-    ("dhall-yaml", "dhall-yaml"),
-    ("git-annex", "git-annex"),
-    ("git-repair", "git-repair"),
-    ("happy", "happy"),
-    ("haskell-chasingbottoms", "ChasingBottoms"),
-    ("haskell-ci","haskell-ci"),
-    ("haskell-configfile", "ConfigFile"),
-    ("haskell-cracknum", "crackNum"),
-    ("haskell-dav", "DAV"),
-    ("haskell-decimal", "Decimal"),
-    ("haskell-diff", "Diff"),
-    ("haskell-edisonapi", "EdisonAPI"),
-    ("haskell-edisoncore", "EdisonCore"),
-    ("haskell-findbin", "FindBin"),
-    ("haskell-floatinghex", "FloatingHex"),
-    ("haskell-glob", "Glob"),
-    ("haskell-gtk", "gtk3"),
-    ("haskell-graphscc", "GraphSCC"),
-    ("haskell-hopenpgp", "hOpenPGP"),
-    ("haskell-http", "HTTP"),
-    ("haskell-hunit", "HUnit"),
-    ("haskell-ifelse", "IfElse"),
-    ("haskell-juicypixels", "JuicyPixels"),
-    ("haskell-lexer", "haskell-lexer"),
-    ("haskell-listlike", "ListLike"),
-    ("haskell-missingh", "MissingH"),
-    ("haskell-monadlib", "monadLib"),
-    ("haskell-monadrandom", "MonadRandom"),
-    ("haskell-only", "Only"),
-    ("haskell-puremd5", "pureMD5"),
-    ("haskell-quickcheck", "QuickCheck"),
-    ("haskell-ranged-sets", "Ranged-sets"),
-    ("haskell-safesemaphore", "SafeSemaphore"),
-    ("haskell-sbv8.7", "haskell-sbv8.7"),
-    ("haskell-sha", "SHA"),
-    ("haskell-smtlib", "smtLib"),
-    ("haskell-src-exts", "haskell-src-exts"),
-    ("haskell-src-exts-util", "haskell-src-exts-util"),
-    ("haskell-src-meta", "haskell-src-meta"),
-    ("haskell-statevar", "StateVar"),
-    ("haskell-stmonadtrans", "STMonadTrans"),
-    ("haskell-unixutils", "Unixutils"),
-    ("haskell-x11", "X11"),
-    ("haskell-x11-xft", "X11-xft"),
-    ("hasktags", "hasktags"),
-    ("hledger", "hledger"),
-    ("hledger-api", "hledger-api"),
-    ("hledger-ui", "hledger-ui"),
-    ("hledger-web", "hledger-web"),
-    ("hlint", "hlint"),
-    ("hoogle", "hoogle"),
-    ("hopenpgp-tools", "hopenpgp-tools"),
-    ("idris", "idris"),
-    ("misfortune", "misfortune"),
-    ("pandoc", "pandoc"),
-    ("pandoc-citeproc", "pandoc-citeproc"),
-    ("pandoc-crossref", "pandoc-crossref"),
-    ("postgrest", "postgrest"),
-    ("shellcheck", "ShellCheck"),
-    ("stack", "stack"),
-    ("stylish-haskell", "stylish-haskell"),
-    ("tamarin-prover", "tamarin-prover"),
-    ("taskell", "taskell"),
-    ("tidalcycles", "tidal"),
-    ("unlambda", "unlambda"),
-    ("xmobar", "xmobar"),
-    ("xmonad", "xmonad"),
-    ("xmonad-contrib", "xmonad-contrib"),
-    ("xmonad-utils", "xmonad-utils")
-  ]
+#include "../../../NAME_PRESET.hs"

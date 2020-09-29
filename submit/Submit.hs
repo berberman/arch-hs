@@ -99,7 +99,7 @@ submit token output upload = do
       let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages"
           r =
             req PUT api (ReqBodyBs . BS.pack $ v) bsResponse $
-              header "X-ApiKey" (BS.pack . fromJust $ token) <> header "Content-Type" "text/csv"
+              header "Authorization" (BS.pack $ "X-ApiKey " <> fromJust token) <> header "Content-Type" "text/csv"
       result <- runReq defaultHttpConfig r
       C.infoMessage $ "StatusCode: " <> (T.pack . show $ responseStatusCode result)
       C.infoMessage $ "ResponseMessage: " <> (decodeUtf8 $ responseStatusMessage result)
