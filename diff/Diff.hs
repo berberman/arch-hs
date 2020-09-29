@@ -187,7 +187,9 @@ diffCabal name a b = do
 
 diffTerm :: String -> (a -> String) -> a -> a -> String
 diffTerm s f a b =
-  let (ra, rb) = (f a, f b)
+  let 
+    f' = T.unpack.T.strip.T.pack.f
+    (ra, rb) = (f' a, f' b)
    in (C.formatWith [C.magenta] s)
         <> (if ra == rb then ra else ((C.formatWith [C.red] ra) <> "  ⇒  " <> C.formatWith [C.green] rb))
 
