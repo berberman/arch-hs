@@ -1,10 +1,12 @@
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveAnyClass     #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE OverloadedLists    #-}
 {-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE OverloadedLists  #-}
-{-# LANGUAGE CPP  #-}
+{-# LANGUAGE QuasiQuotes        #-}
+{-# LANGUAGE TemplateHaskell    #-}
 
 module Distribution.ArchHs.Name
   ( MyName,
@@ -17,14 +19,21 @@ module Distribution.ArchHs.Name
     isHaskellPackage,
   )
 where
-import           Data.Char                            (toLower)
-import qualified Data.Map.Strict                      as Map
-import           Data.Map.Strict                      (Map)
-import           Data.String                          (IsString, fromString)
+
+import           Data.Char                               (toLower)
+import           Data.String                             (IsString, fromString)
+import           Distribution.ArchHs.Internal.NameLoader
 import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.ArchHs.Types
 
 data NameRep = CommunityRep | HackageRep
+
+$(loadNamePreset)
+
+communityToHackage :: MyName 'CommunityRep -> Maybe (MyName 'HackageRep)
+hackageToCommunity :: MyName 'HackageRep -> Maybe (MyName 'CommunityRep)
+falseList :: [MyName 'CommunityRep]
+communityList :: [MyName 'CommunityRep]
 
 newtype MyName a = MyName {unMyName :: String}
   deriving stock (Show, Read, Eq, Ord, Generic)
@@ -49,7 +58,7 @@ instance HasMyName PackageName where
   toHackageRep = MyName . unPackageName
   toCommunityRep = go . unPackageName
     where
-      go s = case hackagePreset Map.!? (MyName s) of
+      go s = case hackageToCommunity (MyName s) of
         Just x -> x
         _ ->
           MyName . fmap toLower $
@@ -61,16 +70,10 @@ instance HasMyName PackageName where
 instance HasMyName CommunityName where
   toHackageRep = go . unCommunityName
     where
-      go s = case communityPreset Map.!? (MyName s) of
+      go s = case communityToHackage (MyName s) of
         Just x -> x
         _      -> MyName $ drop 8 s
   toCommunityRep = MyName . unCommunityName
-
-communityPreset :: Map (MyName 'CommunityRep) (MyName 'HackageRep)
-communityPreset = preset
-
-hackagePreset :: Map.Map (MyName 'HackageRep) (MyName 'CommunityRep)
-hackagePreset = Map.fromList . (fmap (\(x, y) -> (y, x))) . Map.toList $ preset
 
 mToCommunityName :: MyName 'CommunityRep -> CommunityName
 mToCommunityName = CommunityName . unMyName
@@ -85,6 +88,4 @@ toHackageName :: HasMyName n => n -> PackageName
 toHackageName = mToHackageName . toHackageRep
 
 isHaskellPackage :: CommunityName -> Bool
-isHaskellPackage name = let rep = toCommunityRep name in (rep `Map.member` communityPreset || "haskell-" `isPrefixOf` (unMyName rep)) &&  rep `notElem` falseList
-
-#include "../../../NAME_PRESET.hs"
+isHaskellPackage name = let rep = toCommunityRep name in (rep `elem` communityList || "haskell-" `isPrefixOf` (unMyName rep)) && rep `notElem` falseList

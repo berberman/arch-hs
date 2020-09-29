@@ -19,7 +19,8 @@ category:            Distribution
 build-type:          Simple
 extra-doc-files:     README.md
                      CHANGELOG.md
-extra-source-files:  NAME_PRESET.hs
+data-dir:            data
+data-files:          NAME_PRESET.json
 tested-with:         GHC == 8.10.2
 
 source-repository head
@@ -94,6 +95,9 @@ library
                        Distribution.ArchHs.Internal.Prelude
                        Distribution.ArchHs.OptionReader
   other-modules:       Data.Aeson.Ext
+                       Paths_arch_hs
+                       Distribution.ArchHs.Internal.NameLoader
+  autogen-modules:     Paths_arch_hs
                        
 
 executable arch-hs
