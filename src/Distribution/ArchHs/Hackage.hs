@@ -73,7 +73,7 @@ withLatestVersion f name = do
   case Map.lookup name db of
     (Just m) -> case Map.lookupMax m of
       Just (_, vdata) -> return $ f vdata
-      Nothing         -> throw $ VersionError name nullVersion
+      Nothing         -> throw $ VersionNotFound name nullVersion
     Nothing -> throw $ PkgNotFound name
 
 -- | Get the latest 'GenericPackageDescription'.
@@ -91,7 +91,7 @@ getCabal name version = do
   case Map.lookup name db of
     (Just m) -> case Map.lookup version m of
       Just vdata -> return $ vdata & cabalFile
-      Nothing    -> throw $ VersionError name version
+      Nothing    -> throw $ VersionNotFound name version
     Nothing -> throw $ PkgNotFound name
 
 -- | Get flags of a package.

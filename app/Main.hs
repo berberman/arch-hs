@@ -99,7 +99,7 @@ app target path aurSupport skip uusi = do
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle $ newGraph of
-    Left c  -> throw . CyclicError $ toList c
+    Left c  -> throw . CyclicExist $ toList c
     Right x -> return x
   embed $ putStrLn . prettyDeps . reverse $ flattened
   flags <- filter (\(_, l) -> length l /= 0) <$> mapM (\n -> (n,) <$> getPackageFlag n) flattened

@@ -9,7 +9,6 @@ module Diff
 where
 
 import qualified Colourista                             as C
-import qualified Control.Exception                      as CE
 import qualified Data.Map.Strict                        as Map
 import           Data.Maybe                             (fromJust)
 import qualified Data.Text                              as T
@@ -121,13 +120,10 @@ getCabalFromHackage name version = do
       api = https "hackage.haskell.org" /: "package" /: urlPath /: "revision" /: "0.cabal"
       r = req GET api NoReqBody bsResponse mempty
   embed $ C.infoMessage $ "Downloading cabal file from " <> renderUrl api <> "..."
-  response <- embed $ CE.try @HttpException (runReq defaultHttpConfig r)
-  result <- case response of
-    Left _  -> throw $ VersionError name version
-    Right x -> return x
-  case parseGenericPackageDescriptionMaybe $ responseBody result of
+  response <- interceptHttpException (runReq defaultHttpConfig r)
+  case parseGenericPackageDescriptionMaybe $ responseBody response of
     Just x -> return x
-    _ -> embed @IO $ fail $ "Failed to parse .cabal file from " <> show api
+    _      -> error $ "Failed to parse .cabal file from " <> show api
 
 directDependencies ::
   Members [FlagAssignmentsEnv, Trace, DependencyRecord] r =>
