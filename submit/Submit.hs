@@ -4,28 +4,31 @@ module Submit
   ( Options (..),
     runArgsParser,
     submit,
+    check,
   )
 where
 
-import qualified Colourista                           as C
-import qualified Data.ByteString.Char8                as BS
-import qualified Data.Map.Strict                      as Map
-import           Data.Maybe                           (fromJust)
-import qualified Data.Text                            as T
-import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.Local
-import           Distribution.ArchHs.Name
-import           Distribution.ArchHs.Types
-import           Network.HTTP.Req
-import           Options.Applicative                  hiding (header)
+import qualified Colourista as C
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.Map.Strict as Map
+import Data.Maybe (fromJust)
+import qualified Data.Text as T
+import Data.Void (Void)
+import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Local
+import Distribution.ArchHs.Name
+import Distribution.ArchHs.Types
+import Network.HTTP.Req
+import Options.Applicative hiding (header)
 import qualified Options.Applicative
-import           Text.CSV
+import qualified Text.Megaparsec as M
+import Text.Megaparsec.Char as M
 
 data Options = Options
   { optCommunityPath :: FilePath,
-    optOutput        :: FilePath,
-    optUpload        :: Bool
+    optOutput :: FilePath,
+    optUpload :: Bool
   }
 
 cmdOptions :: Parser Options
@@ -39,7 +42,7 @@ cmdOptions =
           <> showDefault
           <> value "/var/lib/pacman/sync/community.db"
       )
-    <*> option
+    <*> Options.Applicative.option
       str
       ( long "output"
           <> metavar "PATH"
@@ -63,7 +66,30 @@ runArgsParser =
           <> Options.Applicative.header "arch-hs-submit - a program submitting haskell packages in community to hackage arch distro."
       )
 
-genCSV :: Member CommunityEnv r => Sem r CSV
+type DistroRecord = (String, String, String)
+
+type DirstroCSV = [DistroRecord]
+
+renderDistroCSV :: DirstroCSV -> String
+renderDistroCSV = mconcat . fmap (\(a, b, c) -> wrap a <> "," <> wrap b <> "," <> wrap c <> "\n")
+  where
+    wrap x = "\"" <> x <> "\""
+
+distroCSVParser :: M.Parsec Void String DirstroCSV
+distroCSVParser = M.sepBy distroRecordParser newline
+
+distroRecordParser :: M.Parsec Void String DistroRecord
+distroRecordParser =
+  (M.between (M.char '"') (M.char '"') (M.many $ M.noneOf (",\"\n" :: String)) `M.sepBy` (M.char ',')) >>= \case
+    (a : b : c : []) -> return (a, b, c)
+    _ -> fail "Failed to parse record"
+
+parseDistroCSV :: String -> DirstroCSV
+parseDistroCSV s = case M.parse distroCSVParser "DistroCSV" s of
+  Left err -> fail $ M.errorBundlePretty err
+  Right x -> x
+
+genCSV :: Member CommunityEnv r => Sem r DirstroCSV
 genCSV = do
   db <- ask @CommunityDB
   let communityPackages = Map.toList db
@@ -82,12 +108,12 @@ genCSV = do
               if (hackageName `elem` ghcLibList || hackageName == "ghc")
                 then "ghc"
                 else unCommunityName communityName
-         in [unPackageName hackageName, version, prefix <> communityName']
+         in (unPackageName hackageName, version, prefix <> communityName')
   return $ processField <$> fields
 
 submit :: Members [CommunityEnv, WithMyErr, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
 submit token output upload = do
-  v <- printCSV <$> genCSV
+  v <- renderDistroCSV <$> genCSV
   embed $
     when (not . null $ output) $ do
       C.infoMessage $ "Write file: " <> T.pack output
@@ -106,3 +132,13 @@ submit token output upload = do
       C.infoMessage "ResponseBody:"
       putStrLn . BS.unpack $ responseBody result
   return ()
+
+check :: Members [CommunityEnv, WithMyErr, Embed IO] r => Sem r ()
+check = do
+  let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages.csv"
+      r = req GET api NoReqBody bsResponse mempty
+  embed $ C.infoMessage "Downloading csv..."
+  result <- interceptHttpException $ runReq defaultHttpConfig r
+  let bs = responseBody result
+      z = parseDistroCSV . T.unpack $ decodeUtf8 bs
+  embed $ print z

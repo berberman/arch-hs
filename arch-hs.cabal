@@ -122,7 +122,7 @@ executable arch-hs-submit
   hs-source-dirs:      submit
   main-is:             Main.hs
   other-modules:       Submit
-  build-depends:       arch-hs, csv
+  build-depends:       arch-hs
   ghc-options:         -threaded
                        -rtsopts
                        -with-rtsopts=-N
