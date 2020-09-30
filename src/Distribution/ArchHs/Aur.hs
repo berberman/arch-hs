@@ -132,7 +132,7 @@ aurToIO = interpret $ \case
             <> "by" =: ("name" :: Text)
             <> "arg" =: (pack name)
         r = req GET baseURL NoReqBody jsonResponse parms
-    response <- interpretHttpException $ runReq defaultHttpConfig r
+    response <- interceptHttpException $ runReq defaultHttpConfig r
     let body :: AurReply AurSearch = responseBody response
     return $ case r_resultcount body of
       1 -> Just . head $ r_results body
@@ -144,7 +144,7 @@ aurToIO = interpret $ \case
             <> "by" =: ("name" :: Text)
             <> "arg[]" =: (pack name)
         r = req GET baseURL NoReqBody jsonResponse parms
-    response <- interpretHttpException $ runReq defaultHttpConfig r
+    response <- interceptHttpException $ runReq defaultHttpConfig r
     let body :: AurReply AurInfo = responseBody response
     return $ case r_resultcount body of
       1 -> Just . head $ r_results body

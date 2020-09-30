@@ -43,15 +43,17 @@ import           Distribution.ArchHs.Internal.Prelude
 import           Distribution.Hackage.DB              (HackageDB)
 import           Lens.Micro.TH                        (makeLenses)
 
-
 -- | A list of 'PackageName'
 type PkgList = [PackageName]
 
 -- | A list of component represented by 'UnqualComponentName' and its dependencies collected in a 'PkgList'
 type ComponentPkgList = [(UnqualComponentName, PkgList)]
 
--- Name of packages in archlinux community repo
-newtype CommunityName = CommunityName {unCommunityName :: String}
+-- | Name of packages in archlinux community repo, a wrapper of 'String'.
+newtype CommunityName = CommunityName
+  { -- | Unwrap the value
+    unCommunityName :: String
+  }
   deriving stock (Show, Read, Eq, Ord, Generic)
   deriving anyclass (NFData)
 

@@ -277,13 +277,11 @@ Available options:
 For all available options, have a look at the help message.
 
 
-## Name preset
+## [Name preset](https://github.com/berberman/arch-hs/blob/master/data/NAME_PRESET.json)
 
-[Name preset](https://github.com/berberman/arch-hs/blob/master/NAME_PRESET.hs) lies in the root of `arch-hs`.
+To distribute a haskell package to archlinux, the name of package should be changed according to the naming convention:
 
-To distribute a haskell package to archlinux, the name of package should be changed according to naming convention:
-
-* for haskell libraries, their names must have prefix `haskell-`
+* for haskell libraries, their names must have `haskell-` prefix
 
 * for programs, it depends on circumstances
 

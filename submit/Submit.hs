@@ -93,7 +93,7 @@ submit token output upload = do
       C.infoMessage $ "Write file: " <> T.pack output
       writeFile output v
 
-  interpretHttpException $
+  interceptHttpException $
     when (token /= Nothing && upload) $ do
       C.infoMessage "Uploading..."
       let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages"

@@ -1,3 +1,9 @@
+-- | Copyright: (c) 2020 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <1793913507@qq.com>
+-- Stability: experimental
+-- Portability: portable
+-- A re-export list.
 module Distribution.ArchHs.Internal.Prelude(
   NFData,
   Generic,

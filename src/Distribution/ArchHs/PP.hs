@@ -1,6 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
-
+-- | Copyright: (c) 2020 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <1793913507@qq.com>
+-- Stability: experimental
+-- Portability: portable
+-- This module provides simple pretty-printing functions work with the cli program.
 module Distribution.ArchHs.PP
   ( prettySkip,
     prettyFlagAssignments,

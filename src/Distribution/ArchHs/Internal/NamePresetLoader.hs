@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE RecordWildCards    #-}
@@ -12,8 +11,8 @@ import           Data.Map.Strict     (Map, fromList, keys, toList)
 import           Data.Tuple          (swap)
 import           GHC.Generics        (Generic)
 import           Language.Haskell.TH
-import System.Directory (getCurrentDirectory)
-import System.FilePath ((</>))
+import           System.Directory    (getCurrentDirectory)
+import           System.FilePath     ((</>))
 
 data NamePreset = NamePreset
   { falseList :: [String],
@@ -30,10 +29,10 @@ loadNamePreset = do
   let NamePreset {..} = case decodeStrict txt of
         Just x -> x
         _      -> error "Failed to parse json"
-  a <- genFunc "communityToHackage" preset
-  b <- genFunc "hackageToCommunity" $ fromList . fmap swap . toList $ preset
-  c <- genArray "falseList" falseList
-  d <- genArray "communityList" $ keys preset
+  a <- genFunc "communityToHackageP" preset
+  b <- genFunc "hackageToCommunityP" $ fromList . fmap swap . toList $ preset
+  c <- genArray "falseListP" falseList
+  d <- genArray "communityListP" $ keys preset
   return [a, b, c, d]
 
 genFunc :: String -> Map String String -> DecQ

@@ -59,19 +59,18 @@ loadCommunity path = do
 
         yieldMany $ result & each . _1 %~ CommunityName
 
--- | Load @community.db@ from @path@, removing @haskell-@ prefix.
+-- | Load @community.db@ from @path@.
+-- @desc@ files in the db will be parsed by @descParser@.
 loadProcessedCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
 loadProcessedCommunity path = Map.fromList <$> (runConduitRes $ loadCommunity path .| sinkList)
 
--- | Check if a package from hackage exists in archlinux community repo.
--- The following name conversion occurs during the checking to work with 'loadProcessedCommunity'.
---
--- >>> "aeson" --> "aeson"
--- >>> "Cabal" --> "cabal"
--- >>> "haskell-a" --> "a"
+-- | Check if a package exists in archlinux community repo.
+-- See 'HasMyName'.
 isInCommunity :: (HasMyName n, Member CommunityEnv r) => n -> Sem r Bool
 isInCommunity name = ask @CommunityDB >>= \db -> return $ (toCommunityName name) `Map.member` db
 
+-- | Get the version of a package in archlinux community repo.
+-- If the package does not exist, 'PkgNotFound' will be thron.
 versionInCommunity :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n -> Sem r CommunityVersion
 versionInCommunity name =
   ask @CommunityDB >>= \db -> case db Map.!? (toCommunityName name) of
