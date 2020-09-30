@@ -17,6 +17,7 @@ import           Distribution.ArchHs.Community          (versionInCommunity)
 import           Distribution.ArchHs.Core               (evalConditionTree)
 import           Distribution.ArchHs.Exception
 import           Distribution.ArchHs.Internal.Prelude
+import           Distribution.ArchHs.OptionReader
 import           Distribution.ArchHs.PP                 (prettyFlags)
 import           Distribution.ArchHs.Types
 import           Distribution.ArchHs.Utils
@@ -26,7 +27,6 @@ import qualified Distribution.Types.BuildInfo.Lens      as L
 import           Distribution.Types.Dependency          (Dependency)
 import           Distribution.Utils.ShortText           (fromShortText)
 import           Network.HTTP.Req                       hiding (header)
-import           Distribution.ArchHs.OptionReader
 
 data Options = Options
   { optCommunityPath :: FilePath,
@@ -181,9 +181,8 @@ diffCabal name a b = do
 
 diffTerm :: String -> (a -> String) -> a -> a -> String
 diffTerm s f a b =
-  let
-    f' = T.unpack.T.strip.T.pack.f
-    (ra, rb) = (f' a, f' b)
+  let f' = T.unpack . T.strip . T.pack . f
+      (ra, rb) = (f' a, f' b)
    in (C.formatWith [C.magenta] s)
         <> (if ra == rb then ra else ((C.formatWith [C.red] ra) <> "  ⇒  " <> C.formatWith [C.green] rb))
 
@@ -199,17 +198,19 @@ url = diffTerm "URL: " getUrl
 splitLine :: String
 splitLine = "\n" <> replicate 38 '-' <> "\n"
 
-inRange :: Members [CommunityEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (PackageName, VersionRange, Version, Bool)
+inRange :: Members [CommunityEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (Either (PackageName, VersionRange) (PackageName, VersionRange, Version, Bool))
 inRange (name, hRange) =
-  (versionInCommunity name)
-    >>= \y -> let version = fromJust . simpleParsec $ y in return $ (name, hRange, version, withinRange version hRange)
+  (try @MyException (versionInCommunity name))
+    >>= \case
+      Right y -> let version = fromJust . simpleParsec $ y in return . Right $ (name, hRange, version, withinRange version hRange)
+      Left _ -> return . Left $ (name, hRange)
 
 lookupDiffCommunity :: Members [CommunityEnv, WithMyErr] r => VersionedList -> VersionedList -> Sem r String
 lookupDiffCommunity va vb = do
   let diffNew = vb \\ va
       diffOld = va \\ vb
       color b = C.formatWith [if b then C.green else C.red]
-      pp b (name, range, v, False) =
+      pp b (Right (name, range, v, False)) =
         "["
           <> color b (unPackageName name)
           <> "] is required to be in range ("
@@ -218,7 +219,14 @@ lookupDiffCommunity va vb = do
           <> "but community provides ("
           <> color b (prettyShow v)
           <> ")."
-      pp _ (_, _, _, _) = ""
+      pp _ (Right _) = ""
+      pp b (Left (name, range)) =
+        "["
+          <> color b (unPackageName name)
+          <> "] is required to be in range ("
+          <> color b (prettyShow range)
+          <> "), "
+          <> "but community does not provide this package."
 
   new <- fmap (pp True) <$> mapM inRange diffNew
   old <- fmap (pp False) <$> mapM inRange diffOld
