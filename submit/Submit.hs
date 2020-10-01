@@ -8,27 +8,27 @@ module Submit
   )
 where
 
-import qualified Colourista as C
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.Map.Strict as Map
-import Data.Maybe (fromJust)
-import qualified Data.Text as T
-import Data.Void (Void)
-import Distribution.ArchHs.Exception
-import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.Local
-import Distribution.ArchHs.Name
-import Distribution.ArchHs.Types
-import Network.HTTP.Req
-import Options.Applicative hiding (header)
+import qualified Colourista                           as C
+import qualified Data.ByteString.Char8                as BS
+import qualified Data.Map.Strict                      as Map
+import           Data.Maybe                           (fromJust)
+import qualified Data.Text                            as T
+import           Data.Void                            (Void)
+import           Distribution.ArchHs.Exception
+import           Distribution.ArchHs.Internal.Prelude
+import           Distribution.ArchHs.Local
+import           Distribution.ArchHs.Name
+import           Distribution.ArchHs.Types
+import           Network.HTTP.Req
+import           Options.Applicative                  hiding (header)
 import qualified Options.Applicative
-import qualified Text.Megaparsec as M
-import Text.Megaparsec.Char as M
+import qualified Text.Megaparsec                      as M
+import           Text.Megaparsec.Char                 as M
 
 data Options = Options
   { optCommunityPath :: FilePath,
-    optOutput :: FilePath,
-    optUpload :: Bool
+    optOutput        :: FilePath,
+    optUpload        :: Bool
   }
 
 cmdOptions :: Parser Options
@@ -71,7 +71,7 @@ type DistroRecord = (String, String, String)
 type DirstroCSV = [DistroRecord]
 
 renderDistroCSV :: DirstroCSV -> String
-renderDistroCSV = mconcat . fmap (\(a, b, c) -> wrap a <> "," <> wrap b <> "," <> wrap c <> "\n")
+renderDistroCSV = init . unlines . fmap (\(a, b, c) -> wrap a <> "," <> wrap b <> "," <> wrap c)
   where
     wrap x = "\"" <> x <> "\""
 
@@ -87,7 +87,7 @@ distroRecordParser =
 parseDistroCSV :: String -> DirstroCSV
 parseDistroCSV s = case M.parse distroCSVParser "DistroCSV" s of
   Left err -> fail $ M.errorBundlePretty err
-  Right x -> x
+  Right x  -> x
 
 genCSV :: Member CommunityEnv r => Sem r DirstroCSV
 genCSV = do
