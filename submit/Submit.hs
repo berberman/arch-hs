@@ -28,7 +28,8 @@ import           Text.Megaparsec.Char                 as M
 data Options = Options
   { optCommunityPath :: FilePath,
     optOutput        :: FilePath,
-    optUpload        :: Bool
+    optUpload        :: Bool,
+    optCheck         :: Bool
   }
 
 cmdOptions :: Parser Options
@@ -55,6 +56,10 @@ cmdOptions =
           <> short 'u'
           <> help "Upload to hackage"
       )
+    <*> switch
+      ( long "check"
+          <> help "Show difference between community and hackage"
+      )
 
 runArgsParser :: IO Options
 runArgsParser =
@@ -68,14 +73,14 @@ runArgsParser =
 
 type DistroRecord = (String, String, String)
 
-type DirstroCSV = [DistroRecord]
+type DistroCSV = [DistroRecord]
 
-renderDistroCSV :: DirstroCSV -> String
+renderDistroCSV :: DistroCSV -> String
 renderDistroCSV = init . unlines . fmap (\(a, b, c) -> wrap a <> "," <> wrap b <> "," <> wrap c)
   where
     wrap x = "\"" <> x <> "\""
 
-distroCSVParser :: M.Parsec Void String DirstroCSV
+distroCSVParser :: M.Parsec Void String DistroCSV
 distroCSVParser = M.sepBy distroRecordParser newline
 
 distroRecordParser :: M.Parsec Void String DistroRecord
@@ -84,12 +89,12 @@ distroRecordParser =
     (a : b : c : []) -> return (a, b, c)
     _ -> fail "Failed to parse record"
 
-parseDistroCSV :: String -> DirstroCSV
+parseDistroCSV :: String -> DistroCSV
 parseDistroCSV s = case M.parse distroCSVParser "DistroCSV" s of
   Left err -> fail $ M.errorBundlePretty err
   Right x  -> x
 
-genCSV :: Member CommunityEnv r => Sem r DirstroCSV
+genCSV :: Member CommunityEnv r => Sem r DistroCSV
 genCSV = do
   db <- ask @CommunityDB
   let communityPackages = Map.toList db
@@ -140,5 +145,7 @@ check = do
   embed $ C.infoMessage "Downloading csv..."
   result <- interceptHttpException $ runReq defaultHttpConfig r
   let bs = responseBody result
-      z = parseDistroCSV . T.unpack $ decodeUtf8 bs
-  embed $ print z
+      hackage = parseDistroCSV . T.unpack $ decodeUtf8 bs
+  community <- genCSV
+
+  embed . putStrLn $ "TODO"
