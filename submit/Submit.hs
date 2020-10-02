@@ -4,32 +4,30 @@ module Submit
   ( Options (..),
     runArgsParser,
     submit,
-    check,
   )
 where
 
-import qualified Colourista                           as C
-import qualified Data.ByteString.Char8                as BS
-import qualified Data.Map.Strict                      as Map
-import           Data.Maybe                           (fromJust)
-import qualified Data.Text                            as T
-import           Data.Void                            (Void)
-import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.Local
-import           Distribution.ArchHs.Name
-import           Distribution.ArchHs.Types
-import           Network.HTTP.Req
-import           Options.Applicative                  hiding (header)
+import qualified Colourista as C
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.Map.Strict as Map
+import Data.Maybe (fromJust)
+import qualified Data.Text as T
+import Data.Void (Void)
+import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Local
+import Distribution.ArchHs.Name
+import Distribution.ArchHs.Types
+import Network.HTTP.Req
+import Options.Applicative hiding (header)
 import qualified Options.Applicative
-import qualified Text.Megaparsec                      as M
-import           Text.Megaparsec.Char                 as M
+import qualified Text.Megaparsec as M
+import Text.Megaparsec.Char as M
 
 data Options = Options
   { optCommunityPath :: FilePath,
-    optOutput        :: FilePath,
-    optUpload        :: Bool,
-    optCheck         :: Bool
+    optOutput :: FilePath,
+    optUpload :: Bool
   }
 
 cmdOptions :: Parser Options
@@ -55,10 +53,6 @@ cmdOptions =
       ( long "upload"
           <> short 'u'
           <> help "Upload to hackage"
-      )
-    <*> switch
-      ( long "check"
-          <> help "Show difference between community and hackage"
       )
 
 runArgsParser :: IO Options
@@ -92,7 +86,7 @@ distroRecordParser =
 parseDistroCSV :: String -> DistroCSV
 parseDistroCSV s = case M.parse distroCSVParser "DistroCSV" s of
   Left err -> fail $ M.errorBundlePretty err
-  Right x  -> x
+  Right x -> x
 
 genCSV :: Member CommunityEnv r => Sem r DistroCSV
 genCSV = do
@@ -118,12 +112,13 @@ genCSV = do
 
 submit :: Members [CommunityEnv, WithMyErr, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
 submit token output upload = do
-  v <- renderDistroCSV <$> genCSV
+  csv <- genCSV
+  let v = renderDistroCSV csv
   embed $
     when (not . null $ output) $ do
       C.infoMessage $ "Write file: " <> T.pack output
       writeFile output v
-
+  check csv
   interceptHttpException $
     when (token /= Nothing && upload) $ do
       C.infoMessage "Uploading..."
@@ -136,16 +131,26 @@ submit token output upload = do
       C.infoMessage $ "ResponseMessage: " <> (decodeUtf8 $ responseStatusMessage result)
       C.infoMessage "ResponseBody:"
       putStrLn . BS.unpack $ responseBody result
-  return ()
 
-check :: Members [CommunityEnv, WithMyErr, Embed IO] r => Sem r ()
-check = do
+check :: Members [WithMyErr, Embed IO] r => DistroCSV -> Sem r ()
+check community = do
   let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages.csv"
       r = req GET api NoReqBody bsResponse mempty
-  embed $ C.infoMessage "Downloading csv..."
+  embed $ C.infoMessage "Downloading csv from hackage..."
   result <- interceptHttpException $ runReq defaultHttpConfig r
   let bs = responseBody result
       hackage = parseDistroCSV . T.unpack $ decodeUtf8 bs
-  community <- genCSV
 
-  embed . putStrLn $ "TODO"
+  let diffOld = hackage \\ community
+      diffNew = community \\ hackage
+      ppRecord b (name, version, url) = (if b then C.formatWith [C.green] else C.formatWith [C.red]) $ "(" <> name <> ", " <> version <> ", " <> url <> ")"
+
+  embed $ case (diffNew <> diffOld) of
+    [] -> return ()
+    _ -> do
+      putStrLn $ C.formatWith [C.magenta] "Diff:"
+      putStr . unlines $ fmap (ppRecord False) diffOld
+      putStrLn $ replicate 68 '-'
+      putStr . unlines $ fmap (ppRecord True) diffNew
+
+  embed . putStrLn $ "Found " <> show (length hackage) <> " submitted distributions in hackage, and " <> show (length community) <> " haskell packages in community."
