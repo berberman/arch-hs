@@ -3,7 +3,7 @@ cradle:
     - path: "./"
       config:
         cradle:
-          stack:
+          cabal:
             - path: "./app"
               component: "arch-hs:exe:arch-hs"
             - path: "./diff"
