@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE RecordWildCards #-}
+
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
@@ -15,11 +16,11 @@ module Distribution.ArchHs.PP
   )
 where
 
-import qualified Colourista                           as C
-import qualified Data.Map.Strict                      as Map
-import qualified Data.Text                            as T
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.Types
+import qualified Colourista as C
+import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Types
 
 prettySkip :: [String] -> String
 prettySkip = C.formatWith [C.magenta] . intercalate ", "
@@ -33,7 +34,7 @@ prettyFlagAssignment m = mconcat $ fmap (\(n, v) -> "⚐ " <> C.formatWith [C.ye
 prettyDeps :: [PackageName] -> String
 prettyDeps =
   mconcat
-    . fmap (\(i, n) -> show @Int i <> ". " <> unPackageName n <> "\n")
+    . fmap (\(i, n) -> show (i :: Int) <> ". " <> unPackageName n <> "\n")
     . zip [1 ..]
 
 prettyFlags :: [(PackageName, [Flag])] -> String
