@@ -6,7 +6,7 @@
 -- Maintainer: berberman <1793913507@qq.com>
 -- Stability: experimental
 -- Portability: portable
--- This module provides functios operating with @community.db@ of pacman.
+-- This module provides functions operating with @community.db@ of pacman.
 module Distribution.ArchHs.Community
   ( defaultCommunityPath,
     loadProcessedCommunity,
@@ -70,7 +70,7 @@ isInCommunity :: (HasMyName n, Member CommunityEnv r) => n -> Sem r Bool
 isInCommunity name = ask @CommunityDB >>= \db -> return $ (toCommunityName name) `Map.member` db
 
 -- | Get the version of a package in archlinux community repo.
--- If the package does not exist, 'PkgNotFound' will be thron.
+-- If the package does not exist, 'PkgNotFound' will be thrown.
 versionInCommunity :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n -> Sem r CommunityVersion
 versionInCommunity name =
   ask @CommunityDB >>= \db -> case db Map.!? (toCommunityName name) of
