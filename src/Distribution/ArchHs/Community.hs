@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
@@ -15,16 +16,16 @@ module Distribution.ArchHs.Community
   )
 where
 
-import           Conduit
-import qualified Data.Conduit.Tar                     as Tar
-import qualified Data.Conduit.Zlib                    as Zlib
-import qualified Data.Map.Strict                      as Map
-import qualified Data.Text                            as T
-import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.Name
-import           Distribution.ArchHs.PkgDesc
-import           Distribution.ArchHs.Types
+import Conduit
+import qualified Data.Conduit.Tar as Tar
+import qualified Data.Conduit.Zlib as Zlib
+import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
+import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Name
+import Distribution.ArchHs.PkgDesc
+import Distribution.ArchHs.Types
 
 -- | Default path to @community.db@.
 defaultCommunityPath :: FilePath
@@ -54,8 +55,8 @@ loadCommunity path = do
             extractVer ver = head $
               splitOn "-" $ case splitOn ":" ver of
                 (_ : v : []) -> v
-                v : []       -> v
-                _            -> fail "err"
+                v : [] -> v
+                _ -> fail "err"
 
         yieldMany $ result & each . _1 %~ CommunityName
 
@@ -75,4 +76,4 @@ versionInCommunity :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n ->
 versionInCommunity name =
   ask @CommunityDB >>= \db -> case db Map.!? (toCommunityName name) of
     Just x -> return x
-    _      -> throw $ PkgNotFound name
+    _ -> throw $ PkgNotFound name

@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RankNTypes       #-}
-{-# LANGUAGE TemplateHaskell  #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_HADDOCK hide #-}
 
 module Data.Aeson.Ext
@@ -10,23 +10,23 @@ module Data.Aeson.Ext
   )
 where
 
-import           Data.Aeson
-import           Data.Aeson.Types
-import           GHC.Generics        (Generic, Rep)
-import           Language.Haskell.TH
+import Data.Aeson
+import Data.Aeson.Types
+import GHC.Generics (Generic, Rep)
+import Language.Haskell.TH
 
 dropSize :: Type -> Q Int
 dropSize (ConT n) = do
   info <- reify n
   case info of
-    (TyConI (DataD _ _ [] _ cons _))  -> go cons
+    (TyConI (DataD _ _ [] _ cons _)) -> go cons
     (TyConI (NewtypeD _ _ _ _ con _)) -> go [con]
-    _                                 -> fail "Unsupported."
+    _ -> fail "Unsupported."
   where
     -- Try only the first record constructor
     rec (x : _) = case x of
       (RecC _ f) -> f
-      _          -> fail "Unsupported"
+      _ -> fail "Unsupported"
     rec [] = fail "Unsupported"
     go cons = do
       let fields = rec cons

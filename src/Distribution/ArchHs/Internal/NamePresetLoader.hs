@@ -1,34 +1,33 @@
-{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE RecordWildCards    #-}
-{-# LANGUAGE TemplateHaskell    #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Distribution.ArchHs.Internal.NamePresetLoader (loadNamePreset) where
 
-import           Data.Aeson
-import qualified Data.ByteString     as BS
-import           Data.Map.Strict     (Map, fromList, keys, toList)
-import           Data.Tuple          (swap)
-import           GHC.Generics        (Generic)
-import           Language.Haskell.TH
-import           System.Directory    (getCurrentDirectory)
-import           System.FilePath     ((</>))
+import Data.Aeson
+import qualified Data.ByteString as BS
+import Data.Map.Strict (Map, fromList, keys, toList)
+import Data.Tuple (swap)
+import GHC.Generics (Generic)
+import Language.Haskell.TH
+import System.Directory (getCurrentDirectory)
+import System.FilePath ((</>))
 
 data NamePreset = NamePreset
   { falseList :: [String],
-    preset    :: Map String String
+    preset :: Map String String
   }
   deriving stock (Generic)
 
 instance FromJSON NamePreset
-
 
 loadNamePreset :: DecsQ
 loadNamePreset = do
   txt <- runIO $ getCurrentDirectory >>= \dot -> BS.readFile $ dot </> "data" </> "NAME_PRESET.json"
   let NamePreset {..} = case decodeStrict txt of
         Just x -> x
-        _      -> error "Failed to parse json"
+        _ -> error "Failed to parse json"
   a <- genFunc "communityToHackageP" preset
   b <- genFunc "hackageToCommunityP" $ fromList . fmap swap . toList $ preset
   c <- genArray "falseListP" falseList

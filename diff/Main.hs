@@ -1,18 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main (main) where
 
-import qualified Colourista                           as C
-import qualified Data.Map                             as Map
-import qualified Data.Text                            as T
-import           Diff
-import           Distribution.ArchHs.Community        (defaultCommunityPath,
-                                                       loadProcessedCommunity)
-import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.PP               (prettyFlagAssignments)
-import           Distribution.ArchHs.Types
+import qualified Colourista as C
+import qualified Data.Map as Map
+import qualified Data.Text as T
+import Diff
+import Distribution.ArchHs.Community
+  ( defaultCommunityPath,
+    loadProcessedCommunity,
+  )
+import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.PP (prettyFlagAssignments)
+import Distribution.ArchHs.Types
 
 main :: IO ()
 main = printHandledIOException $

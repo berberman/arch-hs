@@ -1,6 +1,7 @@
-{-# LANGUAGE DerivingStrategies        #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
@@ -17,13 +18,13 @@ module Distribution.ArchHs.Exception
   )
 where
 
-import qualified Colourista                           as C
-import qualified Control.Exception                    as CE
-import qualified Data.Text                            as T
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.Name
-import           Distribution.ArchHs.Types
-import           Network.HTTP.Req                     (HttpException (..))
+import qualified Colourista as C
+import qualified Control.Exception as CE
+import qualified Data.Text as T
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Name
+import Distribution.ArchHs.Types
+import Network.HTTP.Req (HttpException (..))
 
 -- | Error effect of 'MyException'
 type WithMyErr = Error MyException

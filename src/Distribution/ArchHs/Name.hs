@@ -1,9 +1,9 @@
-{-# LANGUAGE DeriveAnyClass     #-}
-{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE TemplateHaskell    #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
@@ -51,12 +51,14 @@ module Distribution.ArchHs.Name
   )
 where
 
-import           Data.Char                                     (toLower)
-import           Data.String                                   (IsString,
-                                                                fromString)
-import           Distribution.ArchHs.Internal.NamePresetLoader
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.Types
+import Data.Char (toLower)
+import Data.String
+  ( IsString,
+    fromString,
+  )
+import Distribution.ArchHs.Internal.NamePresetLoader
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Types
 
 -- | The representation of a package name.
 data NameRep
@@ -141,7 +143,7 @@ instance HasMyName CommunityName where
     where
       go s = case communityToHackageP (MyName s) of
         Just x -> x
-        _      -> MyName $ drop 8 s
+        _ -> MyName $ drop 8 s
   toCommunityRep = MyName . unCommunityName
 
 -- | Back to 'CommunityName'.

@@ -1,11 +1,10 @@
-{-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE DeriveFunctor         #-}
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# OPTIONS_HADDOCK ignore-exports #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
@@ -38,10 +37,10 @@ module Distribution.ArchHs.Types
   )
 where
 
-import           Data.Map.Strict                      (Map)
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.Hackage.DB              (HackageDB)
-import           Lens.Micro.TH                        (makeLenses)
+import Data.Map.Strict (Map)
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.Hackage.DB (HackageDB)
+import Lens.Micro.TH (makeLenses)
 
 -- | A list of 'PackageName'
 type PkgList = [PackageName]
@@ -136,16 +135,16 @@ data DependencyProvider = ByCommunity | ByAur
 
 instance Show DependencyProvider where
   show ByCommunity = "community"
-  show ByAur       = "aur"
+  show ByAur = "aur"
 
 -- | A solved dependency, holden by 'SolvedPackage'
 data SolvedDependency = SolvedDependency
   { -- | Provider of this dependency
     _depProvider :: Maybe DependencyProvider,
     -- | Name of the dependency
-    _depName     :: PackageName,
+    _depName :: PackageName,
     -- | Types of the dependency
-    _depType     :: [DependencyType]
+    _depType :: [DependencyType]
   }
   deriving stock (Show, Eq, Generic)
   deriving anyclass (NFData)
@@ -156,7 +155,7 @@ data SolvedPackage
   = -- | A package which has been provided by somebody, so there is no need to expand its dependencies
     ProvidedPackage
       { -- | Package name
-        _pkgName     :: PackageName,
+        _pkgName :: PackageName,
         -- | Package provider. (The name of 'DependencyProvider' may be confusing...)
         _pkgProvider :: DependencyProvider
       }

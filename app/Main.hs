@@ -1,45 +1,57 @@
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE RecordWildCards    #-}
-{-# LANGUAGE TupleSections      #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 
 module Main (main) where
 
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
-import qualified Algebra.Graph.Labelled.AdjacencyMap  as GL
-import           Args
-import qualified Colourista                           as C
-import           Conduit
-import           Control.Monad                        (filterM)
-import           Data.IORef                           (IORef, newIORef)
-import           Data.List.NonEmpty                   (toList)
-import qualified Data.Map.Strict                      as Map
-import qualified Data.Set                             as Set
-import qualified Data.Text                            as T
-import           Distribution.ArchHs.Aur              (Aur, aurToIO, isInAur)
-import           Distribution.ArchHs.Community        (defaultCommunityPath,
-                                                       isInCommunity,
-                                                       loadProcessedCommunity)
-import           Distribution.ArchHs.Core             (cabalToPkgBuild,
-                                                       getDependencies)
-import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.Hackage          (getPackageFlag, insertDB,
-                                                       loadHackageDB,
-                                                       lookupHackagePath,
-                                                       parseCabalFile)
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.Local
-import qualified Distribution.ArchHs.PkgBuild         as N
-import           Distribution.ArchHs.PP               (prettyDeps,
-                                                       prettyFlagAssignments,
-                                                       prettyFlags, prettySkip,
-                                                       prettySolvedPkgs)
-import           Distribution.ArchHs.Types
-import           Distribution.ArchHs.Utils            (getTwo)
-import           Distribution.Hackage.DB              (HackageDB)
-import           System.Directory                     (createDirectoryIfMissing,
-                                                       doesFileExist)
-import           System.FilePath                      (takeFileName)
+import qualified Algebra.Graph.Labelled.AdjacencyMap as GL
+import Args
+import qualified Colourista as C
+import Conduit
+import Control.Monad (filterM)
+import Data.IORef (IORef, newIORef)
+import Data.List.NonEmpty (toList)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import qualified Data.Text as T
+import Distribution.ArchHs.Aur (Aur, aurToIO, isInAur)
+import Distribution.ArchHs.Community
+  ( defaultCommunityPath,
+    isInCommunity,
+    loadProcessedCommunity,
+  )
+import Distribution.ArchHs.Core
+  ( cabalToPkgBuild,
+    getDependencies,
+  )
+import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Hackage
+  ( getPackageFlag,
+    insertDB,
+    loadHackageDB,
+    lookupHackagePath,
+    parseCabalFile,
+  )
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Local
+import Distribution.ArchHs.PP
+  ( prettyDeps,
+    prettyFlagAssignments,
+    prettyFlags,
+    prettySkip,
+    prettySolvedPkgs,
+  )
+import qualified Distribution.ArchHs.PkgBuild as N
+import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils (getTwo)
+import Distribution.Hackage.DB (HackageDB)
+import System.Directory
+  ( createDirectoryIfMissing,
+    doesFileExist,
+  )
+import System.FilePath (takeFileName)
 
 app ::
   Members '[Embed IO, State (Set.Set PackageName), CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
@@ -99,7 +111,7 @@ app target path aurSupport skip uusi = do
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle $ newGraph of
-    Left c  -> throw . CyclicExist $ toList c
+    Left c -> throw . CyclicExist $ toList c
     Right x -> return x
   embed $ putStrLn . prettyDeps . reverse $ flattened
   flags <- filter (\(_, l) -> length l /= 0) <$> mapM (\n -> (n,) <$> getPackageFlag n) flattened

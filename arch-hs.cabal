@@ -73,7 +73,6 @@ common common-options
                        PolyKinds
                        RankNTypes
                        ScopedTypeVariables
-                       TypeApplications
                        TypeOperators
                        TypeFamilies
 library

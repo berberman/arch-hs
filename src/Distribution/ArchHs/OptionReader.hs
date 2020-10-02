@@ -17,14 +17,14 @@ module Distribution.ArchHs.OptionReader
   )
 where
 
-import qualified Data.Map.Strict                      as Map
-import           Data.Void                            (Void)
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.Utils
-import           Options.Applicative
-import           System.FilePath                      (takeExtension)
-import qualified Text.Megaparsec                      as M
-import qualified Text.Megaparsec.Char                 as M
+import qualified Data.Map.Strict as Map
+import Data.Void (Void)
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Utils
+import Options.Applicative
+import System.FilePath (takeExtension)
+import qualified Text.Megaparsec as M
+import qualified Text.Megaparsec.Char as M
 
 readFlag :: [(String, String, Bool)] -> Map.Map PackageName FlagAssignment
 readFlag [] = Map.empty
@@ -50,7 +50,7 @@ optFlagReader :: ReadM (Map.Map PackageName FlagAssignment)
 optFlagReader =
   eitherReader
     ( \s -> case M.parse optFlagParser "" s of
-        Right x  -> Right x
+        Right x -> Right x
         Left err -> Left $ M.errorBundlePretty err
     )
 
@@ -68,9 +68,9 @@ optFlagParser =
     bool = do
       s <- M.string "true" <|> M.string "false"
       case s of
-        "true"  -> return True
+        "true" -> return True
         "false" -> return False
-        _       -> fail $ "unknown bool: " <> s
+        _ -> fail $ "unknown bool: " <> s
 
 -- | Read skipped components.
 -- This never fails, i.e. the return value will be 'Right'.
@@ -106,8 +106,9 @@ optVersionReader =
   eitherReader
     ( \s -> case simpleParsec s of
         Just v -> Right v
-        _      -> Left $ "Failed to parse version: " <> s
+        _ -> Left $ "Failed to parse version: " <> s
     )
+
 -- | Read a 'PackageName'
 -- This function never fails, because it just wraps the input string with 'mkPackageName'.
 optPackageNameReader :: ReadM PackageName

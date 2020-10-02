@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes       #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
@@ -17,34 +17,34 @@ module Distribution.ArchHs.PkgBuild
   )
 where
 
-import           Data.Text                   (Text, pack, unpack)
-import           Distribution.SPDX.LicenseId
-import           NeatInterpolation           (text)
+import Data.Text (Text, pack, unpack)
+import Distribution.SPDX.LicenseId
+import NeatInterpolation (text)
 
 -- | PkgBuild data type, representing needed information in filling the 'felixTemplate'.
 data PkgBuild = PkgBuild
   { -- | Field @_hkgName@.
-    _hkgName     :: String,
+    _hkgName :: String,
     -- | Field @pkgname@
-    _pkgName     :: String,
+    _pkgName :: String,
     -- | Field @pkgver@
-    _pkgVer      :: String,
+    _pkgVer :: String,
     -- | Field @pkgdesc@
-    _pkgDesc     :: String,
+    _pkgDesc :: String,
     -- | Field @url@
-    _url         :: String,
+    _url :: String,
     -- | Field @license@
-    _license     :: String,
+    _license :: String,
     -- | Array @depends@, which has been joined into 'String'
-    _depends     :: String,
+    _depends :: String,
     -- | Array @makedepends@, which has been joined into 'String'
     _makeDepends :: String,
     -- | Field @sha256sums@
-    _sha256sums  :: String,
+    _sha256sums :: String,
     -- | License file name
     _licenseFile :: Maybe String,
     -- | Whether generate @prepare()@ bash function which calls @uusi@
-    _enableUusi  :: Bool,
+    _enableUusi :: Bool,
     -- | Whether generate @check()@ bash function
     _enableCheck :: Bool
   }
@@ -76,29 +76,29 @@ data ArchLicense
   | Custom String
 
 instance Show ArchLicense where
-  show AGPL3                                  = "AGPL"
-  show Apache                                 = "Apache"
-  show Artistic2_0                            = "Artistic2.0"
-  show CDDL                                   = "CDDL"
-  show CPL                                    = "CPL"
-  show EPL                                    = "EPL"
-  show FDL1_2                                 = "FDL1.2"
-  show FDL1_3                                 = "FDL1.3"
-  show GPL2                                   = "GPL2"
-  show GPL3                                   = "GPL3"
-  show LGPL2_1                                = "LGPL2.1"
-  show LGPL3                                  = "LGPL3"
-  show LPPL                                   = "LPPL"
-  show MPL                                    = "MPL"
-  show MPL2                                   = "MPL2"
-  show PHP                                    = "PHP"
-  show PSF                                    = "PSF"
-  show PerlArtistic                           = "PerlArtistic"
-  show RUBY                                   = "RUBY"
+  show AGPL3 = "AGPL"
+  show Apache = "Apache"
+  show Artistic2_0 = "Artistic2.0"
+  show CDDL = "CDDL"
+  show CPL = "CPL"
+  show EPL = "EPL"
+  show FDL1_2 = "FDL1.2"
+  show FDL1_3 = "FDL1.3"
+  show GPL2 = "GPL2"
+  show GPL3 = "GPL3"
+  show LGPL2_1 = "LGPL2.1"
+  show LGPL3 = "LGPL3"
+  show LPPL = "LPPL"
+  show MPL = "MPL"
+  show MPL2 = "MPL2"
+  show PHP = "PHP"
+  show PSF = "PSF"
+  show PerlArtistic = "PerlArtistic"
+  show RUBY = "RUBY"
   show Distribution.ArchHs.PkgBuild.Unlicense = "Unlicense"
-  show Distribution.ArchHs.PkgBuild.W3C       = "W3C"
-  show ZPL                                    = "ZPL"
-  show (Custom x)                             = "custom:" <> x
+  show Distribution.ArchHs.PkgBuild.W3C = "W3C"
+  show ZPL = "ZPL"
+  show (Custom x) = "custom:" <> x
 
 -- | Map 'LicenseId' to 'ArchLicense'. License not provided by system will be mapped to @custom:...@.
 mapLicense :: LicenseId -> ArchLicense
@@ -143,7 +143,7 @@ applyTemplate PkgBuild {..} =
       (pack _sha256sums)
       ( case _licenseFile of
           Just n -> "\n" <> (installLicense $ pack n)
-          _      -> "\n"
+          _ -> "\n"
       )
       (if _enableUusi then "\n" <> uusi <> "\n\n" else "\n")
       (if _enableCheck then "\n" <> check <> "\n\n" else "\n")

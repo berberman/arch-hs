@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeApplications #-}
+
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
@@ -17,21 +19,28 @@ module Distribution.ArchHs.Hackage
   )
 where
 
-import qualified Data.ByteString                        as BS
-import qualified Data.Map                               as Map
-import           Data.Maybe                             (fromJust)
-import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.Types
-import           Distribution.ArchHs.Utils              (getPkgName,
-                                                         getPkgVersion)
-import           Distribution.Hackage.DB                (HackageDB, VersionData (VersionData, cabalFile),
-                                                         readTarball,
-                                                         tarballHashes)
-import           Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import           System.Directory                       (findFile,
-                                                         getHomeDirectory,
-                                                         listDirectory)
+import qualified Data.ByteString as BS
+import qualified Data.Map as Map
+import Data.Maybe (fromJust)
+import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils
+  ( getPkgName,
+    getPkgVersion,
+  )
+import Distribution.Hackage.DB
+  ( HackageDB,
+    VersionData (VersionData, cabalFile),
+    readTarball,
+    tarballHashes,
+  )
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
+import System.Directory
+  ( findFile,
+    getHomeDirectory,
+    listDirectory,
+  )
 
 -- | Look up hackage tarball path from @~/.cabal@.
 -- Arbitrary hackage mirror is potential to be selected.
@@ -65,7 +74,7 @@ parseCabalFile path = do
   bs <- BS.readFile path
   case parseGenericPackageDescriptionMaybe bs of
     Just x -> return x
-    _      -> fail $ "Failed to parse .cabal from " <> path
+    _ -> fail $ "Failed to parse .cabal from " <> path
 
 withLatestVersion :: Members [HackageEnv, WithMyErr] r => (VersionData -> a) -> PackageName -> Sem r a
 withLatestVersion f name = do
@@ -73,7 +82,7 @@ withLatestVersion f name = do
   case Map.lookup name db of
     (Just m) -> case Map.lookupMax m of
       Just (_, vdata) -> return $ f vdata
-      Nothing         -> throw $ VersionNotFound name nullVersion
+      Nothing -> throw $ VersionNotFound name nullVersion
     Nothing -> throw $ PkgNotFound name
 
 -- | Get the latest 'GenericPackageDescription'.
@@ -91,7 +100,7 @@ getCabal name version = do
   case Map.lookup name db of
     (Just m) -> case Map.lookup version m of
       Just vdata -> return $ vdata & cabalFile
-      Nothing    -> throw $ VersionNotFound name version
+      Nothing -> throw $ VersionNotFound name version
     Nothing -> throw $ PkgNotFound name
 
 -- | Get flags of a package.

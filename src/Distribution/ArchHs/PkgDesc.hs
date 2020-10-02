@@ -1,7 +1,7 @@
-{-# LANGUAGE DeriveAnyClass     #-}
-{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
@@ -19,11 +19,11 @@ module Distribution.ArchHs.PkgDesc
   )
 where
 
-import qualified Data.Map.Strict                      as Map
-import           Data.Void                            (Void)
-import           Distribution.ArchHs.Internal.Prelude
-import           Text.Megaparsec
-import           Text.Megaparsec.Char
+import qualified Data.Map.Strict as Map
+import Data.Void (Void)
+import Distribution.ArchHs.Internal.Prelude
+import Text.Megaparsec
+import Text.Megaparsec.Char
 
 -- | A parser takes 'String' as input, without user state.
 type DescParser = Parsec Void String
@@ -31,16 +31,16 @@ type DescParser = Parsec Void String
 -- | Package description file of a installed system package,
 -- which lies in @repo.db@ file.
 data PkgDesc = PkgDesc
-  { _name        :: String,
-    _version     :: String,
-    _desc        :: String,
-    _url         :: Maybe String,
-    _license     :: Maybe String,
-    _provides    :: [String],
-    _optDepends  :: [String],
-    _replaces    :: [String],
-    _conflicts   :: [String],
-    _depends     :: [String],
+  { _name :: String,
+    _version :: String,
+    _desc :: String,
+    _url :: Maybe String,
+    _license :: Maybe String,
+    _provides :: [String],
+    _optDepends :: [String],
+    _replaces :: [String],
+    _conflicts :: [String],
+    _depends :: [String],
     _makeDepends :: [String]
   }
   deriving stock (Show, Eq, Generic)
@@ -106,16 +106,16 @@ descParser =
     lookupSingle fields f = case Map.lookup f fields of
       (Just x) -> case x of
         (e : _) -> return e
-        _       -> fail $ "Expect a singleton " <> f
+        _ -> fail $ "Expect a singleton " <> f
       _ -> fail $ "Unable to find field " <> f
     lookupSingleMaybe fields f = return $ case Map.lookup f fields of
       (Just x) -> case x of
         (e : _) -> Just e
-        _       -> Nothing
+        _ -> Nothing
       _ -> Nothing
     lookupList fields f = return $ case Map.lookup f fields of
       (Just x) -> x
-      _        -> []
+      _ -> []
 
 -- | Run the desc fields parser.
 runDescFieldsParser :: String -> String -> Either (ParseErrorBundle String Void) (Map.Map String [String])

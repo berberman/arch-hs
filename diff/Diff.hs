@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE TupleSections #-}
 
 module Diff
   ( diffCabal,
@@ -8,31 +8,31 @@ module Diff
   )
 where
 
-import qualified Colourista                             as C
-import qualified Data.Map.Strict                        as Map
-import           Data.Maybe                             (fromJust)
-import qualified Data.Text                              as T
-import           Distribution.ArchHs.Community          (versionInCommunity)
-import           Distribution.ArchHs.Core               (evalConditionTree)
-import           Distribution.ArchHs.Exception
-import           Distribution.ArchHs.Internal.Prelude
-import           Distribution.ArchHs.OptionReader
-import           Distribution.ArchHs.PP                 (prettyFlags)
-import           Distribution.ArchHs.Types
-import           Distribution.ArchHs.Utils
-import           Distribution.PackageDescription        (CondTree, ConfVar)
-import           Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import qualified Distribution.Types.BuildInfo.Lens      as L
-import           Distribution.Types.Dependency          (Dependency)
-import           Distribution.Utils.ShortText           (fromShortText)
-import           Network.HTTP.Req                       hiding (header)
+import qualified Colourista as C
+import qualified Data.Map.Strict as Map
+import Data.Maybe (fromJust)
+import qualified Data.Text as T
+import Distribution.ArchHs.Community (versionInCommunity)
+import Distribution.ArchHs.Core (evalConditionTree)
+import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.OptionReader
+import Distribution.ArchHs.PP (prettyFlags)
+import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils
+import Distribution.PackageDescription (CondTree, ConfVar)
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
+import qualified Distribution.Types.BuildInfo.Lens as L
+import Distribution.Types.Dependency (Dependency)
+import Distribution.Utils.ShortText (fromShortText)
+import Network.HTTP.Req hiding (header)
 
 data Options = Options
   { optCommunityPath :: FilePath,
-    optFlags         :: FlagAssignments,
-    optPackageName   :: PackageName,
-    optVersionA      :: Version,
-    optVersionB      :: Version
+    optFlags :: FlagAssignments,
+    optPackageName :: PackageName,
+    optVersionA :: Version,
+    optVersionB :: Version
   }
 
 cmdOptions :: Parser Options
@@ -123,7 +123,7 @@ getCabalFromHackage name version = do
   response <- interceptHttpException (runReq defaultHttpConfig r)
   case parseGenericPackageDescriptionMaybe $ responseBody response of
     Just x -> return x
-    _      -> error $ "Failed to parse .cabal file from " <> show api
+    _ -> error $ "Failed to parse .cabal file from " <> show api
 
 directDependencies ::
   Members [FlagAssignmentsEnv, Trace, DependencyRecord] r =>
