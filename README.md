@@ -91,7 +91,7 @@ $ arch-hs -o ~/test accelerate
 ```
 
 This message tells us that in order to package `accelerate`, we must package `unique`
-and `tasty-kat` first sequentially, because `accelerate` dependens on them to build or test,
+and `tasty-kat` first sequentially, because `accelerate` dependents on them to build or test,
 whereas they are not present in archlinux community repo.
 
 ```
@@ -287,7 +287,7 @@ To distribute a haskell package to archlinux, the name of package should be chan
 
 * names should always be in lower case
 
-However, it's not enough to prefix the string with `haskell-` and trasform to lower case; in some special situations, the hackage name
+However, it's not enough to prefix the string with `haskell-` and transform to lower case; in some special situations, the hackage name
 may have `haskell-` prefix already, or the case is irregular, thus we have to a name preset manually. Once a package distributed to archlinux,
 whose name conform to above-mentioned situation, the name preset should be upgraded correspondingly.
 
