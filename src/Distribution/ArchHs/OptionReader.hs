@@ -93,8 +93,8 @@ optSkippedReader = eitherReader $ Right . splitOn ","
 -- Left "Unexpected file name: a.what"
 optExtraCabalReader :: ReadM [FilePath]
 optExtraCabalReader = eitherReader $ \x ->
-  let splitted = splitOn "," x
-      check = map (\e -> if takeExtension e == ".cabal" then (e, True) else (e, False)) splitted
+  let split = splitOn "," x
+      check = map (\e -> if takeExtension e == ".cabal" then (e, True) else (e, False)) split
       failed = map fst . filter (not . snd) $ check
       successful = map fst . filter snd $ check
    in if failed /= [] then Left ("Unexpected file name: " <> intercalate ", " failed) else Right $ successful

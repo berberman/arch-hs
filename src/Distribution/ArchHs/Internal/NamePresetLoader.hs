@@ -36,10 +36,10 @@ loadNamePreset = do
 
 genFunc :: String -> Map String String -> DecQ
 genFunc name src = do
-  let temp = genCluse <$> toList src
+  let temp = genClause <$> toList src
   funD (mkName name) $ temp <> [nothingClause]
   where
-    genCluse (from, to) =
+    genClause (from, to) =
       clause
         [litP $ stringL from]
         (normalB $ [|Just|] `appE` (litE . stringL $ to))
