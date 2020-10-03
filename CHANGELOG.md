@@ -3,6 +3,18 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.2.0.0
+
+* More accurate naming conversion between hackage representation and archlinux representation, according to [NAME_PRESET.json](https://github.com/berberman/arch-hs/blob/master/data/NAME_PRESET.json)
+
+* Clearer project structure
+
+* More reasonable exceptions
+
+* Provide versions of haskell packages in archlinux community
+
+* Add `arch-hs-submit` executable
+
 ## 0.1.1.0
 
 * Add uusi option
