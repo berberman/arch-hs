@@ -7,6 +7,7 @@ import qualified Colourista as C
 import qualified Data.Text as T
 import Distribution.ArchHs.Community
 import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types
 import Submit
@@ -17,12 +18,12 @@ main :: IO ()
 main = printHandledIOException $
   do
     Options {..} <- runArgsParser
-    let useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
 
+    let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
+        useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
+
+    when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
     when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
-
-    community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
-    C.infoMessage "Loading community.db..."
 
     token <- lookupEnv "HACKAGE_API_TOKEN"
 
@@ -36,8 +37,15 @@ main = printHandledIOException $
         C.warningMessage $ "File " <> (T.pack optOutput) <> " already existed, overwrite it."
     C.infoMessage "Start running..."
     when (not $ optUpload || hasOutput) $
-      C.warningMessage "Run diff only."
-    runSubmit community (submit token optOutput optUpload) & printAppResult
+      C.warningMessage "Run diff and check only."
 
-runSubmit :: CommunityDB -> Sem '[CommunityEnv, WithMyErr, Embed IO, Final IO] a -> IO (Either MyException a)
-runSubmit community = runFinal . embedToFinal . errorToIOFinal . (runReader community)
+    community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
+    C.infoMessage "Loading community.db..."
+
+    hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
+    C.infoMessage "Loading hackage..."
+
+    runSubmit community hackage (submit token optOutput optUpload) & printAppResult
+
+runSubmit :: CommunityDB -> HackageDB -> Sem '[CommunityEnv, HackageEnv, WithMyErr, Embed IO, Final IO] a -> IO (Either MyException a)
+runSubmit community hackage = runFinal . embedToFinal . errorToIOFinal . (runReader hackage) . (runReader community)

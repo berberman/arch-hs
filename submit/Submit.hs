@@ -11,10 +11,11 @@ where
 import qualified Colourista as C
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromJust)
+import Data.Maybe (catMaybes, fromJust)
 import qualified Data.Text as T
 import Data.Void (Void)
 import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local
 import Distribution.ArchHs.Name
@@ -26,7 +27,8 @@ import qualified Text.Megaparsec as M
 import Text.Megaparsec.Char as M
 
 data Options = Options
-  { optCommunityPath :: FilePath,
+  { optHackagePath :: FilePath,
+    optCommunityPath :: FilePath,
     optOutput :: FilePath,
     optUpload :: Bool
   }
@@ -35,6 +37,14 @@ cmdOptions :: Parser Options
 cmdOptions =
   Options
     <$> strOption
+      ( long "hackage"
+          <> metavar "PATH"
+          <> short 'h'
+          <> help "Path to hackage index tarball"
+          <> showDefault
+          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/01-index.tar | 00-index.tar"
+      )
+    <*> strOption
       ( long "community"
           <> metavar "PATH"
           <> short 'c'
@@ -111,7 +121,7 @@ genCSV = do
          in (unPackageName hackageName, version, prefix <> communityName')
   return $ processField <$> fields
 
-submit :: Members [CommunityEnv, WithMyErr, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
+submit :: Members [HackageEnv, CommunityEnv, WithMyErr, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
 submit token output upload = do
   csv <- genCSV
   let v = renderDistroCSV csv
@@ -133,8 +143,21 @@ submit token output upload = do
       C.infoMessage "ResponseBody:"
       putStrLn . BS.unpack $ responseBody result
 
-check :: Members [WithMyErr, Embed IO] r => DistroCSV -> Sem r ()
+check :: Members [HackageEnv, WithMyErr, Embed IO] r => DistroCSV -> Sem r ()
 check community = do
+  embed $ C.infoMessage "Checking generated CSV file..."
+
+  let hackageNames = fmap (\(a, _, _) -> a) community
+      pipe = fmap (\case Left (PkgNotFound x) -> Just (unCommunityName $ toCommunityName x); _ -> Nothing)
+
+  failed <- catMaybes . pipe <$> mapM (\x -> try @MyException (getLatestCabal $ mkPackageName x)) hackageNames
+
+  embed $
+    when (not $ null failed) $
+      C.warningMessage "Following packages in community are not linked to hackage:"
+
+  embed . putStrLn . unlines $ failed
+
   let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages.csv"
       r = req GET api NoReqBody bsResponse mempty
   embed $ C.infoMessage "Downloading csv from hackage..."
@@ -146,10 +169,10 @@ check community = do
       diffNew = community \\ hackage
       ppRecord b (name, version, url) = (if b then C.formatWith [C.green] else C.formatWith [C.red]) $ "(" <> name <> ", " <> version <> ", " <> url <> ")"
 
+  embed . putStrLn $ C.formatWith [C.magenta] "Diff:"
   embed $ case (diffNew <> diffOld) of
-    [] -> return ()
+    [] -> putStrLn "[]"
     _ -> do
-      putStrLn $ C.formatWith [C.magenta] "Diff:"
       putStr . unlines $ fmap (ppRecord False) diffOld
       putStrLn $ replicate 68 '-'
       putStr . unlines $ fmap (ppRecord True) diffNew

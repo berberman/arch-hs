@@ -16,6 +16,7 @@ module Distribution.ArchHs.Hackage
     getPackageFlag,
     traverseHackage,
     getLatestSHA256,
+    HackageDB,
   )
 where
 
