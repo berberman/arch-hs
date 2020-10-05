@@ -238,7 +238,7 @@ cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => Solv
 cabalToPkgBuild pkg ignored uusi = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> (getLatestCabal name)
-  _sha256sums <- (\s -> "'" <> s <> "'") <$> getLatestSHA256 name
+  _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> getLatestSHA256 name
   let _hkgName = pkg ^. pkgName & unPackageName
       rawName = toLower <$> _hkgName
       _pkgName = maybe rawName id $ stripPrefix "haskell-" rawName
