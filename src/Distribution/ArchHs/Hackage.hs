@@ -62,11 +62,11 @@ loadHackageDB = readTarball Nothing
 
 -- | Insert a 'GenericPackageDescription' into 'HackageDB'.
 insertDB :: GenericPackageDescription -> HackageDB -> HackageDB
-insertDB cabal db = Map.insert name packageData db
+insertDB cabal = Map.insert name packageData
   where
     name = getPkgName $ packageDescription cabal
     version = getPkgVersion $ packageDescription cabal
-    versionData = VersionData cabal $ Map.empty
+    versionData = VersionData cabal Map.empty
     packageData = Map.singleton version versionData
 
 -- | Read and parse @.cabal@ file.

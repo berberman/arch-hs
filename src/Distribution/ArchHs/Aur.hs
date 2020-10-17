@@ -130,7 +130,7 @@ aurToIO = interpret $ \case
           "v" =: ("5" :: Text)
             <> "type" =: ("search" :: Text)
             <> "by" =: ("name" :: Text)
-            <> "arg" =: (pack name)
+            <> "arg" =: pack name
         r = req GET baseURL NoReqBody jsonResponse parms
     response <- interceptHttpException $ runReq defaultHttpConfig r
     let body :: AurReply AurSearch = responseBody response
@@ -142,7 +142,7 @@ aurToIO = interpret $ \case
           "v" =: ("5" :: Text)
             <> "type" =: ("info" :: Text)
             <> "by" =: ("name" :: Text)
-            <> "arg[]" =: (pack name)
+            <> "arg[]" =: pack name
         r = req GET baseURL NoReqBody jsonResponse parms
     response <- interceptHttpException $ runReq defaultHttpConfig r
     let body :: AurReply AurInfo = responseBody response

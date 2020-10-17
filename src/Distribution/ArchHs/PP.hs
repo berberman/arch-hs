@@ -26,10 +26,14 @@ prettySkip :: [String] -> String
 prettySkip = C.formatWith [C.magenta] . intercalate ", "
 
 prettyFlagAssignments :: Map.Map PackageName FlagAssignment -> String
-prettyFlagAssignments m = mconcat $ fmap (fmap (\(n, a) -> C.formatWith [C.magenta] (unPackageName n) <> "\n" <> C.formatWith [C.indent 4] (prettyFlagAssignment a))) Map.toList m
+prettyFlagAssignments m =
+  mconcat $
+    fmap (fmap (\(n, a) -> C.formatWith [C.magenta] (unPackageName n) <> "\n" <> C.formatWith [C.indent 4] (prettyFlagAssignment a))) Map.toList m
 
 prettyFlagAssignment :: FlagAssignment -> String
-prettyFlagAssignment m = mconcat $ fmap (\(n, v) -> "⚐ " <> C.formatWith [C.yellow] (unFlagName n) <> " : " <> C.formatWith [C.cyan] (show v) <> "\n") $ unFlagAssignment m
+prettyFlagAssignment m =
+  mconcat $
+    (\(n, v) -> "⚐ " <> C.formatWith [C.yellow] (unFlagName n) <> " : " <> C.formatWith [C.cyan] (show v) <> "\n") <$> unFlagAssignment m
 
 prettyDeps :: [PackageName] -> String
 prettyDeps =
@@ -38,10 +42,10 @@ prettyDeps =
     . zip [1 ..]
 
 prettyFlags :: [(PackageName, [Flag])] -> String
-prettyFlags = mconcat . fmap (\(name, flags) -> (C.formatWith [C.magenta] $ unPackageName name <> "\n") <> mconcat (fmap (C.formatWith [C.indent 4] . prettyFlag) flags))
+prettyFlags = mconcat . fmap (\(name, flags) -> C.formatWith [C.magenta] (unPackageName name <> "\n") <> mconcat (C.formatWith [C.indent 4] . prettyFlag <$> flags))
 
 prettyFlag :: Flag -> String
-prettyFlag f = "⚐ " <> C.formatWith [C.yellow] name <> ":\n" <> mconcat (fmap (C.formatWith [C.indent 6]) $ ["description:\n" <> desc, "default: " <> def <> "\n", "isManual: " <> manual <> "\n"])
+prettyFlag f = "⚐ " <> C.formatWith [C.yellow] name <> ":\n" <> mconcat (C.formatWith [C.indent 6] <$> ["description:\n" <> desc, "default: " <> def <> "\n", "isManual: " <> manual <> "\n"])
   where
     name = unFlagName . flagName $ f
     desc = unlines . fmap (C.formatWith [C.indent 8]) . lines $ flagDescription f
@@ -54,19 +58,18 @@ prettySolvedPkgs = con . mconcat . fmap prettySolvedPkg
 prettySolvedPkg :: SolvedPackage -> [(String, String)]
 prettySolvedPkg SolvedPackage {..} =
   (C.formatWith [C.bold, C.yellow] (unPackageName _pkgName), C.formatWith [C.red] "    ✘") :
-  ( fmap
-      ( \(i :: Int, SolvedDependency {..}) ->
-          let prefix = if i == length _pkgDeps then " └─" else " ├─"
-           in case _depProvider of
-                (Just x) -> ((C.formatWith [C.green] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType), ((C.formatWith [C.green] "✔ ") <> (C.formatWith [C.cyan] $ "[" <> show x <> "]")))
-                _ -> (C.formatWith [C.bold, C.yellow] $ (T.unpack prefix) <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.red] "    ✘")
-      )
-      (zip [1 ..] _pkgDeps)
-  )
-prettySolvedPkg ProvidedPackage {..} = [((C.formatWith [C.green] $ unPackageName _pkgName), ((C.formatWith [C.green] "✔ ") <> (C.formatWith [C.cyan] $ "[" <> show _pkgProvider <> "]")))]
+  fmap
+    ( \(i :: Int, SolvedDependency {..}) ->
+        let prefix = if i == length _pkgDeps then " └─" else " ├─"
+         in case _depProvider of
+              (Just x) -> (C.formatWith [C.green] $ T.unpack prefix <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.green] "✔ " <> C.formatWith [C.cyan] ("[" <> show x <> "]"))
+              _ -> (C.formatWith [C.bold, C.yellow] $ T.unpack prefix <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.red] "    ✘")
+    )
+    (zip [1 ..] _pkgDeps)
+prettySolvedPkg ProvidedPackage {..} = [(C.formatWith [C.green] (unPackageName _pkgName), C.formatWith [C.green] "✔ " <> C.formatWith [C.cyan] ("[" <> show _pkgProvider <> "]"))]
 
 con :: [(String, String)] -> String
 con l = mconcat complemented
   where
     maxL = maximum $ fmap (length . fst) l
-    complemented = fmap (\(x, y) -> (x <> (replicate (maxL - length x) ' ') <> y <> "\n")) l
+    complemented = (\(x, y) -> x <> replicate (maxL - length x) ' ' <> y <> "\n") <$> l

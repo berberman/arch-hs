@@ -74,16 +74,16 @@ getUrl cabal = fromJust $ home <|> vcs <|> fallback
     fromJust _ = fail "Impossible."
     home = f . fromShortText . homepage $ cabal
     vcs = repoLocation <=< (^? ix 0) . sourceRepos $ cabal
-    fallback = Just $ "https://hackage.haskell.org/package/" <> (unPackageName $ getPkgName cabal)
+    fallback = Just $ "https://hackage.haskell.org/package/" <> unPackageName (getPkgName cabal)
 
 -- | Map 'DependencyType' with its data constructor tag 'DependencyKind'.
 dependencyTypeToKind :: DependencyType -> DependencyKind
 dependencyTypeToKind (CExe _) = Exe
 dependencyTypeToKind (CExeBuildTools _) = ExeBuildTools
-dependencyTypeToKind (CLib) = Lib
+dependencyTypeToKind CLib = Lib
 dependencyTypeToKind (CTest _) = Test
 dependencyTypeToKind (CBenchmark _) = Benchmark
-dependencyTypeToKind (CLibBuildTools) = LibBuildTools
+dependencyTypeToKind CLibBuildTools = LibBuildTools
 dependencyTypeToKind (CTestBuildTools _) = TestBuildTools
 dependencyTypeToKind (CBenchmarkBuildTools _) = BenchmarkBuildTools
 dependencyTypeToKind (CSubLibs _) = SubLibs

@@ -15,6 +15,7 @@ module Distribution.ArchHs.Core
 where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
+import Data.Bifunctor (second)
 import Data.Char (toLower)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -77,7 +78,7 @@ evalConditionTree cabal cond = do
         mkFlagAssignment
           . (<> flagAssignment)
           . filter (\(fName, _) -> fName `notElem` flagNames)
-          $ (unFlagAssignment defaultFlagAssignments)
+          $ unFlagAssignment defaultFlagAssignments
   trace' $ "Evaluating condition tree of " <> show name
   trace' $ "Flags: " <> show thisFlag
   traceCallStack
@@ -96,7 +97,7 @@ getDependencies ::
   Maybe PackageName ->
   -- | Target
   PackageName ->
-  Sem r ((G.AdjacencyMap (Set DependencyType) PackageName), Set PackageName)
+  Sem r (G.AdjacencyMap (Set DependencyType) PackageName, Set PackageName)
 getDependencies skip parent name = do
   resolved <- get @(Set PackageName)
   modify' $ Set.insert name
@@ -126,14 +127,14 @@ getDependencies skip parent name = do
 
       filteredLibDeps = ignore libDeps
       filteredLibToolsDeps = ignore libToolsDeps
-      filteredExeDeps = ignoreFlatten CExe $ exeDeps
-      filteredExeToolsDeps = ignoreFlatten CExeBuildTools $ exeToolsDeps
-      filteredTestDeps = ignoreFlatten CTest $ testDeps
-      filteredTestToolsDeps = ignoreFlatten CTest $ testToolsDeps
-      filteredSubLibDeps = ignoreFlatten CSubLibs $ subLibDeps
-      filteredSubLibToolsDeps = ignoreFlatten CSubLibsBuildTools $ subLibToolsDeps
+      filteredExeDeps = ignoreFlatten CExe exeDeps
+      filteredExeToolsDeps = ignoreFlatten CExeBuildTools exeToolsDeps
+      filteredTestDeps = ignoreFlatten CTest testDeps
+      filteredTestToolsDeps = ignoreFlatten CTest testToolsDeps
+      filteredSubLibDeps = ignoreFlatten CSubLibs subLibDeps
+      filteredSubLibToolsDeps = ignoreFlatten CSubLibsBuildTools subLibToolsDeps
 
-      filteredSubLibDepsNames = fmap unqualComponentNameToPackageName . fmap fst $ subLibDeps
+      filteredSubLibDepsNames = fmap (unqualComponentNameToPackageName . fst) subLibDeps
       ignoreSubLibs = filter (`notElem` filteredSubLibDepsNames)
       ignoreResolved = filter (`notElem` resolved)
 
@@ -163,7 +164,7 @@ getDependencies skip parent name = do
   let temp = [nextLib, nextExe, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
       subsubs = temp ^. each ^.. each . _2 ^. each
-  return $
+  return
     ( currentLib
         <+> currentLibDeps
         <+> currentExe
@@ -185,8 +186,8 @@ collectLibDeps cabal = do
       let name = getPkgName' cabal
       trace' $ "Getting componential dependencies of " <> show name
       info <- evalConditionTree cabal lib
-      let libDeps = fmap unDepV $ buildDependsIfBuild info
-          toolDeps = fmap unExeV $ buildToolDependsIfBuild info
+      let libDeps = unDepV <$> buildDependsIfBuild info
+          toolDeps = unExeV <$> buildToolDependsIfBuild info
       mapM_ (uncurry updateDependencyRecord) libDeps
       mapM_ (uncurry updateDependencyRecord) toolDeps
       let result = (fmap fst libDeps, fmap fst toolDeps)
@@ -206,9 +207,9 @@ collectComponentialDeps f cabal skip = do
       name = getPkgName' cabal
   trace' $ "Getting componential dependencies of " <> show name
   info <- filter (not . (`elem` skip) . fst) . zip (conds <&> fst) <$> mapM (evalConditionTree cabal . snd) conds
-  let deps = info <&> ((_2 %~) $ fmap unDepV . buildDependsIfBuild)
-      toolDeps = info <&> ((_2 %~) $ fmap unExeV . buildToolDependsIfBuild)
-      k = fmap (\(c, l) -> (c, fmap fst l))
+  let deps = info <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
+      toolDeps = info <&> _2 %~ (fmap unExeV . buildToolDependsIfBuild)
+      k = fmap (second $ fmap fst)
   mapM_ (uncurry updateDependencyRecord) $ deps ^.. each . _2 ^. each
   mapM_ (uncurry updateDependencyRecord) $ toolDeps ^.. each . _2 ^. each
   let result = (k deps, k toolDeps)
@@ -237,14 +238,14 @@ updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> PkgList -> Bool -> Sem r PkgBuild
 cabalToPkgBuild pkg ignored uusi = do
   let name = pkg ^. pkgName
-  cabal <- packageDescription <$> (getLatestCabal name)
+  cabal <- packageDescription <$> getLatestCabal name
   _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> getLatestSHA256 name
   let _hkgName = pkg ^. pkgName & unPackageName
       rawName = toLower <$> _hkgName
-      _pkgName = maybe rawName id $ stripPrefix "haskell-" rawName
+      _pkgName = drop 8 rawName
       _pkgVer = prettyShow $ getPkgVersion cabal
       _pkgDesc = fromShortText $ synopsis cabal
-      getL (NONE) = ""
+      getL NONE = ""
       getL (License e) = getE e
       getE (ELicense (ELicenseId x) _) = show . mapLicense $ x
       getE (ELicense (ELicenseIdPlus x) _) = show . mapLicense $ x
@@ -253,7 +254,7 @@ cabalToPkgBuild pkg ignored uusi = do
       getE (EOr x y) = getE x <> " " <> getE y
 
       _license = getL . license $ cabal
-      _enableCheck = any id $ pkg ^. pkgDeps & mapped %~ (\dep -> selectDepKind Test dep && dep ^. depName == pkg ^. pkgName)
+      _enableCheck = or $ (pkg ^. pkgDeps) <&> (\dep -> selectDepKind Test dep && dep ^. depName == pkg ^. pkgName)
       depends =
         pkg ^. pkgDeps
           ^.. each
@@ -290,7 +291,7 @@ cabalToPkgBuild pkg ignored uusi = do
       notInGHCLib x = (x ^. depName) `notElem` ghcLibList
       notMyself x = x ^. depName /= name
       notIgnore x = x ^. depName `notElem` ignored
-      selectDepKind k x = k `elem` (x ^. depType & mapped %~ dependencyTypeToKind)
+      selectDepKind k x = k `elem` (x ^. depType <&> dependencyTypeToKind)
       _licenseFile = licenseFiles cabal ^? ix 0
       _enableUusi = uusi
   return PkgBuild {..}

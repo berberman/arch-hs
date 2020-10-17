@@ -168,4 +168,4 @@ toHackageName = mToHackageName . toHackageRep
 isHaskellPackage :: CommunityName -> Bool
 isHaskellPackage name =
   let rep = toCommunityRep name
-   in (rep `elem` communityListP || "haskell-" `isPrefixOf` (unMyName rep)) && rep `notElem` falseListP
+   in (rep `elem` communityListP || "haskell-" `isPrefixOf` unMyName rep) && rep `notElem` falseListP

@@ -38,10 +38,10 @@ data MyException
   | NetworkException HttpException
 
 instance Show MyException where
-  show (PkgNotFound name) = "Unable to find [" <> (unPackageName $ toHackageName name) <> "] (hackage name) / [" <> (unCommunityName $ toCommunityName name) <> "] (community name)"
-  show (VersionNotFound name version) = "Unable to find [" <> (unPackageName $ toHackageName name) <> "] (hackage name) / [" <> (unCommunityName $ toCommunityName name) <> "] (community name)" <> " " <> prettyShow version
+  show (PkgNotFound name) = "Unable to find [" <> unPackageName (toHackageName name) <> "] (hackage name) / [" <> unCommunityName (toCommunityName name) <> "] (community name)"
+  show (VersionNotFound name version) = "Unable to find [" <> unPackageName (toHackageName name) <> "] (hackage name) / [" <> unCommunityName (toCommunityName name) <> "] (community name)" <> " " <> prettyShow version
   show (TargetExist name provider) = "Target [" <> unPackageName name <> "] has been provided by " <> show provider
-  show (CyclicExist c) = "Graph contains a cycle " <> (show $ fmap unPackageName c)
+  show (CyclicExist c) = "Graph contains a cycle " <> show (fmap unPackageName c)
   show (NetworkException (JsonHttpException s)) = "Failed to parse response " <> s
   show (NetworkException (VanillaHttpException e)) = show e
 

@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- | Copyright: (c) 2020 berberman
@@ -54,8 +53,8 @@ loadCommunity path = do
                     Left _ -> []
             extractVer ver = head $
               splitOn "-" $ case splitOn ":" ver of
-                (_ : v : []) -> v
-                v : [] -> v
+                [_, v] -> v
+                [v] -> v
                 _ -> fail "err"
 
         yieldMany $ result & each . _1 %~ CommunityName
@@ -63,17 +62,17 @@ loadCommunity path = do
 -- | Load @community.db@ from @path@.
 -- @desc@ files in the db will be parsed by @descParser@.
 loadProcessedCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
-loadProcessedCommunity path = Map.fromList <$> (runConduitRes $ loadCommunity path .| sinkList)
+loadProcessedCommunity path = Map.fromList <$> runConduitRes (loadCommunity path .| sinkList)
 
 -- | Check if a package exists in archlinux community repo.
 -- See 'HasMyName'.
 isInCommunity :: (HasMyName n, Member CommunityEnv r) => n -> Sem r Bool
-isInCommunity name = ask @CommunityDB >>= \db -> return $ (toCommunityName name) `Map.member` db
+isInCommunity name = ask @CommunityDB >>= \db -> return $ toCommunityName name `Map.member` db
 
 -- | Get the version of a package in archlinux community repo.
 -- If the package does not exist, 'PkgNotFound' will be thrown.
 versionInCommunity :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n -> Sem r CommunityVersion
 versionInCommunity name =
-  ask @CommunityDB >>= \db -> case db Map.!? (toCommunityName name) of
+  ask @CommunityDB >>= \db -> case db Map.!? toCommunityName name of
     Just x -> return x
     _ -> throw $ PkgNotFound name
