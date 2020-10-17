@@ -147,7 +147,9 @@ app target path aurSupport skip uusi metaPath = do
             ^.. each
               . filtered (\x -> depNotMyself (pkg ^. pkgName) x && depNotInGHCLib x && x ^. depProvider == Just ByCommunity)
         toStr x = "'" <> (unCommunityName . toCommunityName . _depName) x <> "'"
-        depends = intercalate " " . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked2
+        depends = case intercalate " " . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked2 of
+          [] -> ""
+          xs -> " " <> xs
         flattened' = filter (/= target) flattened
         comment =
           if (not $ null flattened')
