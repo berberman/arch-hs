@@ -9,6 +9,7 @@ module Submit
 where
 
 import qualified Colourista as C
+import Control.Monad (unless)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromJust)
@@ -90,8 +91,8 @@ distroCSVParser = M.sepBy distroRecordParser newline
 
 distroRecordParser :: M.Parsec Void String DistroRecord
 distroRecordParser =
-  (M.between (M.char '"') (M.char '"') (M.many $ M.noneOf (",\"\n" :: String)) `M.sepBy` (M.char ',')) >>= \case
-    (a : b : c : []) -> return (a, b, c)
+  (M.between (M.char '"') (M.char '"') (M.many $ M.noneOf (",\"\n" :: String)) `M.sepBy` M.char ',') >>= \case
+    [a, b, c] -> return (a, b, c)
     _ -> fail "Failed to parse record"
 
 parseDistroCSV :: String -> DistroCSV
@@ -102,6 +103,8 @@ parseDistroCSV s = case M.parse distroCSVParser "DistroCSV" s of
 genCSV :: Member CommunityEnv r => Sem r DistroCSV
 genCSV = do
   db <- ask @CommunityDB
+
+  {-# HLINT ignore "Use <&>" #-}
   let communityPackages = Map.toList db
       fields =
         communityPackages
@@ -115,7 +118,7 @@ genCSV = do
       prefix = "https://www.archlinux.org/packages/community/x86_64/"
       processField (communityName, (hackageName, version)) =
         let communityName' =
-              if (hackageName `elem` ghcLibList || hackageName == "ghc")
+              if hackageName `elem` ghcLibList || hackageName == "ghc"
                 then "ghc"
                 else unCommunityName communityName
          in (unPackageName hackageName, version, prefix <> communityName')
@@ -126,12 +129,12 @@ submit token output upload = do
   csv <- genCSV
   let v = renderDistroCSV csv
   embed $
-    when (not . null $ output) $ do
+    unless (null output) $ do
       C.infoMessage $ "Write file: " <> T.pack output
       writeFile output v
   check csv
   interceptHttpException $
-    when (token /= Nothing && upload) $ do
+    when ((not . null) token && upload) $ do
       C.infoMessage "Uploading..."
       let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages"
           r =
@@ -139,7 +142,7 @@ submit token output upload = do
               header "Authorization" (BS.pack $ "X-ApiKey " <> fromJust token) <> header "Content-Type" "text/csv"
       result <- runReq defaultHttpConfig r
       C.infoMessage $ "StatusCode: " <> (T.pack . show $ responseStatusCode result)
-      C.infoMessage $ "ResponseMessage: " <> (decodeUtf8 $ responseStatusMessage result)
+      C.infoMessage $ "ResponseMessage: " <> decodeUtf8 (responseStatusMessage result)
       C.infoMessage "ResponseBody:"
       putStrLn . BS.unpack $ responseBody result
 
@@ -153,7 +156,7 @@ check community = do
   failed <- catMaybes . pipe <$> mapM (\x -> try @MyException (getLatestCabal $ mkPackageName x)) hackageNames
 
   embed $
-    when (not $ null failed) $
+    unless (null failed) $
       C.warningMessage "Following packages in community are not linked to hackage:"
 
   embed . putStrLn . unlines $ failed
@@ -170,7 +173,7 @@ check community = do
       ppRecord b (name, version, url) = (if b then C.formatWith [C.green] else C.formatWith [C.red]) $ "(" <> name <> ", " <> version <> ", " <> url <> ")"
 
   embed . putStrLn $ C.formatWith [C.magenta] "Diff:"
-  embed $ case (diffNew <> diffOld) of
+  embed $ case diffNew <> diffOld of
     [] -> putStrLn "[]"
     _ -> do
       putStr . unlines $ fmap (ppRecord False) diffOld
