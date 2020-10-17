@@ -151,10 +151,10 @@ app target path aurSupport skip uusi metaPath = do
           [] -> ""
           xs -> " " <> xs
         flattened' = filter (/= target) flattened
-        comment =
-          if (not $ null flattened')
-            then "# Following dependencies are missing in community: " <> (intercalate ", " $ unPackageName <$> flattened')
-            else "\n"
+        comment = case flattened' of
+          [] -> "\n"
+          [x] -> "# The following dependency is missing in community: " <> unPackageName x
+          _ -> "# Following dependencies are missing in community:" <> (intercalate ", " $ unPackageName <$> flattened')
         txt = template (T.pack comment) (T.pack depends)
         dir = metaPath </> "haskell-" <> name <> "-meta"
         fileName = dir </> "PKGBUILD"
