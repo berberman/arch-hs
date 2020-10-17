@@ -130,7 +130,7 @@ instance Show DependencyType where
 
 -- | Provider of a dependency.
 data DependencyProvider = ByCommunity | ByAur
-  deriving stock (Eq, Generic)
+  deriving stock (Eq, Ord, Generic)
   deriving anyclass (NFData)
 
 instance Show DependencyProvider where
@@ -146,7 +146,7 @@ data SolvedDependency = SolvedDependency
     -- | Types of the dependency
     _depType :: [DependencyType]
   }
-  deriving stock (Show, Eq, Generic)
+  deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass (NFData)
 
 -- | A solved package collected from dgraph. This data type is not designed to be recursively,
@@ -166,7 +166,7 @@ data SolvedPackage
         -- | Package dependencies
         _pkgDeps :: [SolvedDependency]
       }
-  deriving stock (Show, Eq, Generic)
+  deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass (NFData)
 
 makeLenses ''SolvedDependency

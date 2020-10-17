@@ -23,6 +23,7 @@ data Options = Options
     optStdoutTrace :: Bool,
     optFileTrace :: FilePath,
     optUusi :: Bool,
+    optMetaDir :: FilePath,
     optTarget :: PackageName
   }
   deriving stock (Show)
@@ -95,6 +96,12 @@ cmdOptions =
       <*> switch
         ( long "uusi"
             <> help "Splicing uusi into prepare()"
+        )
+      <*> strOption
+        ( long "meta"
+            <> metavar "PATH"
+            <> help "Path to target meta package"
+            <> value ""
         )
       <*> argument optPackageNameReader (metavar "TARGET")
 

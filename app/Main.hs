@@ -10,7 +10,8 @@ import qualified Algebra.Graph.Labelled.AdjacencyMap as GL
 import Args
 import qualified Colourista as C
 import Conduit
-import Control.Monad (filterM)
+import Control.Monad (filterM, unless)
+import Data.Containers.ListUtils (nubOrd)
 import Data.IORef (IORef, newIORef)
 import Data.List.NonEmpty (toList)
 import qualified Data.Map.Strict as Map
@@ -28,7 +29,8 @@ import Distribution.ArchHs.Core
   )
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
-  ( getPackageFlag,
+  ( getLatestCabal,
+    getPackageFlag,
     insertDB,
     loadHackageDB,
     lookupHackagePath,
@@ -36,6 +38,7 @@ import Distribution.ArchHs.Hackage
   )
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local
+import Distribution.ArchHs.Name (toCommunityName)
 import Distribution.ArchHs.PP
   ( prettyDeps,
     prettyFlagAssignments,
@@ -45,7 +48,7 @@ import Distribution.ArchHs.PP
   )
 import qualified Distribution.ArchHs.PkgBuild as N
 import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils (getTwo)
+import Distribution.ArchHs.Utils (depNotInGHCLib, depNotMyself, getTwo, getUrl)
 import Distribution.Hackage.DB (HackageDB)
 import System.Directory
   ( createDirectoryIfMissing,
@@ -60,24 +63,23 @@ app ::
   Bool ->
   [String] ->
   Bool ->
+  FilePath ->
   Sem r ()
-app target path aurSupport skip uusi = do
+app target path aurSupport skip uusi metaPath = do
   (deps, ignored) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
 
-  if aurSupport
-    then do
-      inAur <- isInAur target
-      when inAur $ throw $ TargetExist target ByAur
-    else return ()
+  when aurSupport $ do
+    inAur <- isInAur target
+    when inAur $ throw $ TargetExist target ByAur
 
   let grouped = groupDeps deps
       namesFromSolved x = x ^.. each . pkgName <> x ^.. each . pkgDeps . each . depName
-      allNames = nub $ namesFromSolved grouped
+      allNames = nubOrd $ namesFromSolved grouped
   communityProvideList <- (<> ghcLibList) <$> filterM isInCommunity allNames
   let fillProvidedPkgs provideList provider = mapC (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
-      fillProvidedDeps provideList provider = mapC (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider .~ (Just provider) else y))
+      fillProvidedDeps provideList provider = mapC (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))
       filledByCommunity =
         runConduitPure $
           yieldMany grouped
@@ -87,7 +89,7 @@ app target path aurSupport skip uusi = do
       toBePacked1 = filledByCommunity ^.. each . filtered (\case ProvidedPackage _ _ -> False; _ -> True)
   (filledByBoth, toBePacked2) <- do
     embed . when aurSupport $ C.infoMessage "Start searching AUR..."
-    aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> (T.pack $ unPackageName n)); isInAur n) $ toBePacked1 ^.. each . pkgName else return []
+    aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> T.pack (unPackageName n)); isInAur n) $ toBePacked1 ^.. each . pkgName else return []
     let filledByBoth =
           if aurSupport
             then
@@ -110,20 +112,18 @@ app target path aurSupport skip uusi = do
   let vertexesToBeRemoved = filledByBoth ^.. each . filtered (\case ProvidedPackage _ _ -> True; _ -> False) ^.. each . pkgName
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
-  flattened <- case G.topSort . GL.skeleton $ removeSelfCycle $ newGraph of
+  flattened <- case G.topSort . GL.skeleton $ removeSelfCycle newGraph of
     Left c -> throw . CyclicExist $ toList c
     Right x -> return x
   embed $ putStrLn . prettyDeps . reverse $ flattened
-  flags <- filter (\(_, l) -> length l /= 0) <$> mapM (\n -> (n,) <$> getPackageFlag n) flattened
+  flags <- filter (\(_, l) -> not $ null l) <$> mapM (\n -> (n,) <$> getPackageFlag n) flattened
 
   embed $
-    when (length flags /= 0) $ do
+    unless (null flags) $ do
       C.infoMessage "Detected flags from targets (their values will keep default unless you specify):"
       putStrLn . prettyFlags $ flags
 
-  let dry = path == ""
-  embed $ when dry $ C.warningMessage "You didn't pass -o, PKGBUILD files will not be generated."
-  when (not dry) $
+  unless (null path) $
     mapM_
       ( \solved -> do
           pkgBuild <- cabalToPkgBuild solved (Set.toList ignored) uusi
@@ -136,6 +136,29 @@ app target path aurSupport skip uusi = do
           embed $ C.infoMessage $ "Write file: " <> T.pack fileName
       )
       toBePacked2
+
+  unless (null metaPath) $ do
+    cabal <- getLatestCabal target
+    let url = getUrl $ packageDescription cabal
+        name = unPackageName target
+        template = N.metaTemplate (T.pack url) (T.pack name)
+        providedDepends pkg =
+          pkg ^. pkgDeps
+            ^.. each
+              . filtered (\x -> depNotMyself (pkg ^. pkgName) x && depNotInGHCLib x && x ^. depProvider == Just ByCommunity)
+        toStr x = "'" <> (unCommunityName . toCommunityName . _depName) x <> "'"
+        depends = intercalate " " . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked2
+        flattened' = filter (/= target) flattened
+        comment =
+          if (not $ null flattened')
+            then "# Following dependencies are missing in community: " <> (intercalate ", " $ unPackageName <$> flattened')
+            else "\n"
+        txt = template (T.pack comment) (T.pack depends)
+        dir = metaPath </> "haskell-" <> name <> "-meta"
+        fileName = dir </> "PKGBUILD"
+    embed $ createDirectoryIfMissing True dir
+    embed $ writeFile fileName (T.unpack txt)
+    embed $ C.infoMessage $ "Write file: " <> T.pack fileName
 
 -----------------------------------------------------------------------------
 
@@ -164,7 +187,7 @@ runTrace :: Member (Embed IO) r => Bool -> FilePath -> Sem (Trace ': r) a -> Sem
 runTrace stdout path = interpret $ \case
   Trace m -> do
     when stdout (embed $ putStrLn m)
-    when (not $ null path) (embed $ appendFile path (m ++ "\n"))
+    unless (null path) (embed $ appendFile path (m ++ "\n"))
 
 -----------------------------------------------------------------------------
 
@@ -173,28 +196,27 @@ main = printHandledIOException $
   do
     Options {..} <- runArgsParser
 
-    let traceToFile = not $ null optFileTrace
-    when (traceToFile) $ do
-      C.infoMessage $ "Trace will be dumped to " <> (T.pack optFileTrace) <> "."
+    unless (null optFileTrace) $ do
+      C.infoMessage $ "Trace will be dumped to " <> T.pack optFileTrace <> "."
       exist <- doesFileExist optFileTrace
       when exist $
-        C.warningMessage $ "File " <> (T.pack optFileTrace) <> " already existed, overwrite it."
+        C.warningMessage $ "File " <> T.pack optFileTrace <> " already existed, overwrite it."
 
-    let useDefaultHackage = isInfixOf "YOUR_HACKAGE_MIRROR" $ optHackagePath
+    let useDefaultHackage = "YOUR_HACKAGE_MIRROR" `isInfixOf` optHackagePath
         useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
 
     when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
     when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
 
-    let isFlagEmpty = optFlags == Map.empty
-        isSkipEmpty = optSkip == []
+    let isFlagEmpty = Map.null optFlags
+        isSkipEmpty = null optSkip
 
     when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag assignments may make difference in dependency resolving."
-    when (not isFlagEmpty) $ do
+    unless isFlagEmpty $ do
       C.infoMessage "You assigned flags:"
       putStrLn . prettyFlagAssignments $ optFlags
 
-    when (not isSkipEmpty) $ do
+    unless isSkipEmpty $ do
       C.infoMessage "You chose to skip:"
       putStrLn $ prettySkip optSkip
 
@@ -205,14 +227,14 @@ main = printHandledIOException $
     hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
     C.infoMessage "Loading hackage..."
 
-    let isExtraEmpty = optExtraCabalPath == []
+    let isExtraEmpty = null optExtraCabalPath
 
-    when (not isExtraEmpty) $
+    unless isExtraEmpty $
       C.infoMessage $ "You added " <> (T.pack . intercalate ", " $ map takeFileName optExtraCabalPath) <> " as extra cabal file(s), starting parsing right now."
 
     parsedExtra <- mapM parseCabalFile optExtraCabalPath
 
-    let newHackage = foldr (\x acc -> x `insertDB` acc) hackage parsedExtra
+    let newHackage = foldr insertDB hackage parsedExtra
 
     community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
     C.infoMessage "Loading community.db..."
@@ -221,7 +243,7 @@ main = printHandledIOException $
 
     empty <- newIORef Set.empty
 
-    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi) & printAppResult
+    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi optMetaDir) & printAppResult
 
 -----------------------------------------------------------------------------
 
@@ -242,4 +264,4 @@ groupDeps graph =
     parents = fmap fst result
     children = mconcat $ fmap (\(_, ds) -> fmap snd ds) result
     -- Maybe 'G.vertexSet' is a better choice
-    aloneChildren = nub $ zip (filter (`notElem` parents) children) (repeat [])
+    aloneChildren = nubOrd $ zip (filter (`notElem` parents) children) (repeat [])

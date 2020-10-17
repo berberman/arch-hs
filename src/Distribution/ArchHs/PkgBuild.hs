@@ -14,6 +14,7 @@ module Distribution.ArchHs.PkgBuild
     mapLicense,
     applyTemplate,
     felixTemplate,
+    metaTemplate,
   )
 where
 
@@ -142,7 +143,7 @@ applyTemplate PkgBuild {..} =
       (pack _makeDepends)
       (pack _sha256sums)
       ( case _licenseFile of
-          Just n -> "\n" <> (installLicense $ pack n)
+          Just n -> "\n" <> installLicense (pack n)
           _ -> "\n"
       )
       (if _enableUusi then "\n" <> uusi <> "\n\n" else "\n")
@@ -218,3 +219,19 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends sha
     runhaskell Setup copy --destdir="$$pkgdir"$licenseF
   }
 |]
+
+metaTemplate :: Text -> Text -> Text -> Text -> Text
+metaTemplate url pkgname comment depends =
+  [text|
+  # This is a meta package, containing only dependencies of the target.
+  # Maintainer: Your Name <youremail@domain.com>
+
+  pkgname=haskell-$pkgname-meta
+  pkgver=1
+  pkgrel=1
+  pkgdesc="Dependencies of $pkgname"
+  url="$url"
+  arch=('x86_64')
+  $comment
+  depends=('ghc-libs'$depends)
+  |]

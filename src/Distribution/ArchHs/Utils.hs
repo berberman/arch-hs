@@ -18,11 +18,15 @@ module Distribution.ArchHs.Utils
     buildToolDependsIfBuild,
     traceCallStack,
     trace',
+    depNotInGHCLib,
+    depNotMyself,
+    depIsKind,
   )
 where
 
 import Control.Monad ((<=<))
 import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Local (ghcLibList)
 import Distribution.ArchHs.Types
 import Distribution.PackageDescription (repoLocation)
 import Distribution.Types.BuildInfo (BuildInfo (..))
@@ -111,3 +115,12 @@ traceCallStack = do
   trace . prefix $ prettyCallStack callStack
   where
     prefix = unlines . fmap ("[TRACE]  " ++) . lines
+
+depNotInGHCLib :: SolvedDependency -> Bool
+depNotInGHCLib x = (x ^. depName) `notElem` ghcLibList
+
+depNotMyself :: PackageName -> SolvedDependency -> Bool
+depNotMyself name x = x ^. depName /= name
+
+depIsKind :: DependencyKind -> SolvedDependency -> Bool
+depIsKind k x = k `elem` (x ^. depType <&> dependencyTypeToKind)

@@ -254,17 +254,17 @@ cabalToPkgBuild pkg ignored uusi = do
       getE (EOr x y) = getE x <> " " <> getE y
 
       _license = getL . license $ cabal
-      _enableCheck = or $ (pkg ^. pkgDeps) <&> (\dep -> selectDepKind Test dep && dep ^. depName == pkg ^. pkgName)
+      _enableCheck = or $ (pkg ^. pkgDeps) <&> (\dep -> depIsKind Test dep && dep ^. depName == pkg ^. pkgName)
       depends =
         pkg ^. pkgDeps
           ^.. each
             . filtered
               ( \x ->
-                  notMyself x
-                    && notInGHCLib x
-                    && ( selectDepKind Lib x
-                           || selectDepKind Exe x
-                           || selectDepKind SubLibs x
+                  depNotMyself name x
+                    && depNotInGHCLib x
+                    && ( depIsKind Lib x
+                           || depIsKind Exe x
+                           || depIsKind SubLibs x
                        )
                     && notIgnore x
               )
@@ -274,12 +274,12 @@ cabalToPkgBuild pkg ignored uusi = do
             . filtered
               ( \x ->
                   x `notElem` depends
-                    && notMyself x
-                    && notInGHCLib x
-                    && ( selectDepKind LibBuildTools x
-                           || selectDepKind Test x
-                           || selectDepKind TestBuildTools x
-                           || selectDepKind SubLibsBuildTools x
+                    && depNotMyself name x
+                    && depNotInGHCLib x
+                    && ( depIsKind LibBuildTools x
+                           || depIsKind Test x
+                           || depIsKind TestBuildTools x
+                           || depIsKind SubLibsBuildTools x
                        )
                     && notIgnore x
               )
@@ -288,10 +288,7 @@ cabalToPkgBuild pkg ignored uusi = do
       _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString makeDepends
       _url = getUrl cabal
       wrap s = " '" <> s <> "'"
-      notInGHCLib x = (x ^. depName) `notElem` ghcLibList
-      notMyself x = x ^. depName /= name
       notIgnore x = x ^. depName `notElem` ignored
-      selectDepKind k x = k `elem` (x ^. depType <&> dependencyTypeToKind)
       _licenseFile = licenseFiles cabal ^? ix 0
       _enableUusi = uusi
   return PkgBuild {..}
