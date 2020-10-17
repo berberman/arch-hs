@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Diff
@@ -82,8 +81,8 @@ collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
       bInfo <- evalConditionTree cabal lib
-      let libDeps = fmap unDepV $ buildDependsIfBuild bInfo
-          toolDeps = fmap unExeV $ buildToolDependsIfBuild bInfo
+      let libDeps = unDepV <$> buildDependsIfBuild bInfo
+          toolDeps = unExeV <$> buildToolDependsIfBuild bInfo
       mapM_ (uncurry updateDependencyRecord) libDeps
       mapM_ (uncurry updateDependencyRecord) toolDeps
       return (libDeps, toolDeps)
@@ -98,8 +97,8 @@ collectRunnableDeps ::
 collectRunnableDeps f cabal skip = do
   let exes = cabal & f
   bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree cabal . snd) exes
-  let deps = bInfo <&> ((_2 %~) $ fmap unDepV . buildDependsIfBuild)
-      toolDeps = bInfo <&> ((_2 %~) $ fmap unExeV . buildToolDependsIfBuild)
+  let deps = bInfo <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
+      toolDeps = bInfo <&> _2 %~ (fmap unExeV . buildToolDependsIfBuild)
   mapM_ (uncurry updateDependencyRecord) $ deps ^.. each . _2 ^. each
   mapM_ (uncurry updateDependencyRecord) $ toolDeps ^.. each . _2 ^. each
   return (deps, toolDeps)
@@ -141,10 +140,10 @@ directDependencies cabal = do
       et = flatten exeToolsDeps
       t = flatten testDeps
       tt = flatten testToolsDeps
-      notMyself = (/= (getPkgName' cabal))
+      notMyself = (/= getPkgName' cabal)
       distinct = filter (notMyself . fst) . nub
       depends = distinct $ l <> e
-      makedepends = (distinct $ lt <> et <> t <> tt) \\ depends
+      makedepends = distinct (lt <> et <> t <> tt) \\ depends
   return (depends, makedepends)
 
 -----------------------------------------------------------------------------
@@ -180,8 +179,8 @@ diffTerm :: String -> (a -> String) -> a -> a -> String
 diffTerm s f a b =
   let f' = T.unpack . T.strip . T.pack . f
       (ra, rb) = (f' a, f' b)
-   in (C.formatWith [C.magenta] s)
-        <> (if ra == rb then ra else ((C.formatWith [C.red] ra) <> "  ⇒  " <> C.formatWith [C.green] rb))
+   in C.formatWith [C.magenta] s
+        <> (if ra == rb then ra else C.formatWith [C.red] ra <> "  ⇒  " <> C.formatWith [C.green] rb)
 
 desc :: PackageDescription -> PackageDescription -> String
 desc = diffTerm "Synopsis: " $ fromShortText . synopsis
@@ -197,7 +196,7 @@ splitLine = "\n" <> replicate 38 '-' <> "\n"
 
 inRange :: Members [CommunityEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (Either (PackageName, VersionRange) (PackageName, VersionRange, Version, Bool))
 inRange (name, hRange) =
-  (try @MyException (versionInCommunity name))
+  try @MyException (versionInCommunity name)
     >>= \case
       Right y -> let version = fromJust . simpleParsec $ y in return . Right $ (name, hRange, version, withinRange version hRange)
       Left _ -> return . Left $ (name, hRange)
@@ -232,13 +231,13 @@ lookupDiffCommunity va vb = do
 
 dep :: String -> VersionedList -> VersionedList -> String
 dep s va vb =
-  (C.formatWith [C.magenta] s) <> "    " <> case (diffOld <> diffNew) of
+  C.formatWith [C.magenta] s <> "    " <> case diffOld <> diffNew of
     [] -> joinToString a
     _ ->
-      (joinToString $ fmap (\x -> red (x `elem` diffOld) x) a)
+      joinToString (fmap (\x -> red (x `elem` diffOld) x) a)
         <> splitLine
         <> "    "
-        <> (joinToString $ fmap (\x -> green (x `elem` diffNew) x) b)
+        <> joinToString (fmap (\x -> green (x `elem` diffNew) x) b)
   where
     a = joinVersionWithName <$> va
     b = joinVersionWithName <$> vb
@@ -252,13 +251,13 @@ dep s va vb =
 
 flags :: PackageName -> [Flag] -> [Flag] -> String
 flags name a b =
-  (C.formatWith [C.magenta] "Flags:\n") <> "  " <> case (diffOld <> diffNew) of
+  C.formatWith [C.magenta] "Flags:\n" <> "  " <> case diffOld <> diffNew of
     [] -> joinToString a
     _ ->
-      (joinToString a)
+      joinToString a
         <> splitLine
         <> "    "
-        <> (joinToString b)
+        <> joinToString b
   where
     diffNew = b \\ a
     diffOld = a \\ b

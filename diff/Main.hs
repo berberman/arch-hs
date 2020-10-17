@@ -4,6 +4,7 @@
 module Main (main) where
 
 import qualified Colourista as C
+import Control.Monad (unless)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Diff
@@ -26,7 +27,7 @@ main = printHandledIOException $
     when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
 
     when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag values may make difference in dependency resolving."
-    when (not isFlagEmpty) $ do
+    unless isFlagEmpty $ do
       C.infoMessage "You assigned flags:"
       putStrLn . prettyFlagAssignments $ optFlags
 
@@ -39,4 +40,4 @@ main = printHandledIOException $
       Right r -> putStrLn r >> C.successMessage "Success!"
 
 runDiff :: CommunityDB -> FlagAssignments -> Sem '[CommunityEnv, FlagAssignmentsEnv, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a -> IO (Either MyException a)
-runDiff community flags = runFinal . embedToFinal . errorToIOFinal . evalState (Map.empty) . ignoreTrace . (runReader flags) . (runReader community)
+runDiff community flags = runFinal . embedToFinal . errorToIOFinal . evalState Map.empty . ignoreTrace . runReader flags . runReader community
