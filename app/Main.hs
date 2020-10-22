@@ -66,7 +66,7 @@ app ::
   FilePath ->
   Sem r ()
 app target path aurSupport skip uusi metaPath = do
-  (deps, ignored) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
+  (deps, sublibs) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
   inCommunity <- isInCommunity target
   when inCommunity $ throw $ TargetExist target ByCommunity
 
@@ -114,7 +114,7 @@ app target path aurSupport skip uusi metaPath = do
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle newGraph of
     Left c -> throw . CyclicExist $ toList c
-    Right x -> return x
+    Right x -> return $ filter (`notElem` sublibs) x
   embed $ putStrLn . prettyDeps . reverse $ flattened
   flags <- filter (\(_, l) -> not $ null l) <$> mapM (\n -> (n,) <$> getPackageFlag n) flattened
 
@@ -126,7 +126,7 @@ app target path aurSupport skip uusi metaPath = do
   unless (null path) $
     mapM_
       ( \solved -> do
-          pkgBuild <- cabalToPkgBuild solved (Set.toList ignored) uusi
+          pkgBuild <- cabalToPkgBuild solved uusi
           let pName = "haskell-" <> N._pkgName pkgBuild
               dir = path </> pName
               fileName = dir </> "PKGBUILD"

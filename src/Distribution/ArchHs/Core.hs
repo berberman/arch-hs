@@ -26,7 +26,7 @@ import Distribution.ArchHs.Hackage
     getLatestSHA256,
   )
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.Local (ghcLibList, ignoreList)
+import Distribution.ArchHs.Local (ignoreList)
 import Distribution.ArchHs.Name
 import Distribution.ArchHs.PkgBuild
   ( PkgBuild (..),
@@ -184,7 +184,7 @@ collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
       let name = getPkgName' cabal
-      trace' $ "Getting componential dependencies of " <> show name
+      trace' $ "Getting libs dependencies of " <> show name
       info <- evalConditionTree cabal lib
       let libDeps = unDepV <$> buildDependsIfBuild info
           toolDeps = unExeV <$> buildToolDependsIfBuild info
@@ -198,14 +198,15 @@ collectLibDeps cabal = do
 
 collectComponentialDeps ::
   (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) =>
+  String ->
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
   Sem r (ComponentPkgList, ComponentPkgList)
-collectComponentialDeps f cabal skip = do
+collectComponentialDeps tag f cabal skip = do
   let conds = cabal & f
       name = getPkgName' cabal
-  trace' $ "Getting componential dependencies of " <> show name
+  trace' $ "Getting "<> tag <> " dependencies of " <> show name
   info <- filter (not . (`elem` skip) . fst) . zip (conds <&> fst) <$> mapM (evalConditionTree cabal . snd) conds
   let deps = info <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
       toolDeps = info <&> _2 %~ (fmap unExeV . buildToolDependsIfBuild)
@@ -218,13 +219,13 @@ collectComponentialDeps f cabal skip = do
   return result
 
 collectExeDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
-collectExeDeps = collectComponentialDeps condExecutables
+collectExeDeps = collectComponentialDeps "exe" condExecutables
 
 collectTestDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
-collectTestDeps = collectComponentialDeps condTestSuites
+collectTestDeps = collectComponentialDeps "test" condTestSuites
 
 collectSubLibDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
-collectSubLibDeps = collectComponentialDeps condSubLibraries
+collectSubLibDeps = collectComponentialDeps "sublib" condSubLibraries
 
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> VersionRange -> Sem r ()
 updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
@@ -235,8 +236,8 @@ updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 -----------------------------------------------------------------------------
 
 -- | Generate 'PkgBuild' for a 'SolvedPackage'.
-cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> PkgList -> Bool -> Sem r PkgBuild
-cabalToPkgBuild pkg ignored uusi = do
+cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> Bool -> Sem r PkgBuild
+cabalToPkgBuild pkg uusi = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> getLatestCabal name
   _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> getLatestSHA256 name
@@ -264,9 +265,7 @@ cabalToPkgBuild pkg ignored uusi = do
                     && depNotInGHCLib x
                     && ( depIsKind Lib x
                            || depIsKind Exe x
-                           || depIsKind SubLibs x
                        )
-                    && notIgnore x
               )
       makeDepends =
         pkg ^. pkgDeps
@@ -279,16 +278,13 @@ cabalToPkgBuild pkg ignored uusi = do
                     && ( depIsKind LibBuildTools x
                            || depIsKind Test x
                            || depIsKind TestBuildTools x
-                           || depIsKind SubLibsBuildTools x
                        )
-                    && notIgnore x
               )
       depsToString deps = deps <&> (wrap . unCommunityName . toCommunityName . _depName) & mconcat
       _depends = depsToString depends
       _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString makeDepends
       _url = getUrl cabal
       wrap s = " '" <> s <> "'"
-      notIgnore x = x ^. depName `notElem` ignored
       _licenseFile = licenseFiles cabal ^? ix 0
       _enableUusi = uusi
   return PkgBuild {..}
