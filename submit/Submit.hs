@@ -180,4 +180,4 @@ check community = do
       putStrLn $ replicate 68 '-'
       putStr . unlines $ fmap (ppRecord True) diffNew
 
-  embed . putStrLn $ "Found " <> show (length hackage) <> " packages with submitted distribution information in hackage, and " <> show (length community) <> " haskell packages in community."
+  embed . putStrLn $ "Found " <> show (length hackage) <> " packages with submitted distribution information in hackage, and " <> show (length community) <> " haskell packages in [community]."

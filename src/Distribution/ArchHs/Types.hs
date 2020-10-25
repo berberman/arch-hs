@@ -134,8 +134,8 @@ data DependencyProvider = ByCommunity | ByAur
   deriving anyclass (NFData)
 
 instance Show DependencyProvider where
-  show ByCommunity = "community"
-  show ByAur = "aur"
+  show ByCommunity = "[community]"
+  show ByAur = "[aur]"
 
 -- | A solved dependency, holden by 'SolvedPackage'
 data SolvedDependency = SolvedDependency

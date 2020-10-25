@@ -207,22 +207,22 @@ lookupDiffCommunity va vb = do
       diffOld = va \\ vb
       color b = C.formatWith [if b then C.green else C.red]
       pp b (Right (name, range, v, False)) =
-        "["
+        "\""
           <> color b (unPackageName name)
-          <> "] is required to be in range ("
+          <> "\" is required to be in range ("
           <> color b (prettyShow range)
           <> "), "
-          <> "but community provides ("
+          <> "but [community] provides ("
           <> color b (prettyShow v)
           <> ")."
       pp _ (Right _) = ""
       pp b (Left (name, range)) =
-        "["
+        "\""
           <> color b (unPackageName name)
-          <> "] is required to be in range ("
+          <> "\" is required to be in range ("
           <> color b (prettyShow range)
           <> "), "
-          <> "but community does not provide this package."
+          <> "but [community] does not provide this package."
 
   new <- fmap (pp True) <$> mapM inRange diffNew
   old <- fmap (pp False) <$> mapM inRange diffOld

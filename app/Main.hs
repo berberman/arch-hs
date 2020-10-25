@@ -73,8 +73,10 @@ app target path aurSupport skip uusi metaPath = do
   when aurSupport $ do
     inAur <- isInAur target
     when inAur $ throw $ TargetExist target ByAur
-
-  let grouped = groupDeps deps
+  let 
+      removeSublibs list =
+        list ^.. each . filtered (\x -> x ^. pkgName `notElem` sublibs) & each %~ (\x -> x & pkgDeps %~ (filter (\d -> d ^. depName `notElem` sublibs)))
+      grouped = removeSublibs $ groupDeps deps
       namesFromSolved x = x ^.. each . pkgName <> x ^.. each . pkgDeps . each . depName
       allNames = nubOrd $ namesFromSolved grouped
   communityProvideList <- (<> ghcLibList) <$> filterM isInCommunity allNames
@@ -105,10 +107,10 @@ app target path aurSupport skip uusi metaPath = do
             else toBePacked1
     return (filledByBoth, toBePacked2)
 
-  embed $ C.infoMessage "Solved target:"
+  embed $ C.infoMessage "Solved:"
   embed $ putStrLn . prettySolvedPkgs $ filledByBoth
 
-  embed $ C.infoMessage "Recommended package order (from topological sort):"
+  embed $ C.infoMessage "Recommended package order:"
   let vertexesToBeRemoved = filledByBoth ^.. each . filtered (\case ProvidedPackage _ _ -> True; _ -> False) ^.. each . pkgName
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
@@ -120,14 +122,14 @@ app target path aurSupport skip uusi metaPath = do
 
   embed $
     unless (null flags) $ do
-      C.infoMessage "Detected flags from targets (their values will keep default unless you specify):"
+      C.infoMessage "Detected flag(s) from targets:"
       putStrLn . prettyFlags $ flags
 
   unless (null path) $
     mapM_
       ( \solved -> do
           pkgBuild <- cabalToPkgBuild solved uusi
-          let pName = "haskell-" <> N._pkgName pkgBuild
+          let pName = N._pkgName pkgBuild
               dir = path </> pName
               fileName = dir </> "PKGBUILD"
               txt = N.applyTemplate pkgBuild

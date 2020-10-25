@@ -183,7 +183,7 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends sha
   # Maintainer: Your Name <youremail@domain.com>
 
   _hkgname=$hkgname
-  pkgname=haskell-$pkgname
+  pkgname=$pkgname
   pkgver=$pkgver
   pkgrel=1
   pkgdesc="$pkgdesc"

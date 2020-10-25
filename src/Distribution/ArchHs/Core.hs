@@ -16,7 +16,6 @@ where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Data.Bifunctor (second)
-import Data.Char (toLower)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -105,7 +104,6 @@ getDependencies skip parent name = do
   trace' $ "Already resolved: " <> show resolved
   traceCallStack
   cabal <- getLatestCabal name
-  -- Ignore subLibraries
   (libDeps, libToolsDeps) <- collectLibDeps cabal
   (subLibDeps, subLibToolsDeps) <- collectSubLibDeps cabal skip
   (exeDeps, exeToolsDeps) <- collectExeDeps cabal skip
@@ -206,7 +204,7 @@ collectComponentialDeps ::
 collectComponentialDeps tag f cabal skip = do
   let conds = cabal & f
       name = getPkgName' cabal
-  trace' $ "Getting "<> tag <> " dependencies of " <> show name
+  trace' $ "Getting " <> tag <> " dependencies of " <> show name
   info <- filter (not . (`elem` skip) . fst) . zip (conds <&> fst) <$> mapM (evalConditionTree cabal . snd) conds
   let deps = info <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
       toolDeps = info <&> _2 %~ (fmap unExeV . buildToolDependsIfBuild)
@@ -240,10 +238,9 @@ cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => Solv
 cabalToPkgBuild pkg uusi = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> getLatestCabal name
-  _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> getLatestSHA256 name
+  _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> tryMaybe (getLatestSHA256 name)
   let _hkgName = pkg ^. pkgName & unPackageName
-      rawName = toLower <$> _hkgName
-      _pkgName = drop 8 rawName
+      _pkgName = unCommunityName . toCommunityName $ pkg ^. pkgName
       _pkgVer = prettyShow $ getPkgVersion cabal
       _pkgDesc = fromShortText $ synopsis cabal
       getL NONE = ""
@@ -255,7 +252,7 @@ cabalToPkgBuild pkg uusi = do
       getE (EOr x y) = getE x <> " " <> getE y
 
       _license = getL . license $ cabal
-      _enableCheck = or $ (pkg ^. pkgDeps) <&> (\dep -> depIsKind Test dep && dep ^. depName == pkg ^. pkgName)
+      _enableCheck = or $ (pkg ^. pkgDeps) <&> (depIsKind Test)
       depends =
         pkg ^. pkgDeps
           ^.. each
@@ -265,6 +262,7 @@ cabalToPkgBuild pkg uusi = do
                     && depNotInGHCLib x
                     && ( depIsKind Lib x
                            || depIsKind Exe x
+                           || depIsKind SubLibs x
                        )
               )
       makeDepends =
@@ -278,6 +276,7 @@ cabalToPkgBuild pkg uusi = do
                     && ( depIsKind LibBuildTools x
                            || depIsKind Test x
                            || depIsKind TestBuildTools x
+                           || depIsKind SubLibsBuildTools x
                        )
               )
       depsToString deps = deps <&> (wrap . unCommunityName . toCommunityName . _depName) & mconcat

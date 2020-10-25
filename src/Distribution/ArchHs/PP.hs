@@ -62,11 +62,11 @@ prettySolvedPkg SolvedPackage {..} =
     ( \(i :: Int, SolvedDependency {..}) ->
         let prefix = if i == length _pkgDeps then " └─" else " ├─"
          in case _depProvider of
-              (Just x) -> (C.formatWith [C.green] $ T.unpack prefix <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.green] "✔ " <> C.formatWith [C.cyan] ("[" <> show x <> "]"))
+              (Just x) -> (C.formatWith [C.green] $ T.unpack prefix <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.green] "✔ " <> C.formatWith [C.cyan] (show x))
               _ -> (C.formatWith [C.bold, C.yellow] $ T.unpack prefix <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.red] "    ✘")
     )
     (zip [1 ..] _pkgDeps)
-prettySolvedPkg ProvidedPackage {..} = [(C.formatWith [C.green] (unPackageName _pkgName), C.formatWith [C.green] "✔ " <> C.formatWith [C.cyan] ("[" <> show _pkgProvider <> "]"))]
+prettySolvedPkg ProvidedPackage {..} = [(C.formatWith [C.green] (unPackageName _pkgName), C.formatWith [C.green] "✔ " <> C.formatWith [C.cyan] (show _pkgProvider))]
 
 con :: [(String, String)] -> String
 con l = mconcat complemented

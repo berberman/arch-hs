@@ -15,6 +15,7 @@ module Distribution.ArchHs.Exception
     printHandledIOException,
     printAppResult,
     interceptHttpException,
+    tryMaybe,
   )
 where
 
@@ -38,10 +39,10 @@ data MyException
   | NetworkException HttpException
 
 instance Show MyException where
-  show (PkgNotFound name) = "Unable to find [" <> unPackageName (toHackageName name) <> "] (hackage name) / [" <> unCommunityName (toCommunityName name) <> "] (community name)"
-  show (VersionNotFound name version) = "Unable to find [" <> unPackageName (toHackageName name) <> "] (hackage name) / [" <> unCommunityName (toCommunityName name) <> "] (community name)" <> " " <> prettyShow version
-  show (TargetExist name provider) = "Target [" <> unPackageName name <> "] has been provided by " <> show provider
-  show (CyclicExist c) = "Graph contains a cycle " <> show (fmap unPackageName c)
+  show (PkgNotFound name) = "Unable to find \"" <> unPackageName (toHackageName name) <> "\""
+  show (VersionNotFound name version) = "Unable to find \"" <> unPackageName (toHackageName name) <> "\" " <> prettyShow version
+  show (TargetExist name provider) = "Target \"" <> unPackageName name <> "\" has been provided by " <> show provider
+  show (CyclicExist c) = "Graph contains a cycle \"" <> show (fmap unPackageName c) <> "\""
   show (NetworkException (JsonHttpException s)) = "Failed to parse response " <> s
   show (NetworkException (VanillaHttpException e)) = show e
 
@@ -63,3 +64,9 @@ interceptHttpException io = do
   case x of
     Left err -> throw $ NetworkException err
     Right x' -> return x'
+
+tryMaybe :: Member WithMyErr r => Sem r a -> Sem r (Maybe a)
+tryMaybe m =
+  try @MyException m >>= \case
+    Left _ -> return Nothing
+    Right x -> return $ Just x
