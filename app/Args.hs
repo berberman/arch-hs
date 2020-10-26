@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -14,7 +15,9 @@ import Distribution.ArchHs.Types
 
 data Options = Options
   { optHackagePath :: FilePath,
+#ifndef ALPM
     optCommunityPath :: FilePath,
+#endif
     optOutputDir :: FilePath,
     optFlags :: FlagAssignments,
     optSkip :: [String],
@@ -24,6 +27,9 @@ data Options = Options
     optFileTrace :: FilePath,
     optUusi :: Bool,
     optMetaDir :: FilePath,
+#ifdef ALPM
+    optAlpm :: Bool,
+#endif
     optTarget :: PackageName
   }
   deriving stock (Show)
@@ -39,6 +45,7 @@ cmdOptions =
           <> showDefault
           <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/01-index.tar | 00-index.tar"
       )
+#ifndef ALPM
       <*> strOption
         ( long "community"
             <> metavar "PATH"
@@ -47,6 +54,7 @@ cmdOptions =
             <> showDefault
             <> value "/var/lib/pacman/sync/community.db"
         )
+#endif
       <*> strOption
         ( long "output"
             <> metavar "PATH"
@@ -95,7 +103,7 @@ cmdOptions =
         )
       <*> switch
         ( long "uusi"
-            <> help "Splicing uusi into prepare()"
+            <> help "Splice uusi into prepare()"
         )
       <*> strOption
         ( long "meta"
@@ -103,6 +111,12 @@ cmdOptions =
             <> help "Path to target meta package"
             <> value ""
         )
+#ifdef ALPM
+      <*> switch
+        ( long "alpm"
+            <> help "Use libalpm to parse community db"
+        )
+#endif
       <*> argument optPackageNameReader (metavar "TARGET")
 
 runArgsParser :: IO Options

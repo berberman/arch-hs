@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -12,6 +14,10 @@ module Distribution.ArchHs.Community
     loadProcessedCommunity,
     isInCommunity,
     versionInCommunity,
+    compiledWithAlpm,
+#ifdef ALPM
+    loadCommunityFFI,
+#endif
   )
 where
 
@@ -25,6 +31,50 @@ import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Name
 import Distribution.ArchHs.PkgDesc
 import Distribution.ArchHs.Types
+
+#ifdef ALPM
+import qualified Data.Sequence as Seq
+import Data.Foldable (toList)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Distribution.ArchHs.Utils
+import Foreign.C.String (CString, peekCString)
+import Foreign.C.Types (CInt(..))
+import Foreign.Ptr (FunPtr, freeHaskellFunPtr)
+
+foreign import ccall "wrapper"
+  wrap :: (CString -> CString -> IO ()) -> IO (FunPtr (CString -> CString -> IO ()))
+
+foreign import ccall "clib.h query_community"
+  query_community :: FunPtr (CString -> CString -> IO ()) -> IO CInt
+
+foreign import ccall "alpm.h alpm_strerror"
+  alpm_strerror :: CInt -> IO CString
+
+callback :: IORef (Seq.Seq (CommunityName, CommunityVersion)) -> CString -> CString -> IO ()
+callback ref x y = do
+  x' <- peekCString x
+  y' <- peekCString y
+  modifyIORef' ref (Seq.|> (CommunityName x', extractFromEVR y'))
+
+loadCommunityFFI :: IO CommunityDB
+loadCommunityFFI = do
+  ref <- newIORef Seq.empty
+  callbackW <- wrap $ callback ref
+  errno <- query_community callbackW
+  freeHaskellFunPtr callbackW
+  when (errno /= 0) $ do
+    msg <- peekCString =<< alpm_strerror errno
+    error $ "unexpected return code from libalpm: " <> show errno <> "\n" <> msg <> "\ntry running again"
+  Map.fromList . toList <$> readIORef ref
+#endif
+
+compiledWithAlpm :: Bool
+compiledWithAlpm =
+#ifdef ALPM
+  True
+#else
+  False
+#endif
 
 -- | Default path to @community.db@.
 defaultCommunityPath :: FilePath

@@ -25,6 +25,12 @@ tested-with:         GHC == 8.10.2
 source-repository head
   type:                git
   location:            https://github.com/berberman/arch-hs.git
+
+flag alpm
+  description: Whether to use libalpm
+  default: False
+  manual: True
+
 common common-options
   build-depends:       base ^>= 4.14.0,
                        Cabal ^>= 3.2.0, 
@@ -75,6 +81,13 @@ common common-options
                        ScopedTypeVariables
                        TypeOperators
                        TypeFamilies
+  if flag(alpm)
+    c-sources: cbits/clib.c
+    extra-libraries: alpm
+    include-dirs: cbits
+    install-includes: cbits/clib.h
+    cpp-options: -DALPM
+
 library
   import:              common-options
   hs-source-dirs:      src

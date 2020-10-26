@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -29,7 +30,11 @@ import Text.Megaparsec.Char as M
 
 data Options = Options
   { optHackagePath :: FilePath,
+#ifndef ALPM
     optCommunityPath :: FilePath,
+#else
+    optAlpm :: Bool,
+#endif
     optOutput :: FilePath,
     optUpload :: Bool
   }
@@ -45,6 +50,7 @@ cmdOptions =
           <> showDefault
           <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/01-index.tar | 00-index.tar"
       )
+#ifndef ALPM
     <*> strOption
       ( long "community"
           <> metavar "PATH"
@@ -53,6 +59,12 @@ cmdOptions =
           <> showDefault
           <> value "/var/lib/pacman/sync/community.db"
       )
+#else
+      <*> switch
+        ( long "alpm"
+            <> help "Use libalpm to parse community db"
+        )
+#endif
     <*> Options.Applicative.option
       str
       ( long "output"

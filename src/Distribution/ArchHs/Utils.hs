@@ -21,6 +21,7 @@ module Distribution.ArchHs.Utils
     depNotInGHCLib,
     depNotMyself,
     depIsKind,
+    extractFromEVR,
   )
 where
 
@@ -124,3 +125,8 @@ depNotMyself name x = x ^. depName /= name
 
 depIsKind :: DependencyKind -> SolvedDependency -> Bool
 depIsKind k x = k `elem` (x ^. depType <&> dependencyTypeToKind)
+
+extractFromEVR :: CommunityVersion -> CommunityVersion
+extractFromEVR evr =
+  let ev = head $ splitOn ("-") evr
+   in if ':' `elem` ev then tail $ dropWhile (/= ':') ev else ev

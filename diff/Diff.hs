@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -28,8 +29,12 @@ import Distribution.Utils.ShortText (fromShortText)
 import Network.HTTP.Req hiding (header)
 
 data Options = Options
-  { optCommunityPath :: FilePath,
-    optFlags :: FlagAssignments,
+  { optFlags :: FlagAssignments,
+#ifdef ALPM
+    optAlpm :: Bool,
+#else
+  optCommunityPath :: FilePath,
+#endif
     optPackageName :: PackageName,
     optVersionA :: Version,
     optVersionB :: Version
@@ -38,15 +43,7 @@ data Options = Options
 cmdOptions :: Parser Options
 cmdOptions =
   Options
-    <$> strOption
-      ( long "community"
-          <> metavar "PATH"
-          <> short 'c'
-          <> help "Path to community.db"
-          <> showDefault
-          <> value "/var/lib/pacman/sync/community.db"
-      )
-    <*> option
+    <$> option
       optFlagReader
       ( long "flags"
           <> metavar "package_name:flag_name:true|false,..."
@@ -54,6 +51,21 @@ cmdOptions =
           <> help "Flag assignments for packages - e.g. inline-c:gsl-example:true (separated by ',')"
           <> value Map.empty
       )
+#ifndef ALPM
+    <*> strOption
+      ( long "community"
+          <> metavar "PATH"
+          <> short 'c'
+          <> help "Path to community.db"
+          <> showDefault
+          <> value "/var/lib/pacman/sync/community.db"
+      )
+#else
+      <*> switch
+        ( long "alpm"
+            <> help "Use libalpm to parse community db"
+        )
+#endif
     <*> argument optPackageNameReader (metavar "TARGET")
     <*> argument optVersionReader (metavar "VERSION_A")
     <*> argument optVersionReader (metavar "VERSION_B")

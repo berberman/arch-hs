@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -21,10 +22,12 @@ main = printHandledIOException $
     Options {..} <- runArgsParser
 
     let useDefaultHackage = "YOUR_HACKAGE_MIRROR" `isInfixOf` optHackagePath
-        useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
-
     when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
+
+#ifndef ALPM
+    let useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
     when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
+#endif
 
     token <- lookupEnv "HACKAGE_API_TOKEN"
 
@@ -40,8 +43,15 @@ main = printHandledIOException $
     unless (optUpload || hasOutput) $
       C.warningMessage "Run diff and check only."
 
+#ifdef ALPM
+    when optAlpm $ C.infoMessage "Using alpm."
+    community <- if optAlpm then loadCommunityFFI else loadProcessedCommunity defaultCommunityPath
+#else
     community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
+#endif
+
     C.infoMessage "Loading community.db..."
+    writeFile "t" (show community)
 
     hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
     C.infoMessage "Loading hackage..."

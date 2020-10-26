@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -19,37 +20,16 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import Distribution.ArchHs.Aur (Aur, aurToIO, isInAur)
 import Distribution.ArchHs.Community
-  ( defaultCommunityPath,
-    isInCommunity,
-    loadProcessedCommunity,
-  )
 import Distribution.ArchHs.Core
-  ( cabalToPkgBuild,
-    getDependencies,
-  )
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
-  ( getLatestCabal,
-    getPackageFlag,
-    insertDB,
-    loadHackageDB,
-    lookupHackagePath,
-    parseCabalFile,
-  )
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local
-import Distribution.ArchHs.Name (toCommunityName)
+import Distribution.ArchHs.Name
 import Distribution.ArchHs.PP
-  ( prettyDeps,
-    prettyFlagAssignments,
-    prettyFlags,
-    prettySkip,
-    prettySolvedPkgs,
-  )
 import qualified Distribution.ArchHs.PkgBuild as N
 import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils (depNotInGHCLib, depNotMyself, getTwo, getUrl)
-import Distribution.Hackage.DB (HackageDB)
+import Distribution.ArchHs.Utils
 import System.Directory
   ( createDirectoryIfMissing,
     doesFileExist,
@@ -73,8 +53,7 @@ app target path aurSupport skip uusi metaPath = do
   when aurSupport $ do
     inAur <- isInAur target
     when inAur $ throw $ TargetExist target ByAur
-  let 
-      removeSublibs list =
+  let removeSublibs list =
         list ^.. each . filtered (\x -> x ^. pkgName `notElem` sublibs) & each %~ (\x -> x & pkgDeps %~ (filter (\d -> d ^. depName `notElem` sublibs)))
       grouped = removeSublibs $ groupDeps deps
       namesFromSolved x = x ^.. each . pkgName <> x ^.. each . pkgDeps . each . depName
@@ -207,10 +186,12 @@ main = printHandledIOException $
         C.warningMessage $ "File " <> T.pack optFileTrace <> " already existed, overwrite it."
 
     let useDefaultHackage = "YOUR_HACKAGE_MIRROR" `isInfixOf` optHackagePath
-        useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
-
     when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
+
+#ifndef ALPM
+    let useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
     when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
+#endif
 
     let isFlagEmpty = Map.null optFlags
         isSkipEmpty = null optSkip
@@ -240,7 +221,13 @@ main = printHandledIOException $
 
     let newHackage = foldr insertDB hackage parsedExtra
 
+#ifdef ALPM
+    when optAlpm $ C.infoMessage "Using alpm."
+    community <- if optAlpm then loadCommunityFFI else loadProcessedCommunity defaultCommunityPath
+#else
     community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
+#endif
+
     C.infoMessage "Loading community.db..."
 
     C.infoMessage "Start running..."
