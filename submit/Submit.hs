@@ -160,7 +160,7 @@ submit token output upload = do
 
 check :: Members [HackageEnv, WithMyErr, Embed IO] r => DistroCSV -> Sem r ()
 check community = do
-  embed $ C.infoMessage "Checking generated CSV file..."
+  embed $ C.infoMessage "Checking generated csv file..."
 
   let hackageNames = fmap (\(a, _, _) -> a) community
       pipe = fmap (\case Left (PkgNotFound x) -> Just (unCommunityName $ toCommunityName x); _ -> Nothing)

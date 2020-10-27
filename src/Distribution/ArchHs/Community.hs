@@ -64,7 +64,8 @@ loadCommunityFFI = do
   freeHaskellFunPtr callbackW
   when (errno /= 0) $ do
     msg <- peekCString =<< alpm_strerror errno
-    error $ "unexpected return code from libalpm: " <> show errno <> "\n" <> msg <> "\ntry running again"
+    -- TODO: why? :(
+    putStr $ "warn: unexpected return code from libalpm: " <> show errno <> "\n" <> msg
   Map.fromList . toList <$> readIORef ref
 #endif
 
@@ -98,14 +99,9 @@ loadCommunity path = do
                     Right r -> case head $ r Map.! "NAME" of
                       "ghc" -> parseProvidedTerm <$> provided r
                       "ghc-libs" -> parseProvidedTerm <$> provided r
-                      _ -> [(head $ r Map.! "NAME", extractVer . head $ r Map.! "VERSION")]
-                    -- TODO: Drop it
+                      _ -> [(head $ r Map.! "NAME", extractFromEVR . head $ r Map.! "VERSION")]
+                    -- Drop it if failed to parse
                     Left _ -> []
-            extractVer ver = head $
-              splitOn "-" $ case splitOn ":" ver of
-                [_, v] -> v
-                [v] -> v
-                _ -> fail "err"
 
         yieldMany $ result & each . _1 %~ CommunityName
 

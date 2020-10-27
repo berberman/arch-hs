@@ -51,7 +51,6 @@ main = printHandledIOException $
 #endif
 
     C.infoMessage "Loading community.db..."
-    writeFile "t" (show community)
 
     hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
     C.infoMessage "Loading hackage..."
