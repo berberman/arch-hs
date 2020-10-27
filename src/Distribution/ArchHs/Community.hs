@@ -31,12 +31,13 @@ import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Name
 import Distribution.ArchHs.PkgDesc
 import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils
+
 
 #ifdef ALPM
 import qualified Data.Sequence as Seq
 import Data.Foldable (toList)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
-import Distribution.ArchHs.Utils
 import Foreign.C.String (CString, peekCString)
 import Foreign.C.Types (CInt(..))
 import Foreign.Ptr (FunPtr, freeHaskellFunPtr)
