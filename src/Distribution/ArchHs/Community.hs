@@ -66,7 +66,7 @@ loadCommunityFFI = do
   when (errno /= 0) $ do
     msg <- peekCString =<< alpm_strerror errno
     -- TODO: why? :(
-    putStr $ "warn: unexpected return code from libalpm: " <> show errno <> "\n" <> msg
+    putStrLn $ "warn: unexpected return code from libalpm: " <> show errno <> " (" <> msg <> ")"
   Map.fromList . toList <$> readIORef ref
 #endif
 

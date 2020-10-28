@@ -32,7 +32,6 @@ import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import System.Directory
   ( createDirectoryIfMissing,
-    doesFileExist,
   )
 import System.FilePath (takeFileName)
 
@@ -154,13 +153,13 @@ runApp ::
   IORef (Set.Set PackageName) ->
   Sem '[CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, State (Set.Set PackageName), Aur, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runApp hackage community flags stdout path ref =
+runApp hackage community flags traceStdout tracePath ref =
   runFinal
     . embedToFinal
     . errorToIOFinal
     . aurToIO
     . runStateIORef ref
-    . runTrace stdout path
+    . runTrace traceStdout tracePath
     . evalState Map.empty
     . runReader flags
     . runReader hackage
@@ -179,11 +178,8 @@ main = printHandledIOException $
   do
     Options {..} <- runArgsParser
 
-    unless (null optFileTrace) $ do
+    unless (null optFileTrace) $
       C.infoMessage $ "Trace will be dumped to " <> T.pack optFileTrace <> "."
-      exist <- doesFileExist optFileTrace
-      when exist $
-        C.warningMessage $ "File " <> T.pack optFileTrace <> " already existed, overwrite it."
 
     let useDefaultHackage = "YOUR_HACKAGE_MIRROR" `isInfixOf` optHackagePath
     when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
