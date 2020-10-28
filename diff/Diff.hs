@@ -167,7 +167,7 @@ diffCabal name a b = do
   let pa = packageDescription ga
       pb = packageDescription gb
       fa = genPackageFlags ga
-      fb = genPackageFlags ga
+      fb = genPackageFlags gb
   (ba, ma) <- directDependencies ga
   (bb, mb) <- directDependencies gb
   queryb <- lookupDiffCommunity ba bb
