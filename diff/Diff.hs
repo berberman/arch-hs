@@ -94,7 +94,7 @@ collectLibDeps cabal = do
     Just lib -> do
       bInfo <- evalConditionTree cabal lib
       let libDeps = unDepV <$> buildDependsIfBuild bInfo
-          toolDeps = unExeV <$> buildToolDependsIfBuild bInfo
+          toolDeps = unBuildTools $ buildToolsAndbuildToolDependsIfBuild bInfo
       mapM_ (uncurry updateDependencyRecord) libDeps
       mapM_ (uncurry updateDependencyRecord) toolDeps
       return (libDeps, toolDeps)
@@ -110,7 +110,7 @@ collectRunnableDeps f cabal skip = do
   let exes = cabal & f
   bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree cabal . snd) exes
   let deps = bInfo <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
-      toolDeps = bInfo <&> _2 %~ (fmap unExeV . buildToolDependsIfBuild)
+      toolDeps = bInfo <&> _2 %~ (unBuildTools . buildToolsAndbuildToolDependsIfBuild)
   mapM_ (uncurry updateDependencyRecord) $ deps ^.. each . _2 ^. each
   mapM_ (uncurry updateDependencyRecord) $ toolDeps ^.. each . _2 ^. each
   return (deps, toolDeps)

@@ -11,11 +11,13 @@ module Distribution.ArchHs.Utils
     dependencyTypeToKind,
     unExe,
     unExeV,
+    unLegacyExeV,
+    unBuildTools,
     unDepV,
     getUrl,
     getTwo,
     buildDependsIfBuild,
-    buildToolDependsIfBuild,
+    buildToolsAndbuildToolDependsIfBuild,
     traceCallStack,
     trace',
     depNotInGHCLib,
@@ -37,6 +39,7 @@ import Distribution.Types.Dependency
     depVerRange,
   )
 import Distribution.Types.ExeDependency (ExeDependency (..))
+import Distribution.Types.LegacyExeDependency
 import qualified Distribution.Types.PackageId as I
 import Distribution.Utils.ShortText (fromShortText)
 import GHC.Stack
@@ -51,6 +54,12 @@ unExe (ExeDependency name _ _) = name
 -- | Extract the package name and the version range from a 'ExeDependency'.
 unExeV :: ExeDependency -> (PackageName, VersionRange)
 unExeV (ExeDependency name _ v) = (name, v)
+
+unLegacyExeV :: LegacyExeDependency -> (PackageName, VersionRange)
+unLegacyExeV (LegacyExeDependency name v) = (mkPackageName name, v)
+
+unBuildTools :: ([LegacyExeDependency], [ExeDependency]) -> [(PackageName, VersionRange)]
+unBuildTools (l, e) = (unLegacyExeV <$> l) <> (unExeV <$> e)
 
 -- | Extract the 'PackageName' and 'VersionRange' of a 'Dependency'.
 unDepV :: Dependency -> (PackageName, VersionRange)
@@ -102,9 +111,10 @@ getTwo l a b = (a, b) & both %~ (^. l)
 buildDependsIfBuild :: BuildInfo -> [Dependency]
 buildDependsIfBuild info = if buildable info then targetBuildDepends info else []
 
--- | Same as 'buildToolDepends', but check if this is 'buildable'.
-buildToolDependsIfBuild :: BuildInfo -> [ExeDependency]
-buildToolDependsIfBuild info = if buildable info then buildToolDepends info else []
+-- | 'buildToolDepends' combined with 'buildTools', and check if this is 'buildable'.
+-- Actually, we should avoid accessing these two fields directly, in in favor of 'Distribution.Simple.BuildToolDepends.getAllToolDependencies'
+buildToolsAndbuildToolDependsIfBuild :: BuildInfo -> ([LegacyExeDependency], [ExeDependency])
+buildToolsAndbuildToolDependsIfBuild info = if buildable info then (buildTools info, buildToolDepends info) else ([], [])
 
 -- | Trace with prefix @[TRACE]@.
 trace' :: MemberWithError Trace r => String -> Sem r ()

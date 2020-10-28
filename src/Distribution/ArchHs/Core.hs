@@ -185,7 +185,7 @@ collectLibDeps cabal = do
       trace' $ "Getting libs dependencies of " <> show name
       info <- evalConditionTree cabal lib
       let libDeps = unDepV <$> buildDependsIfBuild info
-          toolDeps = unExeV <$> buildToolDependsIfBuild info
+          toolDeps = unBuildTools $ buildToolsAndbuildToolDependsIfBuild info
       mapM_ (uncurry updateDependencyRecord) libDeps
       mapM_ (uncurry updateDependencyRecord) toolDeps
       let result = (fmap fst libDeps, fmap fst toolDeps)
@@ -207,7 +207,7 @@ collectComponentialDeps tag f cabal skip = do
   trace' $ "Getting " <> tag <> " dependencies of " <> show name
   info <- filter (not . (`elem` skip) . fst) . zip (conds <&> fst) <$> mapM (evalConditionTree cabal . snd) conds
   let deps = info <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
-      toolDeps = info <&> _2 %~ (fmap unExeV . buildToolDependsIfBuild)
+      toolDeps = info <&> _2 %~ (unBuildTools . buildToolsAndbuildToolDependsIfBuild)
       k = fmap (second $ fmap fst)
   mapM_ (uncurry updateDependencyRecord) $ deps ^.. each . _2 ^. each
   mapM_ (uncurry updateDependencyRecord) $ toolDeps ^.. each . _2 ^. each
@@ -274,6 +274,7 @@ cabalToPkgBuild pkg uusi = do
                     && depNotMyself name x
                     && depNotInGHCLib x
                     && ( depIsKind LibBuildTools x
+                           || depIsKind ExeBuildTools x
                            || depIsKind Test x
                            || depIsKind TestBuildTools x
                            || depIsKind SubLibsBuildTools x
