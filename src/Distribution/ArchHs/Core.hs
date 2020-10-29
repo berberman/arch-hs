@@ -252,7 +252,7 @@ cabalToPkgBuild pkg uusi = do
       getE (EOr x y) = getE x <> " " <> getE y
 
       _license = getL . license $ cabal
-      _enableCheck = or $ (pkg ^. pkgDeps) <&> (depIsKind Test)
+      _enableCheck = or $ (pkg ^. pkgDeps) <&> depIsKind Test
       depends =
         pkg ^. pkgDeps
           ^.. each

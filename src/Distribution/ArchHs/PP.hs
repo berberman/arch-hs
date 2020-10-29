@@ -28,12 +28,12 @@ prettySkip = C.formatWith [C.magenta] . intercalate ", "
 prettyFlagAssignments :: Map.Map PackageName FlagAssignment -> String
 prettyFlagAssignments m =
   mconcat $
-    fmap (fmap (\(n, a) -> C.formatWith [C.magenta] (unPackageName n) <> "\n" <> C.formatWith [C.indent 4] (prettyFlagAssignment a))) Map.toList m
+    fmap (fmap (\(n, a) -> C.formatWith [C.magenta] (unPackageName n) <> "\n" <> prettyFlagAssignment a)) Map.toList m
 
 prettyFlagAssignment :: FlagAssignment -> String
 prettyFlagAssignment m =
   mconcat $
-    (\(n, v) -> "⚐ " <> C.formatWith [C.yellow] (unFlagName n) <> " : " <> C.formatWith [C.cyan] (show v) <> "\n") <$> unFlagAssignment m
+    (\(n, v) -> "    ⚐ " <> C.formatWith [C.yellow] (unFlagName n) <> " : " <> C.formatWith [C.cyan] (show v) <> "\n") <$> unFlagAssignment m
 
 prettyDeps :: [PackageName] -> String
 prettyDeps =

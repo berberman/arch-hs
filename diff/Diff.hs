@@ -33,7 +33,7 @@ data Options = Options
 #ifdef ALPM
     optAlpm :: Bool,
 #else
-  optCommunityPath :: FilePath,
+    optCommunityPath :: FilePath,
 #endif
     optPackageName :: PackageName,
     optVersionA :: Version,

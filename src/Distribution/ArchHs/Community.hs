@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -35,6 +34,7 @@ import Distribution.ArchHs.Utils
 
 
 #ifdef ALPM
+{-# LANGUAGE ForeignFunctionInterface #-}
 import qualified Data.Sequence as Seq
 import Data.Foldable (toList)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)

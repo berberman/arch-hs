@@ -138,5 +138,5 @@ depIsKind k x = k `elem` (x ^. depType <&> dependencyTypeToKind)
 
 extractFromEVR :: CommunityVersion -> CommunityVersion
 extractFromEVR evr =
-  let ev = head $ splitOn ("-") evr
+  let ev = head $ splitOn "-" evr
    in if ':' `elem` ev then tail $ dropWhile (/= ':') ev else ev

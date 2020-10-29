@@ -20,24 +20,21 @@ where
 import qualified Data.Map.Strict as Map
 import Data.Void (Void)
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.Utils
 import Options.Applicative
 import System.FilePath (takeExtension)
 import qualified Text.Megaparsec as M
 import qualified Text.Megaparsec.Char as M
 
 readFlag :: [(String, String, Bool)] -> Map.Map PackageName FlagAssignment
-readFlag [] = Map.empty
 readFlag list =
-  Map.fromList
-    . fmap (\l -> (mkPackageName . (^. _1) . head $ l, foldr (\(_, f, v) acc -> insertFlagAssignment (mkFlagName f) v acc) (mkFlagAssignment []) l))
-    . groupBy (\a b -> uncurry (==) (getTwo _1 a b))
-    $ list
+  Map.map toAssignment $
+    foldr (\(name, fname, fvalue) acc -> Map.insertWith (<>) (mkPackageName name) [(mkFlagName fname, fvalue)] acc) Map.empty list
+  where
+    toAssignment = foldr (\(fname, fvalue) acc -> insertFlagAssignment fname fvalue acc) (mkFlagAssignment [])
 
 -- | Read a set of package name with flag assignments.
 --
 -- >>> f ""
--- Right (fromList [])
 -- >>> f "package_name:flag_name:true"
 -- Right (fromList [(PackageName "package_name",fromList [(FlagName "flag_name",(1,True))])])
 -- >>> f "package_name:flag_name_1:true,package_name:flag_name_2:false"
