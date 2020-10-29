@@ -10,6 +10,7 @@
     "agda": "Agda",
     "alex": "alex",
     "arch-hs": "arch-hs",
+    "bnfc": "BNFC",
     "c2hs": "c2hs",
     "haskell-cabal": "Cabal",
     "cabal-install": "cabal-install",
