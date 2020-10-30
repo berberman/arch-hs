@@ -65,6 +65,7 @@ interceptHttpException io = do
     Left err -> throw $ NetworkException err
     Right x' -> return x'
 
+-- | Like 'try' but discard the concrete exception.
 tryMaybe :: Member WithMyErr r => Sem r a -> Sem r (Maybe a)
 tryMaybe m =
   try @MyException m >>= \case

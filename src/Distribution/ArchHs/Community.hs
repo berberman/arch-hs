@@ -57,6 +57,7 @@ callback ref x y = do
   y' <- peekCString y
   modifyIORef' ref (Seq.|> (CommunityName x', extractFromEVR y'))
 
+-- | The same purpose as 'loadCommunity' but use alpm to query community db instead.
 loadCommunityFFI :: IO CommunityDB
 loadCommunityFFI = do
   ref <- newIORef Seq.empty
@@ -70,6 +71,7 @@ loadCommunityFFI = do
   Map.fromList . toList <$> readIORef ref
 #endif
 
+-- Whether this program enables alpm support.
 compiledWithAlpm :: Bool
 compiledWithAlpm =
 #ifdef ALPM

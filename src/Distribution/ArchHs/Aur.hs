@@ -107,8 +107,6 @@ data Aur m a where
   InfoByName :: String -> Aur m (Maybe AurInfo)
   IsInAur :: HasMyName n => n -> Aur m Bool
 
--- searchByName
-
 makeSem_ ''Aur
 
 -- | Serach a package from AUR

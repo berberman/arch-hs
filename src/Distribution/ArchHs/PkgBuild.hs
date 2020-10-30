@@ -220,6 +220,7 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends sha
   }
 |]
 
+-- | A fixed template of a haskell meta package.
 metaTemplate :: Text -> Text -> Text -> Text -> Text
 metaTemplate url pkgname comment depends =
   [text|

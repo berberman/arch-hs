@@ -55,9 +55,11 @@ unExe (ExeDependency name _ _) = name
 unExeV :: ExeDependency -> (PackageName, VersionRange)
 unExeV (ExeDependency name _ v) = (name, v)
 
+-- | Extract the package name and the version range from a 'LegacyExeDependency'.
 unLegacyExeV :: LegacyExeDependency -> (PackageName, VersionRange)
 unLegacyExeV (LegacyExeDependency name v) = (mkPackageName name, v)
 
+-- | Extract and join package names and version ranges of '[LegacyExeDependency]' and '[ExeDependency]'.
 unBuildTools :: ([LegacyExeDependency], [ExeDependency]) -> [(PackageName, VersionRange)]
 unBuildTools (l, e) = (unLegacyExeV <$> l) <> (unExeV <$> e)
 
@@ -127,16 +129,25 @@ traceCallStack = do
   where
     prefix = unlines . fmap ("[TRACE]  " ++) . lines
 
+-- | 'SolvedDependency' @x@' is not provided by ghc.
 depNotInGHCLib :: SolvedDependency -> Bool
 depNotInGHCLib x = (x ^. depName) `notElem` ghcLibList
 
+-- | 'SolvedDependency' @x@'s name is not equal to @name@.
 depNotMyself :: PackageName -> SolvedDependency -> Bool
 depNotMyself name x = x ^. depName /= name
 
+-- | 'SolvedDependency' @x@' has 'DependencyKind' @k@.
 depIsKind :: DependencyKind -> SolvedDependency -> Bool
 depIsKind k x = k `elem` (x ^. depType <&> dependencyTypeToKind)
 
-extractFromEVR :: CommunityVersion -> CommunityVersion
+-- | Extract package version from epoch-version-release.
+--
+-- >>> extractFromEVR "8.10.2-1"
+-- "8.10.2"
+-- >>> extractFromEVR "3:2.4.11-19"
+-- "2.4.11"
+extractFromEVR :: String -> CommunityVersion
 extractFromEVR evr =
   let ev = head $ splitOn "-" evr
    in if ':' `elem` ev then tail $ dropWhile (/= ':') ev else ev
