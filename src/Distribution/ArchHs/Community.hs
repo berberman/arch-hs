@@ -32,6 +32,7 @@ import Distribution.ArchHs.PkgDesc
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 
+-----------------------------------------------------------------------------
 
 #ifdef ALPM
 {-# LANGUAGE ForeignFunctionInterface #-}
@@ -71,7 +72,7 @@ loadCommunityFFI = do
   Map.fromList . toList <$> readIORef ref
 #endif
 
--- Whether this program enables alpm support.
+-- | Whether this program enables alpm support.
 compiledWithAlpm :: Bool
 compiledWithAlpm =
 #ifdef ALPM
@@ -79,6 +80,8 @@ compiledWithAlpm =
 #else
   False
 #endif
+
+-----------------------------------------------------------------------------
 
 -- | Default path to @community.db@.
 defaultCommunityPath :: FilePath
@@ -112,6 +115,8 @@ loadCommunity path = do
 -- @desc@ files in the db will be parsed by @descParser@.
 loadProcessedCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
 loadProcessedCommunity path = Map.fromList <$> runConduitRes (loadCommunity path .| sinkList)
+
+-----------------------------------------------------------------------------
 
 -- | Check if a package exists in archlinux community repo.
 -- See 'HasMyName'.

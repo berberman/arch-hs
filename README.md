@@ -20,7 +20,7 @@ thus there is no guarantee of dependencies' version consistency.
 
 ## Prerequisite
 
-`arch-hs` is just a PKGBUILD text file generator, which is not integrated with `pacman`, depending on nothing than:
+`arch-hs` is a PKGBUILD text file generator, which is not integrated with `pacman`(See [Alpm Support](#Alpm-Support)), depending on nothing than:
 
 * Pacman database (`community.db`)
 
@@ -28,8 +28,9 @@ thus there is no guarantee of dependencies' version consistency.
 
 ## Installation
 
-Both `arch-hs` and `arch-hs-diff` are portable, which means that they are not restricted to Arch Linux.
-However, if you want to run them in other systems, you have to build them from source.
+`arch-hs` is portable, which means it's not restricted to Arch Linux.
+However, `arch-hs` can use libalpm to load pacman database on Arch Linux,
+and if you want to run them on other systems, you have to build it from source.
 
 ### Install the latest release
 
@@ -238,43 +239,13 @@ prepare() {
 
 See [uusi](https://hackage.haskell.org/package/uusi) for details.
 
-### Help
+### Alpm
 
 ```
-$ arch-hs --help
-arch-hs - a program generating PKGBUILD for hackage packages.
-
-Usage: arch-hs [-h|--hackage PATH] [-c|--community PATH] [-o|--output PATH] 
-               [-f|--flags package_name:flag_name:true|false,...] 
-               [-s|--skip component_name,...] [-e|--extra PATH_1,...] [-a|--aur]
-               [--trace] [--trace-file PATH] [--uusi] TARGET
-  Try to reach the TARGET QAQ.
-
-Available options:
-  -h,--hackage PATH        Path to hackage index
-                           tarball (default: "~/.cabal/packages/YOUR_HACKAGE_MIRROR/01-index.tar | 00-index.tar")
-  -c,--community PATH      Path to
-                           community.db (default: "/var/lib/pacman/sync/community.db")
-  -o,--output PATH         Output path to generated PKGBUILD files (empty means
-                           dry run)
-  -f,--flags package_name:flag_name:true|false,...
-                           Flag assignments for packages - e.g.
-                           inline-c:gsl-example:true (separated by ',')
-  -s,--skip component_name,...
-                           Skip a runnable component (executable, test suit, or
-                           benchmark) in dependency calculation
-  -e,--extra PATH_1,...    Extra cabal files' path - e.g.
-                           /home/berberman/arch-hs/arch-hs.cabal
-  -a,--aur                 Enable AUR searching
-  --trace                  Print trace to stdout
-  --trace-file PATH        Path to trace file (empty means do not write trace to
-                           file)
-  --uusi                   Splicing uusi into prepare()
-  -h,--help                Show this help text
-
+$ arch-hs --alpm TARGET
 ```
 
-For all available options, have a look at the help message.
+See [Alpm Support](#Alpm-Support).
 
 
 ## [Name preset](https://github.com/berberman/arch-hs/blob/master/data/NAME_PRESET.json)
@@ -379,6 +350,21 @@ the libraries of a package partially exist in hackage, some libraries include ex
 
 * Currently, `arch-hs`'s functionality is limited to dependency processing, whereas necessary procedures like
 file patches, loose of version constraints, etc. are need to be done manually, so **DO NOT** give too much trust in generated PKGBUILD files.
+
+## Alpm Support
+
+[alpm](https://www.archlinux.org/pacman/libalpm.3.html) is Arch Linux Package Management library.
+When running on Arch Linux, loading `community.db` through this library is slightly faster than using the internal parser of `arch-hs`.
+Thus, `arch-hs` provides a flag `alpm` to enable this feature:
+
+```
+cabal build -f alpm
+```
+
+This flag is enabled by default in `arch-hs` Arch Linux package.
+Compiled with `alpm`, `arch-hs` can accpet runtime flag `--alpm`.
+**That said, if you want to use alpm to boost `arch-hs`, you have to pass --aplm in command line when running `arch-hs`, which has been built with `alpm` cabal flag.**
+> When `alpm` is enabled, `arch-hs` will lose the capability of specifying the path of `community.db`.
 
 ## ToDoList
 
