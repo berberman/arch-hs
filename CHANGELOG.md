@@ -3,6 +3,20 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.4.0.0
+
+* [Alpm](https://www.archlinux.org/pacman/libalpm.3.html) support
+
+* Fix sub-libraries handling ([#22](https://github.com/berberman/arch-hs/issues/22))
+
+* Fix missing build tools ([#24](https://github.com/berberman/arch-hs/issues/24))
+
+* Fix flag comparison in diff ([#25](https://github.com/berberman/arch-hs/issues/25))
+
+* Fix pretty printing of flags
+
+* Update name preset ([#26](https://github.com/berberman/arch-hs/issues/26))
+
 ## 0.3.0.0
 
 * Update name preset

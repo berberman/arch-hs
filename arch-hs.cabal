@@ -1,140 +1,135 @@
-cabal-version:       2.4
-name:                arch-hs
-version:             0.3.0.0
-synopsis:            Distribute hackage packages to archlinux
-description:         
-    @arch-hs@ is a command-line program, which simplifies the process of producing
-    and maintaining haskell packages for archlinux distribution by automating the
-    PKGBUILD generation with the dependency resolving and template filling. Currently,
-    @arch-hs@ is unstable, so packagers should not trust it 100%, but always follow the
-    <https://wiki.archlinux.org/index.php/Haskell_package_guidelines Haskell package guidelines>.
-homepage:            https://github.com/berberman/arch-hs
-bug-reports:         https://github.com/berberman/arch-hs/issues
-license:             MIT
-license-file:        LICENSE
-author:              berberman
-maintainer:          berberman <1793913507@qq.com>
-copyright:           2020 berberman
-category:            Distribution
-build-type:          Simple
-extra-source-files:  data/NAME_PRESET.json
-extra-doc-files:     README.md
-                     CHANGELOG.md
-tested-with:         GHC == 8.10.2
+cabal-version:      2.4
+name:               arch-hs
+version:            0.4.0.0
+synopsis:           Distribute hackage packages to archlinux
+description:
+  @arch-hs@ is a command-line program, which simplifies the process of producing
+  and maintaining haskell packages for archlinux distribution by automating the
+  PKGBUILD generation with the dependency resolving and template filling. Currently,
+  @arch-hs@ is unstable, so packagers should not trust it 100%, but always follow the
+  <https://wiki.archlinux.org/index.php/Haskell_package_guidelines Haskell package guidelines>.
+
+homepage:           https://github.com/berberman/arch-hs
+bug-reports:        https://github.com/berberman/arch-hs/issues
+license:            MIT
+license-file:       LICENSE
+author:             berberman
+maintainer:         berberman <1793913507@qq.com>
+copyright:          2020 berberman
+category:           Distribution
+build-type:         Simple
+extra-source-files: data/NAME_PRESET.json
+extra-doc-files:
+  CHANGELOG.md
+  README.md
+
+tested-with:        GHC ==8.10.2
 
 source-repository head
-  type:                git
-  location:            https://github.com/berberman/arch-hs.git
+  type:     git
+  location: https://github.com/berberman/arch-hs.git
 
 flag alpm
   description: Whether to use libalpm
-  default: False
-  manual: True
+  default:     False
+  manual:      True
 
 common common-options
-  build-depends:       base ^>= 4.14.0,
-                       Cabal ^>= 3.2.0, 
-                       aeson ^>= 1.5.4,
-                       req ^>= 3.6.0 || ^>= 3.7.0,
-                       hackage-db ^>= 2.1.0,
-                       conduit ^>= 1.3.2,
-                       containers ^>= 0.6.2,
-                       deepseq ^>= 1.4.4,
-                       algebraic-graphs ^>= 0.5,
-                       megaparsec ^>= 8.0.0,
-                       directory ^>= 1.3.6,
-                       bytestring ^>= 0.10.10,
-                       tar-conduit ^>= 0.3.2,
-                       conduit-extra ^>= 1.3.5,
-                       split ^>= 0.2.3,
-                       neat-interpolation ^>= 0.5.1,
-                       text ^>= 1.2.3,
-                       microlens ^>= 0.4.11,
-                       microlens-th ^>= 0.4.3,
-                       polysemy ^>= 1.3.0 || ^>= 1.4.0,
-                       filepath ^>= 1.4.2,
-                       colourista ^>= 0.1,
-                       template-haskell ^>= 2.16.0,
-                       optparse-applicative ^>= 0.15.1
+  build-depends:
+    , aeson                 ^>=1.5.4
+    , algebraic-graphs      ^>=0.5
+    , base                  ^>=4.14.0
+    , bytestring            ^>=0.10.10
+    , Cabal                 ^>=3.2.0
+    , colourista            ^>=0.1
+    , conduit               ^>=1.3.2
+    , conduit-extra         ^>=1.3.5
+    , containers            ^>=0.6.2
+    , deepseq               ^>=1.4.4
+    , directory             ^>=1.3.6
+    , filepath              ^>=1.4.2
+    , hackage-db            ^>=2.1.0
+    , megaparsec            ^>=8.0.0
+    , microlens             ^>=0.4.11
+    , microlens-th          ^>=0.4.3
+    , neat-interpolation    ^>=0.5.1
+    , optparse-applicative  ^>=0.15.1
+    , polysemy              ^>=1.3.0 || ^>=1.4.0
+    , req                   ^>=3.6.0 || ^>=3.7.0
+    , split                 ^>=0.2.3
+    , tar-conduit           ^>=0.3.2
+    , template-haskell      ^>=2.16.0
+    , text                  ^>=1.2.3
 
-  ghc-options:         -Wall
-                       -Wcompat
-                       -Widentities
-                       -Wincomplete-uni-patterns
-                       -Wincomplete-record-updates
-                       -O2 
-                       -flate-specialise 
-                       -fspecialise-aggressively
-                       -Wredundant-constraints
-                       -fhide-source-paths
-                       -Wmissing-export-lists
-                       -Wpartial-fields
-                       -Wmissing-deriving-strategies
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
+    -Wincomplete-record-updates -O2 -flate-specialise
+    -fspecialise-aggressively -Wredundant-constraints
+    -fhide-source-paths -Wmissing-export-lists -Wpartial-fields
+    -Wmissing-deriving-strategies
 
-  default-language:    Haskell2010
-  default-extensions:  DataKinds
-                       FlexibleContexts
-                       GADTs
-                       LambdaCase
-                       PolyKinds
-                       RankNTypes
-                       ScopedTypeVariables
-                       TypeOperators
-                       TypeFamilies
+  default-language:   Haskell2010
+  default-extensions:
+    DataKinds
+    FlexibleContexts
+    GADTs
+    LambdaCase
+    PolyKinds
+    RankNTypes
+    ScopedTypeVariables
+    TypeFamilies
+    TypeOperators
+
   if flag(alpm)
-    c-sources: cbits/clib.c
-    extra-libraries: alpm
-    include-dirs: cbits
+    c-sources:        cbits/clib.c
+    extra-libraries:  alpm
+    include-dirs:     cbits
     install-includes: cbits/clib.h
-    cpp-options: -DALPM
+    cpp-options:      -DALPM
 
 library
-  import:              common-options
-  hs-source-dirs:      src
-  exposed-modules:     Distribution.ArchHs.Aur,
-                       Distribution.ArchHs.PkgDesc,
-                       Distribution.ArchHs.Community,
-                       Distribution.ArchHs.Core,
-                       Distribution.ArchHs.Hackage,
-                       Distribution.ArchHs.Local,
-                       Distribution.ArchHs.PkgBuild,
-                       Distribution.ArchHs.Types,
-                       Distribution.ArchHs.Utils,
-                       Distribution.ArchHs.PP,
-                       Distribution.ArchHs.Name,
-                       Distribution.ArchHs.Exception,
-                       Distribution.ArchHs.Internal.Prelude
-                       Distribution.ArchHs.OptionReader
-  other-modules:       Data.Aeson.Ext
-                       Distribution.ArchHs.Internal.NamePresetLoader
-                       
+  import:          common-options
+  hs-source-dirs:  src
+  exposed-modules:
+    Distribution.ArchHs.Aur
+    Distribution.ArchHs.Community
+    Distribution.ArchHs.Core
+    Distribution.ArchHs.Exception
+    Distribution.ArchHs.Hackage
+    Distribution.ArchHs.Internal.Prelude
+    Distribution.ArchHs.Local
+    Distribution.ArchHs.Name
+    Distribution.ArchHs.OptionReader
+    Distribution.ArchHs.PkgBuild
+    Distribution.ArchHs.PkgDesc
+    Distribution.ArchHs.PP
+    Distribution.ArchHs.Types
+    Distribution.ArchHs.Utils
+
+  other-modules:
+    Data.Aeson.Ext
+    Distribution.ArchHs.Internal.NamePresetLoader
 
 executable arch-hs
-  import:              common-options
-  hs-source-dirs:      app
-  main-is:             Main.hs
-  other-modules:       Args
-  build-depends:       arch-hs
-  ghc-options:         -threaded
-                       -rtsopts
-                       -with-rtsopts=-N
+  import:         common-options
+  hs-source-dirs: app
+  main-is:        Main.hs
+  other-modules:  Args
+  build-depends:  arch-hs
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
 
 executable arch-hs-diff
-  import:              common-options
-  hs-source-dirs:      diff
-  main-is:             Main.hs
-  other-modules:       Diff
-  build-depends:       arch-hs
-  ghc-options:         -threaded
-                       -rtsopts
-                       -with-rtsopts=-N
-                       
+  import:         common-options
+  hs-source-dirs: diff
+  main-is:        Main.hs
+  other-modules:  Diff
+  build-depends:  arch-hs
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+
 executable arch-hs-submit
-  import:              common-options
-  hs-source-dirs:      submit
-  main-is:             Main.hs
-  other-modules:       Submit
-  build-depends:       arch-hs
-  ghc-options:         -threaded
-                       -rtsopts
-                       -with-rtsopts=-N
+  import:         common-options
+  hs-source-dirs: submit
+  main-is:        Main.hs
+  other-modules:  Submit
+  build-depends:  arch-hs
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
