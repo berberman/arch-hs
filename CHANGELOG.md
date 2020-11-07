@@ -15,7 +15,7 @@ The changelog is available [on GitHub][2].
 
 * Fix pretty printing of flags
 
-* Update name preset ([#26](https://github.com/berberman/arch-hs/issues/26))
+* Update name preset ([#26](https://github.com/berberman/arch-hs/pull/26))
 
 ## 0.3.0.0
 
