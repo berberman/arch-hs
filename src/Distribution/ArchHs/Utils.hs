@@ -24,6 +24,7 @@ module Distribution.ArchHs.Utils
     depNotMyself,
     depIsKind,
     extractFromEVR,
+    isProvided,
   )
 where
 
@@ -151,3 +152,7 @@ extractFromEVR :: String -> CommunityVersion
 extractFromEVR evr =
   let ev = head $ splitOn "-" evr
    in if ':' `elem` ev then tail $ dropWhile (/= ':') ev else ev
+
+isProvided :: SolvedPackage -> Bool
+isProvided (ProvidedPackage _ _) = True
+isProvided _ = False

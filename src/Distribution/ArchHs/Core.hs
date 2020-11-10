@@ -153,13 +153,14 @@ getDependencies skip parent name = do
 
       -- currentBench = componentialEdges Types.Benchmark benchDeps
       -- currentBenchTools = componentialEdges BenchmarkBuildTools benchToolsDeps
-
+      processNext = mapM (getDependencies skip (Just name)) . ignoreResolved . ignoreSubLibs
       (<+>) = G.overlay
-  -- Only solve lib & exe deps recursively.
-  nextLib <- mapM (getDependencies skip (Just name)) . ignoreResolved . ignoreSubLibs $ filteredLibDeps
-  nextExe <- mapM (getDependencies skip (Just name)) . ignoreResolved . ignoreSubLibs $ fmap snd filteredExeDeps
+  nextLib <- processNext filteredLibDeps
+  nextExe <- processNext $ fmap snd filteredExeDeps
+  -- TODO: maybe unstable
+  nextTest <- processNext $ fmap snd filteredTestDeps
   nextSubLibs <- mapM (getDependencies skip (Just name)) $ fmap snd filteredSubLibDeps
-  let temp = [nextLib, nextExe, nextSubLibs]
+  let temp = [nextLib, nextExe, nextTest, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
       subsubs = temp ^. each ^.. each . _2 ^. each
   return

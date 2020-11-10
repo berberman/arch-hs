@@ -53,7 +53,7 @@ app target path aurSupport skip uusi metaPath = do
     inAur <- isInAur target
     when inAur $ throw $ TargetExist target ByAur
   let removeSublibs list =
-        list ^.. each . filtered (\x -> x ^. pkgName `notElem` sublibs) & each %~ (\x -> x & pkgDeps %~ (filter (\d -> d ^. depName `notElem` sublibs)))
+        list ^.. each . filtered (\x -> x ^. pkgName `notElem` sublibs) & each %~ (\x -> x & pkgDeps %~ filter (\d -> d ^. depName `notElem` sublibs))
       grouped = removeSublibs $ groupDeps deps
       namesFromSolved x = x ^.. each . pkgName <> x ^.. each . pkgDeps . each . depName
       allNames = nubOrd $ namesFromSolved grouped
@@ -66,7 +66,7 @@ app target path aurSupport skip uusi metaPath = do
             .| fillProvidedPkgs communityProvideList ByCommunity
             .| fillProvidedDeps communityProvideList ByCommunity
             .| sinkList
-      toBePacked1 = filledByCommunity ^.. each . filtered (\case ProvidedPackage _ _ -> False; _ -> True)
+      toBePacked1 = filledByCommunity ^.. each . filtered (not . isProvided)
   (filledByBoth, toBePacked2) <- do
     embed . when aurSupport $ C.infoMessage "Start searching AUR..."
     aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> T.pack (unPackageName n)); isInAur n) $ toBePacked1 ^.. each . pkgName else return []
@@ -81,7 +81,7 @@ app target path aurSupport skip uusi metaPath = do
             else filledByCommunity
         toBePacked2 =
           if aurSupport
-            then filledByBoth ^.. each . filtered (\case ProvidedPackage _ _ -> False; _ -> True)
+            then filledByBoth ^.. each . filtered (not . isProvided)
             else toBePacked1
     return (filledByBoth, toBePacked2)
 
@@ -89,7 +89,7 @@ app target path aurSupport skip uusi metaPath = do
   embed $ putStrLn . prettySolvedPkgs $ filledByBoth
 
   embed $ C.infoMessage "Recommended package order:"
-  let vertexesToBeRemoved = filledByBoth ^.. each . filtered (\case ProvidedPackage _ _ -> True; _ -> False) ^.. each . pkgName
+  let vertexesToBeRemoved = filledByBoth ^.. each . filtered isProvided ^.. each . pkgName
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle newGraph of
@@ -127,14 +127,14 @@ app target path aurSupport skip uusi metaPath = do
             ^.. each
               . filtered (\x -> depNotMyself (pkg ^. pkgName) x && depNotInGHCLib x && x ^. depProvider == Just ByCommunity)
         toStr x = "'" <> (unCommunityName . toCommunityName . _depName) x <> "'"
-        depends = case intercalate " " . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked2 of
+        depends = case unwords . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked2 of
           [] -> ""
           xs -> " " <> xs
         flattened' = filter (/= target) flattened
         comment = case flattened' of
           [] -> "\n"
           [x] -> "# The following dependency is missing in community: " <> unPackageName x
-          _ -> "# Following dependencies are missing in community:" <> (intercalate ", " $ unPackageName <$> flattened')
+          _ -> "# Following dependencies are missing in community:" <> intercalate ", " (unPackageName <$> flattened')
         txt = template (T.pack comment) (T.pack depends)
         dir = metaPath </> "haskell-" <> name <> "-meta"
         fileName = dir </> "PKGBUILD"
