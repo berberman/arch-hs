@@ -25,7 +25,6 @@ ignoreList =
           "bytestring-builder",
           "nats",
           "old-time",
-          "old-locale",
           "integer",
           "unsupported-ghc-version",
           "base",
