@@ -1,7 +1,6 @@
 {
   "falseList": [
     "haskell-network2.8",
-    "haskell-sbv8.7",
     "haskell-ghc-heap",
     "haskell-libiserv",
     "haskell-tamarin-prover-sapic"
@@ -67,7 +66,6 @@
     "haskell-quickcheck": "QuickCheck",
     "haskell-ranged-sets": "Ranged-sets",
     "haskell-safesemaphore": "SafeSemaphore",
-    "haskell-sbv8.7": "haskell-sbv8.7",
     "haskell-sha": "SHA",
     "haskell-smtlib": "smtLib",
     "haskell-src-exts": "haskell-src-exts",
