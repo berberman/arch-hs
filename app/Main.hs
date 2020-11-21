@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Main (main) where
 
@@ -11,11 +12,12 @@ import qualified Algebra.Graph.Labelled.AdjacencyMap as GL
 import Args
 import qualified Colourista as C
 import Conduit
-import Control.Monad (filterM, unless)
+import Control.Monad (filterM, forM_, unless)
 import Data.Containers.ListUtils (nubOrd)
 import Data.IORef (IORef, newIORef)
 import Data.List.NonEmpty (toList)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Distribution.ArchHs.Aur (Aur, aurToIO, isInAur)
@@ -58,6 +60,21 @@ app target path aurSupport skip uusi metaPath = do
       namesFromSolved x = x ^.. each . pkgName <> x ^.. each . pkgDeps . each . depName
       allNames = nubOrd $ namesFromSolved grouped
   communityProvideList <- (<> ghcLibList) <$> filterM isInCommunity allNames
+
+  let providedPackages = filter (\x -> x ^. pkgName `elem` communityProvideList) grouped
+      abnormalDependencies =
+        mapMaybe
+          ( \x -> case filter (`notElem` communityProvideList) (x ^. pkgDeps ^.. each . depName) of
+              [] -> Nothing
+              list -> Just (x ^. pkgName, list)
+          )
+          providedPackages
+
+  embed $
+    forM_ abnormalDependencies $ \(T.pack . unPackageName -> parent, childs) -> do
+      C.warningMessage $ "Package \"" <> parent <> "\" is provided without:"
+      forM_ childs $ \x -> putStrLn $ C.formatWith [] . unPackageName $ x
+
   let fillProvidedPkgs provideList provider = mapC (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = mapC (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))
       filledByCommunity =
