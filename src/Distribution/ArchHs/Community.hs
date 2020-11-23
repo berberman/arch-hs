@@ -65,7 +65,7 @@ loadCommunityFFI = do
   callbackW <- wrap $ callback ref
   errno <- query_community callbackW
   freeHaskellFunPtr callbackW
-  when (errno /= 0) $ do
+  when (errno `elem` [1..64]) $ do
     msg <- peekCString =<< alpm_strerror errno
     -- TODO: why? :(
     putStrLn $ "warn: unexpected return code from libalpm: " <> show errno <> " (" <> msg <> ")"
