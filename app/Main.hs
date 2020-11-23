@@ -102,6 +102,9 @@ app target path aurSupport skip uusi metaPath = do
             else toBePacked1
     return (filledByBoth, toBePacked2)
 
+  when (null filledByBoth) $
+    throw $ TargetDisappearException target
+
   embed $ C.infoMessage "Solved:"
   embed $ putStrLn . prettySolvedPkgs $ filledByBoth
 

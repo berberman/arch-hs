@@ -37,6 +37,7 @@ data MyException
   | TargetExist PackageName DependencyProvider
   | CyclicExist [PackageName]
   | NetworkException HttpException
+  | TargetDisappearException PackageName
 
 instance Show MyException where
   show (PkgNotFound name) = "Unable to find \"" <> unPackageName (toHackageName name) <> "\""
@@ -45,6 +46,7 @@ instance Show MyException where
   show (CyclicExist c) = "Graph contains a cycle \"" <> show (fmap unPackageName c) <> "\""
   show (NetworkException (JsonHttpException s)) = "Failed to parse response " <> s
   show (NetworkException (VanillaHttpException e)) = show e
+  show (TargetDisappearException name)= "Target \"" <> unPackageName name <> "\" is discarded during the dependency resolving"
 
 -- | Catch 'CE.IOException' and print it.
 printHandledIOException :: IO () -> IO ()
