@@ -195,8 +195,9 @@ main = printHandledIOException $
   do
     Options {..} <- runArgsParser
 
-    unless (null optFileTrace) $
+    unless (null optFileTrace) $ do
       C.infoMessage $ "Trace will be dumped to " <> T.pack optFileTrace <> "."
+      writeFile optFileTrace ""
 
     let useDefaultHackage = "YOUR_HACKAGE_MIRROR" `isInfixOf` optHackagePath
     when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
