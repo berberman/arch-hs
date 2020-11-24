@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-int query_community(callback_t callback) {
+void query_community(callback_t callback) {
   alpm_errno_t err;
   alpm_handle_t *handle;
   handle = alpm_initialize("/", "/var/lib/pacman", &err);
@@ -30,5 +30,4 @@ int query_community(callback_t callback) {
       callback(name, ver);
   }
   alpm_release(handle);
-  return err;
 }

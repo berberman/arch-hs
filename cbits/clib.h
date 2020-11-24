@@ -3,6 +3,6 @@
 
 typedef void callback_t(const char *, const char *);
 
-int query_community(callback_t callback);
+void query_community(callback_t callback);
 
 #endif

@@ -40,17 +40,13 @@ import qualified Data.Sequence as Seq
 import Data.Foldable (toList)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Foreign.C.String (CString, peekCString)
-import Foreign.C.Types (CInt(..))
 import Foreign.Ptr (FunPtr, freeHaskellFunPtr)
 
 foreign import ccall "wrapper"
   wrap :: (CString -> CString -> IO ()) -> IO (FunPtr (CString -> CString -> IO ()))
 
 foreign import ccall "clib.h query_community"
-  query_community :: FunPtr (CString -> CString -> IO ()) -> IO CInt
-
-foreign import ccall "alpm.h alpm_strerror"
-  alpm_strerror :: CInt -> IO CString
+  query_community :: FunPtr (CString -> CString -> IO ()) -> IO ()
 
 callback :: IORef (Seq.Seq (CommunityName, CommunityVersion)) -> CString -> CString -> IO ()
 callback ref x y = do
@@ -63,12 +59,8 @@ loadCommunityFFI :: IO CommunityDB
 loadCommunityFFI = do
   ref <- newIORef Seq.empty
   callbackW <- wrap $ callback ref
-  errno <- query_community callbackW
+  query_community callbackW
   freeHaskellFunPtr callbackW
-  when (errno `elem` [1..64]) $ do
-    msg <- peekCString =<< alpm_strerror errno
-    -- TODO: why? :(
-    putStrLn $ "warn: unexpected return code from libalpm: " <> show errno <> " (" <> msg <> ")"
   Map.fromList . toList <$> readIORef ref
 #endif
 
