@@ -73,7 +73,7 @@ app target path aurSupport skip uusi metaPath = do
   embed $
     forM_ abnormalDependencies $ \(T.pack . unPackageName -> parent, childs) -> do
       C.warningMessage $ "Package \"" <> parent <> "\" is provided without:"
-      forM_ childs $ \x -> putStrLn $ C.formatWith [] . unPackageName $ x
+      forM_ childs $ putStrLn . unPackageName
 
   let fillProvidedPkgs provideList provider = mapC (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = mapC (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))
@@ -131,9 +131,10 @@ app target path aurSupport skip uusi metaPath = do
               dir = path </> pName
               fileName = dir </> "PKGBUILD"
               txt = N.applyTemplate pkgBuild
-          embed $ createDirectoryIfMissing True dir
-          embed $ writeFile fileName txt
-          embed $ C.infoMessage $ "Write file: " <> T.pack fileName
+          embed $ do
+            createDirectoryIfMissing True dir
+            writeFile fileName txt
+            C.infoMessage $ "Write file: " <> T.pack fileName
       )
       toBePacked2
 
@@ -158,9 +159,10 @@ app target path aurSupport skip uusi metaPath = do
         txt = template (T.pack comment) (T.pack depends)
         dir = metaPath </> "haskell-" <> name <> "-meta"
         fileName = dir </> "PKGBUILD"
-    embed $ createDirectoryIfMissing True dir
-    embed $ writeFile fileName (T.unpack txt)
-    embed $ C.infoMessage $ "Write file: " <> T.pack fileName
+    embed $ do
+      createDirectoryIfMissing True dir
+      writeFile fileName (T.unpack txt)
+      C.infoMessage $ "Write file: " <> T.pack fileName
 
 -----------------------------------------------------------------------------
 
