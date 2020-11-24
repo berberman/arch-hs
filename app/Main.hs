@@ -11,7 +11,6 @@ import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.Labelled.AdjacencyMap as GL
 import Args
 import qualified Colourista as C
-import Conduit
 import Control.Monad (filterM, forM_, unless)
 import Data.Containers.ListUtils (nubOrd)
 import Data.IORef (IORef, newIORef)
@@ -48,12 +47,15 @@ app ::
   Sem r ()
 app target path aurSupport skip uusi metaPath = do
   (deps, sublibs) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
+
   inCommunity <- isInCommunity target
+
   when inCommunity $ throw $ TargetExist target ByCommunity
 
   when aurSupport $ do
     inAur <- isInAur target
     when inAur $ throw $ TargetExist target ByAur
+
   let removeSublibs list =
         list ^.. each . filtered (\x -> x ^. pkgName `notElem` sublibs) & each %~ (\x -> x & pkgDeps %~ filter (\d -> d ^. depName `notElem` sublibs))
       grouped = removeSublibs $ groupDeps deps
@@ -75,26 +77,16 @@ app target path aurSupport skip uusi metaPath = do
       C.warningMessage $ "Package \"" <> parent <> "\" is provided without:"
       forM_ childs $ putStrLn . unPackageName
 
-  let fillProvidedPkgs provideList provider = mapC (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
-      fillProvidedDeps provideList provider = mapC (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))
-      filledByCommunity =
-        runConduitPure $
-          yieldMany grouped
-            .| fillProvidedPkgs communityProvideList ByCommunity
-            .| fillProvidedDeps communityProvideList ByCommunity
-            .| sinkList
+  let fillProvidedPkgs provideList provider = map (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
+      fillProvidedDeps provideList provider = map (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))
+      filledByCommunity = fillProvidedPkgs communityProvideList ByCommunity . fillProvidedDeps communityProvideList ByCommunity $ grouped
       toBePacked1 = filledByCommunity ^.. each . filtered (not . isProvided)
   (filledByBoth, toBePacked2) <- do
     embed . when aurSupport $ C.infoMessage "Start searching AUR..."
     aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> T.pack (unPackageName n)); isInAur n) $ toBePacked1 ^.. each . pkgName else return []
     let filledByBoth =
           if aurSupport
-            then
-              runConduitPure $
-                yieldMany filledByCommunity
-                  .| fillProvidedPkgs aurProvideList ByAur
-                  .| fillProvidedDeps aurProvideList ByAur
-                  .| sinkList
+            then fillProvidedPkgs aurProvideList ByAur . fillProvidedDeps aurProvideList ByAur $ filledByCommunity
             else filledByCommunity
         toBePacked2 =
           if aurSupport
