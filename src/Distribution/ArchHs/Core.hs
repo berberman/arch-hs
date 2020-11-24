@@ -36,10 +36,7 @@ import Distribution.ArchHs.Utils
 import Distribution.Compiler (CompilerFlavor (..))
 import Distribution.PackageDescription
 import Distribution.SPDX
-import Distribution.System
-  ( Arch (X86_64),
-    OS (Linux),
-  )
+import Distribution.System (Arch (X86_64), OS (Linux))
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
 import Distribution.Types.Dependency (Dependency)

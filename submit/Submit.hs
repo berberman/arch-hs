@@ -116,17 +116,13 @@ genCSV :: Member CommunityEnv r => Sem r DistroCSV
 genCSV = do
   db <- ask @CommunityDB
 
-  {-# HLINT ignore "Use <&>" #-}
   let communityPackages = Map.toList db
       fields =
         communityPackages
           ^.. each
-            . filtered (\(name, _) -> isHaskellPackage name)
-            & mapped
-            %~ _1
-            <<%~ toHackageName
-            & sortBy (\x y -> (x ^. _2 . _1) `compare` (y ^. _2 . _1))
-
+            . filtered (isHaskellPackage . (^. _1))
+          <&> (_1 <<%~ toHackageName)
+          & sortBy (\x y -> (x ^. _2 . _1) `compare` (y ^. _2 . _1))
       prefix = "https://www.archlinux.org/packages/community/x86_64/"
       processField (communityName, (hackageName, version)) =
         let communityName' =

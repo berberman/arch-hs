@@ -34,19 +34,12 @@ import Distribution.ArchHs.Local (ghcLibList)
 import Distribution.ArchHs.Types
 import Distribution.PackageDescription (repoLocation)
 import Distribution.Types.BuildInfo (BuildInfo (..))
-import Distribution.Types.Dependency
-  ( Dependency,
-    depPkgName,
-    depVerRange,
-  )
+import Distribution.Types.Dependency (Dependency, depPkgName, depVerRange)
 import Distribution.Types.ExeDependency (ExeDependency (..))
 import Distribution.Types.LegacyExeDependency
 import qualified Distribution.Types.PackageId as I
 import Distribution.Utils.ShortText (fromShortText)
-import GHC.Stack
-  ( callStack,
-    prettyCallStack,
-  )
+import GHC.Stack (callStack, prettyCallStack)
 
 -- | Extract the package name from a 'ExeDependency'.
 unExe :: ExeDependency -> PackageName

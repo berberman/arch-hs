@@ -31,9 +31,7 @@ import Distribution.ArchHs.PP
 import qualified Distribution.ArchHs.PkgBuild as N
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
-import System.Directory
-  ( createDirectoryIfMissing,
-  )
+import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName)
 
 app ::

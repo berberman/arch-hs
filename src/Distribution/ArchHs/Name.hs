@@ -52,10 +52,7 @@ module Distribution.ArchHs.Name
 where
 
 import Data.Char (toLower)
-import Data.String
-  ( IsString,
-    fromString,
-  )
+import Data.String (IsString, fromString)
 import Distribution.ArchHs.Internal.NamePresetLoader
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types

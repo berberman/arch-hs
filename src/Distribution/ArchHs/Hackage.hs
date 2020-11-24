@@ -26,22 +26,10 @@ import Data.Maybe (fromJust)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils
-  ( getPkgName,
-    getPkgVersion,
-  )
-import Distribution.Hackage.DB
-  ( HackageDB,
-    VersionData (VersionData, cabalFile),
-    readTarball,
-    tarballHashes,
-  )
+import Distribution.ArchHs.Utils (getPkgName, getPkgVersion)
+import Distribution.Hackage.DB (HackageDB, VersionData (VersionData, cabalFile), readTarball, tarballHashes)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import System.Directory
-  ( findFile,
-    getHomeDirectory,
-    listDirectory,
-  )
+import System.Directory (findFile, getHomeDirectory, listDirectory)
 
 -- | Look up hackage tarball path from @~/.cabal@.
 -- Arbitrary hackage mirror is potential to be selected.
