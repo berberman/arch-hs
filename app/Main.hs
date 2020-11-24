@@ -83,16 +83,13 @@ app target path aurSupport skip uusi metaPath = do
       toBePacked1 = filledByCommunity ^.. each . filtered (not . isProvided)
   (filledByBoth, toBePacked2) <- do
     embed . when aurSupport $ C.infoMessage "Start searching AUR..."
-    aurProvideList <- if aurSupport then filterM (\n -> do embed $ C.infoMessage ("Searching " <> T.pack (unPackageName n)); isInAur n) $ toBePacked1 ^.. each . pkgName else return []
-    let filledByBoth =
-          if aurSupport
-            then fillProvidedPkgs aurProvideList ByAur . fillProvidedDeps aurProvideList ByAur $ filledByCommunity
-            else filledByCommunity
-        toBePacked2 =
-          if aurSupport
-            then filledByBoth ^.. each . filtered (not . isProvided)
-            else toBePacked1
-    return (filledByBoth, toBePacked2)
+    aurProvideList <-
+      if aurSupport
+        then filterM (\n -> do embed $ C.infoMessage ("Searching " <> T.pack (unPackageName n)); isInAur n) $ toBePacked1 ^.. each . pkgName
+        else return []
+    let a = fillProvidedPkgs aurProvideList ByAur . fillProvidedDeps aurProvideList ByAur $ filledByCommunity
+        b = a ^.. each . filtered (not . isProvided)
+    return (a, b)
 
   when (null filledByBoth) $
     throw $ TargetDisappearException target
