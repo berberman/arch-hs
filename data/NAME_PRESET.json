@@ -1,6 +1,5 @@
 {
   "falseList": [
-    "haskell-network2.8",
     "haskell-ghc-heap",
     "haskell-libiserv",
     "haskell-tamarin-prover-sapic"
