@@ -54,7 +54,7 @@ common common-options
     , microlens-th          ^>=0.4.3
     , neat-interpolation    ^>=0.5.1
     , optparse-applicative  ^>=0.16.0
-    , polysemy              ^>=1.4.0
+    , polysemy
     , req                   ^>=3.7.0
     , split                 ^>=0.2.3
     , tar-conduit           ^>=0.3.2
