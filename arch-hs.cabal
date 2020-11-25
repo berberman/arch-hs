@@ -55,7 +55,7 @@ common common-options
     , neat-interpolation    ^>=0.5.1
     , optparse-applicative  ^>=0.16.0
     , polysemy
-    , req                   ^>=3.7.0
+    , req                   ^>=3.8.0
     , split                 ^>=0.2.3
     , tar-conduit           ^>=0.3.2
     , template-haskell      ^>=2.16.0
