@@ -13,7 +13,7 @@ A program generating PKGBUILD for hackage packages. Special thanks to [felixonma
 ## Introduction
 
 Given the name of a package in hackage, `arch-hs` can generate PKGBUILD files, not only for the package
-whose name is given, but also for all dependencies missing in [community](https://www.archlinux.org/packages/).
+whose name is given, but also for all dependencies missing in [\[community\]](https://www.archlinux.org/packages/).
 `arch-hs` has a naive built-in dependency solver, which can fetch those dependencies and find out which are required to be packaged.
 During the dependency calculation, all version constraints will be discarded due to the arch haskell packaging strategy,
 thus there is no guarantee of dependencies' version consistency.
@@ -38,7 +38,7 @@ and if you want to run them on other systems, you have to build it from source.
 # pacman -S arch-hs
 ```
 
-`arch-hs` is available in [community](https://www.archlinux.org/packages/community/x86_64/arch-hs/), so you can install it using `pacman`.
+`arch-hs` is available in [\[community\]](https://www.archlinux.org/packages/community/x86_64/arch-hs/), so you can install it using `pacman`.
 
 ### Install the development version
 
@@ -46,7 +46,7 @@ and if you want to run them on other systems, you have to build it from source.
 # pacman -S arch-hs-git
 ```
 
-The `-git` version is available in [archlinuxcn](https://github.com/archlinuxcn/repo), following the latest git commit.
+The `-git` version is available in [\[archlinuxcn\]](https://github.com/archlinuxcn/repo), following the latest git commit.
 
 ## Build
 
@@ -93,7 +93,7 @@ $ arch-hs -o ~/test accelerate
 
 This message tells us that in order to package `accelerate`, we must package `unique`
 and `tasty-kat` first sequentially, because `accelerate` dependents on them to build or test,
-whereas they are not present in archlinux community repo.
+whereas they are not present in archlinux \[community\] repo.
 
 ```
 $ tree ~/test
@@ -344,12 +344,14 @@ For hackage distribution maintainers only.
 
 ## Limitations
 
-* The dependency solver will **ONLY** expand the dependencies of *executables* , *libraries* and *sub-libraries* recursively, because
-circular dependency lies ubiquitously involving *test suites* and their *buildTools*. `arch-hs` is not able to handle with complicated situations:
-the libraries of a package partially exist in hackage, some libraries include external sources, etc. 
+* `arch-hs` will run into error, if solved targets contain cycle. Indeed, circular dependency lies ubiquitously in hackage because of tests,
+but basic cycles are resolved manually in \[community\] by maintainers. So after the provider simplification, `arch-hs` can eliminate these cycles.
+Nevertheless, if the target introduces new cycle or it dependens on a package in an unknown cycle, `arch-hs` will throw `CyclicExist` exception.
 
-* Currently, `arch-hs`'s functionality is limited to dependency processing, whereas necessary procedures like
-file patches, loose of version constraints, etc. are need to be done manually, so **DO NOT** give too much trust in generated PKGBUILD files.
+* `arch-hs` is not able to handle with complicated situations: the libraries of a package partially exist in hackage, some libraries include external sources, etc. 
+
+* `arch-hs`'s functionality is limited to dependency processing, whereas necessary procedures like
+file patches, version range processes, etc. They need to be done manually, so **DO NOT** give too much trust in generated PKGBUILD files.
 
 ## Alpm Support
 
@@ -373,8 +375,6 @@ Compiled with `alpm`, `arch-hs` can accept runtime flag `--alpm`.
 - [x] AUR support.
 
 - [x] Working with given `.cabal` files which haven't been released to hackage.
-
-- [ ] Using `hackage-security` to manage hackage index tarball.
 
 
 ## Contributing
