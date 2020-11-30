@@ -3,6 +3,22 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.5.0.0
+
+* Add `TargetDisappearException` to complain if target is clearly not reachable
+
+* Warn abnormal dependencies
+
+* Clear trace file if is not empty
+
+* Collect test dependencies recursively
+
+* Drop meaningless `alpm_errno_t`
+
+* Update name preset ([#30](https://github.com/berberman/arch-hs/pull/30) [#32](https://github.com/berberman/arch-hs/pull/32))
+
+* Fix a typo ([#29](https://github.com/berberman/arch-hs/pull/29))
+
 ## 0.4.0.0
 
 * [Alpm](https://www.archlinux.org/pacman/libalpm.3.html) support

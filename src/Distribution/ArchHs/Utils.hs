@@ -146,6 +146,7 @@ extractFromEVR evr =
   let ev = head $ splitOn "-" evr
    in if ':' `elem` ev then tail $ dropWhile (/= ':') ev else ev
 
+-- | Whether a 'SolvedPackage' is provided
 isProvided :: SolvedPackage -> Bool
 isProvided (ProvidedPackage _ _) = True
 isProvided _ = False
