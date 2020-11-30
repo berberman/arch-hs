@@ -28,7 +28,6 @@ ignoreList =
           "integer",
           "unsupported-ghc-version",
           "base",
-          "ghc",
           "ghc-prim",
           "ghc-bignum",
           "hans",
