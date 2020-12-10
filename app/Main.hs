@@ -41,25 +41,32 @@ app ::
   Bool ->
   [String] ->
   Bool ->
+  Bool ->
   FilePath ->
   Sem r ()
-app target path aurSupport skip uusi metaPath = do
+app target path aurSupport skip uusi force metaPath = do
   (deps, sublibs) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
 
   inCommunity <- isInCommunity target
 
-  when inCommunity $ throw $ TargetExist target ByCommunity
+  when inCommunity $ 
+    if force
+      then embed $ C.warningMessage $ "Target has been provided by [community], ignore it"
+      else throw $ TargetExist target ByCommunity
 
   when aurSupport $ do
     inAur <- isInAur target
-    when inAur $ throw $ TargetExist target ByAur
+    when inAur $ 
+      if force
+      then embed $ C.warningMessage $ "Target has been provided by [aur], ignore it"
+      else throw $ TargetExist target ByAur
 
   let removeSublibs list =
         list ^.. each . filtered (\x -> x ^. pkgName `notElem` sublibs) & each %~ (\x -> x & pkgDeps %~ filter (\d -> d ^. depName `notElem` sublibs))
       grouped = removeSublibs $ groupDeps deps
       namesFromSolved x = x ^.. each . pkgName <> x ^.. each . pkgDeps . each . depName
       allNames = nubOrd $ namesFromSolved grouped
-  communityProvideList <- (<> ghcLibList) <$> filterM isInCommunity allNames
+  communityProvideList <- (<> ghcLibList) <$> filterM (\x -> if x == target && force then return False else isInCommunity x) allNames
 
   let providedPackages = filter (\x -> x ^. pkgName `elem` communityProvideList) grouped
       abnormalDependencies =
@@ -83,7 +90,7 @@ app target path aurSupport skip uusi metaPath = do
     embed . when aurSupport $ C.infoMessage "Start searching AUR..."
     aurProvideList <-
       if aurSupport
-        then filterM (\n -> do embed $ C.infoMessage ("Searching " <> T.pack (unPackageName n)); isInAur n) $ toBePacked1 ^.. each . pkgName
+        then filterM (\n -> do embed $ C.infoMessage ("Searching " <> T.pack (unPackageName n)); isInAur n) $ filter (\x -> not $ x == target && force) $ toBePacked1 ^.. each . pkgName
         else return []
     let a = fillProvidedPkgs aurProvideList ByAur . fillProvidedDeps aurProvideList ByAur $ filledByCommunity
         b = a ^.. each . filtered (not . isProvided)
@@ -240,7 +247,7 @@ main = printHandledIOException $
 
     empty <- newIORef Set.empty
 
-    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi optMetaDir) & printAppResult
+    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir) & printAppResult
 
 -----------------------------------------------------------------------------
 

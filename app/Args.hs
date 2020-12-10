@@ -26,6 +26,7 @@ data Options = Options
     optStdoutTrace :: Bool,
     optFileTrace :: FilePath,
     optUusi :: Bool,
+    optForce :: Bool,
     optMetaDir :: FilePath,
 #ifdef ALPM
     optAlpm :: Bool,
@@ -104,6 +105,10 @@ cmdOptions =
       <*> switch
         ( long "uusi"
             <> help "Splice uusi into prepare()"
+        )      
+      <*> switch
+        ( long "force"
+            <> help "Try to package even if target is provided"
         )
       <*> strOption
         ( long "meta"
