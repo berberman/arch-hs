@@ -10,6 +10,7 @@ module Diff
 where
 
 import qualified Colourista as C
+import Data.Algorithm.Diff
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import qualified Data.Text as T
@@ -18,7 +19,7 @@ import Distribution.ArchHs.Core (evalConditionTree)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.OptionReader
-import Distribution.ArchHs.PP (prettyFlags)
+import Distribution.ArchHs.PP (ppDiffColored, prettyFlags)
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import Distribution.PackageDescription (CondTree, ConfVar)
@@ -31,7 +32,7 @@ import Network.HTTP.Req hiding (header)
 data Options = Options
   { optFlags :: FlagAssignments,
 #ifdef ALPM
-    optAlpm :: Bool,
+    optAlpm          :: Bool,
 #else
     optCommunityPath :: FilePath,
 #endif
@@ -243,35 +244,35 @@ lookupDiffCommunity va vb = do
 
 dep :: String -> VersionedList -> VersionedList -> String
 dep s va vb =
-  C.formatWith [C.magenta] s <> "    " <> case diffOld <> diffNew of
-    [] -> joinToString a
-    _ ->
-      joinToString (fmap (\x -> red (x `elem` diffOld) x) a)
-        <> splitLine
-        <> "    "
-        <> joinToString (fmap (\x -> green (x `elem` diffNew) x) b)
+  C.formatWith [C.magenta] s <> "    "
+    <> if noDiff diff
+      then joinToString []
+      else
+        joinToString da
+          <> splitLine
+          <> "    "
+          <> joinToString db
   where
     a = joinVersionWithName <$> va
     b = joinVersionWithName <$> vb
-    diffNew = b \\ a
-    diffOld = a \\ b
+    da = mconcat $ ppDiffColored <$> filterFirstAndBothDiff diff
+    db = mconcat $ ppDiffColored <$> filterSecondAndBothDiff diff
+    diff = getGroupedDiff a b
     joinToString [] = "[]"
     joinToString xs = intercalate "\n    " $ sort xs
     joinVersionWithName (n, range) = unPackageName n <> "  " <> prettyShow range
-    red p x = if p then C.formatWith [C.red] x else x
-    green p x = if p then C.formatWith [C.green] x else x
 
 flags :: PackageName -> [Flag] -> [Flag] -> String
 flags name a b =
-  C.formatWith [C.magenta] "Flags:\n" <> "  " <> case diffOld <> diffNew of
-    [] -> joinToString a
-    _ ->
-      joinToString a
-        <> splitLine
-        <> "    "
-        <> joinToString b
+  C.formatWith [C.magenta] "Flags:\n" <> "  "
+    <> if noDiff diff
+      then joinToString a
+      else
+        joinToString a
+          <> splitLine
+          <> "    "
+          <> joinToString b
   where
-    diffNew = b \\ a
-    diffOld = a \\ b
+    diff = getGroupedDiff a b
     joinToString [] = "[]"
     joinToString xs = prettyFlags [(name, xs)]

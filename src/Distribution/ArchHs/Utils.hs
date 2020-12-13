@@ -25,10 +25,17 @@ module Distribution.ArchHs.Utils
     depIsKind,
     extractFromEVR,
     isProvided,
+    filterFirstDiff,
+    filterFirstAndBothDiff,
+    filterSecondDiff,
+    filterSecondAndBothDiff,
+    noDiff,
+    mapDiff,
   )
 where
 
 import Control.Monad ((<=<))
+import Data.Algorithm.Diff
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local (ghcLibList)
 import Distribution.ArchHs.Types
@@ -150,3 +157,23 @@ extractFromEVR evr =
 isProvided :: SolvedPackage -> Bool
 isProvided (ProvidedPackage _ _) = True
 isProvided _ = False
+
+filterFirstDiff :: [Diff a] -> [Diff a]
+filterFirstDiff = filter (\case First _ -> True; _ -> False)
+
+filterSecondDiff :: [Diff a] -> [Diff a]
+filterSecondDiff = filter (\case Second _ -> True; _ -> False)
+
+filterFirstAndBothDiff :: [Diff a] -> [Diff a]
+filterFirstAndBothDiff = filter (\case Second _ -> False; _ -> True)
+
+filterSecondAndBothDiff :: [Diff a] -> [Diff a]
+filterSecondAndBothDiff = filter (\case First _ -> False; _ -> True)
+
+noDiff :: [Diff a] -> Bool
+noDiff = all (\case Both _ _ -> True; _ -> False)
+
+mapDiff :: (a -> b) -> Diff a -> Diff b
+mapDiff f (First x) = First $ f x
+mapDiff f (Second x) = Second $ f x
+mapDiff f (Both x y) = Both (f x) (f y)

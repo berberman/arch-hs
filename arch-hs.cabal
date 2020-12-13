@@ -46,6 +46,7 @@ common common-options
     , conduit-extra         ^>=1.3.5
     , containers            ^>=0.6.2
     , deepseq               ^>=1.4.4
+    , Diff                  ^>=0.4.0
     , directory             ^>=1.3.6
     , filepath              ^>=1.4.2
     , hackage-db            ^>=2.1.0

@@ -11,6 +11,7 @@ where
 
 import qualified Colourista as C
 import Control.Monad (unless)
+import Data.Algorithm.Diff (getGroupedDiff)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromJust)
@@ -21,7 +22,9 @@ import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local
 import Distribution.ArchHs.Name
+import Distribution.ArchHs.PP (ppDiffColored)
 import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils (filterFirstDiff, filterSecondDiff, mapDiff, noDiff)
 import Network.HTTP.Req
 import Options.Applicative hiding (header)
 import qualified Options.Applicative
@@ -176,16 +179,18 @@ check community = do
   let bs = responseBody result
       hackage = parseDistroCSV . T.unpack $ decodeUtf8 bs
 
-  let diffOld = hackage \\ community
-      diffNew = community \\ hackage
-      ppRecord b (name, version, url) = (if b then C.formatWith [C.green] else C.formatWith [C.red]) $ "(" <> name <> ", " <> version <> ", " <> url <> ")"
+  let diff = getGroupedDiff hackage community
+      diffOld = mconcat . ppDiffColored . mapDiff (fmap ppRecord) <$> filterFirstDiff diff
+      diffNew = mconcat . ppDiffColored . mapDiff (fmap ppRecord) <$> filterSecondDiff diff
+      ppRecord (name, version, url) = "(" <> name <> ", " <> version <> ", " <> url <> ")\n"
 
   embed . putStrLn $ C.formatWith [C.magenta] "Diff:"
-  embed $ case diffNew <> diffOld of
-    [] -> putStrLn "[]"
-    _ -> do
-      putStr . unlines $ fmap (ppRecord False) diffOld
-      putStrLn $ replicate 68 '-'
-      putStr . unlines $ fmap (ppRecord True) diffNew
+  embed $
+    if noDiff diff
+      then putStrLn "[]"
+      else do
+        putStr . mconcat $ diffOld
+        putStrLn $ replicate 68 '-'
+        putStr . mconcat $ diffNew
 
   embed . putStrLn $ "Found " <> show (length hackage) <> " packages with submitted distribution information in hackage, and " <> show (length community) <> " haskell packages in [community]."

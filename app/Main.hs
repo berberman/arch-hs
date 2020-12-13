@@ -51,14 +51,14 @@ app target path aurSupport skip uusi force metaPath = do
 
   when inCommunity $ 
     if force
-      then embed $ C.warningMessage $ "Target has been provided by [community], ignore it"
+      then embed $ C.warningMessage "Target has been provided by [community], ignore it"
       else throw $ TargetExist target ByCommunity
 
   when aurSupport $ do
     inAur <- isInAur target
     when inAur $ 
       if force
-      then embed $ C.warningMessage $ "Target has been provided by [aur], ignore it"
+      then embed $ C.warningMessage "Target has been provided by [aur], ignore it"
       else throw $ TargetExist target ByAur
 
   let removeSublibs list =

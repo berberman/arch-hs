@@ -13,10 +13,12 @@ module Distribution.ArchHs.PP
     prettyFlags,
     prettySolvedPkgs,
     prettyDeps,
+    ppDiffColored,
   )
 where
 
 import qualified Colourista as C
+import Data.Algorithm.Diff
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Distribution.ArchHs.Internal.Prelude
@@ -73,3 +75,8 @@ con l = mconcat complemented
   where
     maxL = maximum $ fmap (length . fst) l
     complemented = (\(x, y) -> x <> replicate (maxL - length x) ' ' <> y <> "\n") <$> l
+
+ppDiffColored :: Diff [String] -> [String]
+ppDiffColored (First x) = C.formatWith [C.red] <$> x
+ppDiffColored (Second x) = C.formatWith [C.green] <$> x
+ppDiffColored (Both x _) = x
