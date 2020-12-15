@@ -14,7 +14,7 @@ import Data.Algorithm.Diff
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import qualified Data.Text as T
-import Distribution.ArchHs.Community (versionInCommunity)
+import Distribution.ArchHs.CommunityDB (versionInCommunity)
 import Distribution.ArchHs.Core (evalConditionTree)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude

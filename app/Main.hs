@@ -20,7 +20,7 @@ import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Distribution.ArchHs.Aur (Aur, aurToIO, isInAur)
-import Distribution.ArchHs.Community
+import Distribution.ArchHs.CommunityDB
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
@@ -236,9 +236,9 @@ main = printHandledIOException $
 
 #ifdef ALPM
     when optAlpm $ C.infoMessage "Using alpm."
-    community <- if optAlpm then loadCommunityFFI else loadProcessedCommunity defaultCommunityPath
+    community <- if optAlpm then loadCommunityDBFFI else loadProcessedCommunityDB defaultCommunityDBPath
 #else
-    community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
+    community <- loadProcessedCommunityDB $ if useDefaultCommunity then defaultCommunityDBPath else optCommunityPath
 #endif
 
     C.infoMessage "Loading community.db..."

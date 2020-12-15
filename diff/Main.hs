@@ -9,7 +9,7 @@ import Control.Monad (unless)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Diff
-import Distribution.ArchHs.Community
+import Distribution.ArchHs.CommunityDB
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP (prettyFlagAssignments)
@@ -33,9 +33,9 @@ main = printHandledIOException $
 
 #ifdef ALPM
     when optAlpm $ C.infoMessage "Using alpm."
-    community <- if optAlpm then loadCommunityFFI else loadProcessedCommunity defaultCommunityPath
+    community <- if optAlpm then loadCommunityDBFFI else loadProcessedCommunityDB defaultCommunityDBPath
 #else
-    community <- loadProcessedCommunity $ if useDefaultCommunity then defaultCommunityPath else optCommunityPath
+    community <- loadProcessedCommunityDB $ if useDefaultCommunity then defaultCommunityDBPath else optCommunityPath
 #endif
     
     C.infoMessage "Loading community.db..."

@@ -93,7 +93,8 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Distribution.ArchHs.Aur
-    Distribution.ArchHs.Community
+    Distribution.ArchHs.CommunityDB
+    Distribution.ArchHs.CommunityFiles
     Distribution.ArchHs.Core
     Distribution.ArchHs.Exception
     Distribution.ArchHs.Hackage

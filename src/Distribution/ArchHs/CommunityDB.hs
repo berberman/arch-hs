@@ -8,14 +8,14 @@
 -- Stability: experimental
 -- Portability: portable
 -- This module provides functions operating with @community.db@ of pacman.
-module Distribution.ArchHs.Community
-  ( defaultCommunityPath,
-    loadProcessedCommunity,
+module Distribution.ArchHs.CommunityDB
+  ( defaultCommunityDBPath,
+    loadProcessedCommunityDB,
     isInCommunity,
     versionInCommunity,
     compiledWithAlpm,
 #ifdef ALPM
-    loadCommunityFFI,
+    loadCommunityDBFFI,
 #endif
   )
 where
@@ -55,8 +55,8 @@ callback ref x y = do
   modifyIORef' ref (Seq.|> (CommunityName x', extractFromEVR y'))
 
 -- | The same purpose as 'loadCommunity' but use alpm to query community db instead.
-loadCommunityFFI :: IO CommunityDB
-loadCommunityFFI = do
+loadCommunityDBFFI :: IO CommunityDB
+loadCommunityDBFFI = do
   ref <- newIORef Seq.empty
   callbackW <- wrap $ callback ref
   query_community callbackW
@@ -76,14 +76,14 @@ compiledWithAlpm =
 -----------------------------------------------------------------------------
 
 -- | Default path to @community.db@.
-defaultCommunityPath :: FilePath
-defaultCommunityPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "community.db"
+defaultCommunityDBPath :: FilePath
+defaultCommunityDBPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "community.db"
 
-loadCommunity ::
+loadCommunityDB ::
   (MonadResource m, PrimMonad m, MonadThrow m) =>
   FilePath ->
   ConduitT i (CommunityName, CommunityVersion) m ()
-loadCommunity path = do
+loadCommunityDB path = do
   sourceFileBS path .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
   where
     action header =
@@ -105,8 +105,8 @@ loadCommunity path = do
 
 -- | Load @community.db@ from @path@.
 -- @desc@ files in the db will be parsed by @descParser@.
-loadProcessedCommunity :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
-loadProcessedCommunity path = Map.fromList <$> runConduitRes (loadCommunity path .| sinkList)
+loadProcessedCommunityDB :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
+loadProcessedCommunityDB path = Map.fromList <$> runConduitRes (loadCommunityDB path .| sinkList)
 
 -----------------------------------------------------------------------------
 
