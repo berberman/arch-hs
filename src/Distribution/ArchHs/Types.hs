@@ -18,6 +18,7 @@ module Distribution.ArchHs.Types
     CommunityName (..),
     CommunityVersion,
     CommunityDB,
+    CommunityFiles,
     HackageEnv,
     CommunityEnv,
     FlagAssignmentsEnv,
@@ -61,6 +62,8 @@ type CommunityVersion = String
 
 -- | Representation of @cummunity.db@
 type CommunityDB = Map CommunityName CommunityVersion
+
+type CommunityFiles = Map CommunityName [FilePath]
 
 -- | Reader effect of 'HackageDB'
 type HackageEnv = Reader HackageDB

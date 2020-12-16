@@ -10,7 +10,7 @@
 -- This module provides functions operating with @community.db@ of pacman.
 module Distribution.ArchHs.CommunityDB
   ( defaultCommunityDBPath,
-    loadProcessedCommunityDB,
+    loadCommunityDB,
     isInCommunity,
     versionInCommunity,
     compiledWithAlpm,
@@ -79,21 +79,20 @@ compiledWithAlpm =
 defaultCommunityDBPath :: FilePath
 defaultCommunityDBPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "community.db"
 
-loadCommunityDB ::
+loadCommunityDBC ::
   (MonadResource m, PrimMonad m, MonadThrow m) =>
   FilePath ->
   ConduitT i (CommunityName, CommunityVersion) m ()
-loadCommunityDB path = do
+loadCommunityDBC path = do
   sourceFileBS path .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
   where
     action header =
       when (Tar.headerFileType header == Tar.FTNormal) $ do
         x <- mconcat <$> sinkList
         let txt = T.unpack . decodeUtf8 $ x
-            result =
-              let provided r = r Map.! "PROVIDES"
-                  parseProvidedTerm t = let s = splitOn "=" t in (s ^. ix 0, s ^. ix 1)
-               in case runDescFieldsParser (Tar.headerFilePath header) txt of
+            provided r = r Map.! "PROVIDES"
+            parseProvidedTerm t = let s = splitOn "=" t in (s ^. ix 0, s ^. ix 1)
+            result = case runDescFieldsParser (Tar.headerFilePath header) txt of
                     Right r -> case head $ r Map.! "NAME" of
                       "ghc" -> parseProvidedTerm <$> provided r
                       "ghc-libs" -> parseProvidedTerm <$> provided r
@@ -105,8 +104,8 @@ loadCommunityDB path = do
 
 -- | Load @community.db@ from @path@.
 -- @desc@ files in the db will be parsed by @descParser@.
-loadProcessedCommunityDB :: (MonadUnliftIO m, PrimMonad m, MonadThrow m) => FilePath -> m CommunityDB
-loadProcessedCommunityDB path = Map.fromList <$> runConduitRes (loadCommunityDB path .| sinkList)
+loadCommunityDB :: FilePath -> IO CommunityDB
+loadCommunityDB path = Map.fromList <$> runConduitRes (loadCommunityDBC path .| sinkList)
 
 -----------------------------------------------------------------------------
 

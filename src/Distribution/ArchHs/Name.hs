@@ -40,11 +40,8 @@
 -- For details, see the type 'MyName' and type class 'HasMyName' with its instances.
 module Distribution.ArchHs.Name
   ( MyName,
-    unMyName,
-    HasMyName (..),
+    HasMyName,
     NameRep (..),
-    mToCommunityName,
-    mToHackageName,
     toCommunityName,
     toHackageName,
     isHaskellPackage,
@@ -97,7 +94,7 @@ communityListP :: [MyName 'CommunityRep]
 -- to unify them, with type level constraints as bonus.
 newtype MyName a = MyName
   { -- | Unwrap the value.
-    unMyName :: String
+    unsafeUnMyName :: String
   }
   deriving stock (Show, Read, Eq, Ord, Generic)
   deriving anyclass (NFData)
@@ -115,12 +112,12 @@ class HasMyName a where
   toCommunityRep :: a -> MyName 'CommunityRep
 
 instance HasMyName (MyName 'CommunityRep) where
-  toHackageRep = toHackageRep . CommunityName . unMyName
+  toHackageRep = toHackageRep . CommunityName . unsafeUnMyName
   toCommunityRep = id
 
 instance HasMyName (MyName 'HackageRep) where
   toHackageRep = id
-  toCommunityRep = toCommunityRep . mkPackageName . unMyName
+  toCommunityRep = toCommunityRep . mkPackageName . unsafeUnMyName
 
 instance HasMyName PackageName where
   toHackageRep = MyName . unPackageName
@@ -145,11 +142,11 @@ instance HasMyName CommunityName where
 
 -- | Back to 'CommunityName'.
 mToCommunityName :: MyName 'CommunityRep -> CommunityName
-mToCommunityName = CommunityName . unMyName
+mToCommunityName = CommunityName . unsafeUnMyName
 
 -- | Back to 'PackageName'.
 mToHackageName :: MyName 'HackageRep -> PackageName
-mToHackageName = mkPackageName . unMyName
+mToHackageName = mkPackageName . unsafeUnMyName
 
 -- | Convert @n@ to 'CommunityName'.
 toCommunityName :: HasMyName n => n -> CommunityName
@@ -165,4 +162,4 @@ toHackageName = mToHackageName . toHackageRep
 isHaskellPackage :: CommunityName -> Bool
 isHaskellPackage name =
   let rep = toCommunityRep name
-   in (rep `elem` communityListP || "haskell-" `isPrefixOf` unMyName rep) && rep `notElem` falseListP
+   in (rep `elem` communityListP || "haskell-" `isPrefixOf` unsafeUnMyName rep) && rep `notElem` falseListP

@@ -45,9 +45,9 @@ main = printHandledIOException $
 
 #ifdef ALPM
     when optAlpm $ C.infoMessage "Using alpm."
-    community <- if optAlpm then loadCommunityDBFFI else loadProcessedCommunityDB defaultCommunityDBPath
+    community <- if optAlpm then loadCommunityDBFFI else loadCommunityDB defaultCommunityDBPath
 #else
-    community <- loadProcessedCommunityDB $ if useDefaultCommunity then defaultCommunityDBPath else optCommunityPath
+    community <- loadCommunityDB $ if useDefaultCommunity then defaultCommunityDBPath else optCommunityPath
 #endif
 
     C.infoMessage "Loading community.db..."
