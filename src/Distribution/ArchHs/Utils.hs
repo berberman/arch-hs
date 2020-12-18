@@ -71,7 +71,7 @@ unBuildTools :: ([LegacyExeDependency], [ExeDependency]) -> [(PackageName, Versi
 unBuildTools (l, e) = (unLegacyExeV <$> l) <> (unExeV <$> e)
 
 unSystemDependency :: ([PkgconfigDependency], [String]) -> [SystemDependency]
-unSystemDependency (p, s) = [SystemDependency $ "Pkgconfig [" <>name <> "]" | (PkgconfigDependency (unPkgconfigName -> name) _) <- p] <> [SystemDependency $"ExtraLib [" <>name <> "]" | name <- s]
+unSystemDependency (p, s) = [SystemDependency $ name <> ".pc" | (PkgconfigDependency (unPkgconfigName -> name) _) <- p] <> [SystemDependency $ "lib" <> name <> ".so" | name <- s]
 
 -- | Extract the 'PackageName' and 'VersionRange' of a 'Dependency'.
 unDepV :: Dependency -> (PackageName, VersionRange)

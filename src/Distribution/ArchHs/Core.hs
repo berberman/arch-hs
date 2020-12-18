@@ -16,6 +16,7 @@ where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Data.Bifunctor (second)
+import Data.Containers.ListUtils (nubOrd)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -41,7 +42,6 @@ import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
 import Distribution.Types.Dependency (Dependency)
 import Distribution.Utils.ShortText (fromShortText)
-import Data.Containers.ListUtils (nubOrd)
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Linux) = Right True
@@ -239,8 +239,8 @@ updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 -----------------------------------------------------------------------------
 
 -- | Generate 'PkgBuild' for a 'SolvedPackage'.
-cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> Bool -> Sem r PkgBuild
-cabalToPkgBuild pkg uusi = do
+cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> Bool -> [ArchLinuxName] -> Sem r PkgBuild
+cabalToPkgBuild pkg uusi sysDeps = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> getLatestCabal name
   _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> tryMaybe (getLatestSHA256 name)
@@ -285,9 +285,9 @@ cabalToPkgBuild pkg uusi = do
                            || depIsKind SubLibsBuildTools x
                        )
               )
-      depsToString deps = deps <&> (wrap . unArchLinuxName . toArchLinuxName . _depName) & mconcat
-      _depends = depsToString depends
-      _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString makeDepends
+      depsToString k deps = deps <&> (wrap . unArchLinuxName . toArchLinuxName . k) & mconcat
+      _depends = depsToString _depName depends <> depsToString id sysDeps
+      _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString _depName makeDepends
       _url = getUrl cabal
       wrap s = " '" <> s <> "'"
       _licenseFile = licenseFiles cabal ^? ix 0

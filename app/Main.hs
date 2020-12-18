@@ -13,16 +13,17 @@ import Args
 import qualified Colourista as C
 import Control.Monad (filterM, forM_, unless)
 import Data.Containers.ListUtils (nubOrd)
-import Data.IORef (IORef, newIORef)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty (toList)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Distribution.ArchHs.Aur (Aur, aurToIO, isInAur)
 import Distribution.ArchHs.CommunityDB
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Exception
+import Distribution.ArchHs.FilesDB
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local
@@ -46,7 +47,7 @@ app ::
   Sem r ()
 app target path aurSupport skip uusi force metaPath = do
   (deps, sublibs, sysDeps) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
-  -- embed $ putStrLn $mconcat $ fmap (\(pkg,ls)-> unPackageName pkg <> ": " <> mconcat (fmap (\(SystemDependency x) -> x <>" " )ls) <> "\n") $ Map.toList sysDeps
+
   inCommunity <- isInCommunity target
 
   when inCommunity $
@@ -109,7 +110,42 @@ app target path aurSupport skip uusi force metaPath = do
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle newGraph of
     Left c -> throw . CyclicExist $ toList c
     Right x -> return $ filter (`notElem` sublibs) x
+
   embed $ putStrLn . prettyDeps . reverse $ flattened
+
+  let sysDepsToBePacked = Map.filterWithKey (\k _ -> k `elem` flattened) sysDeps
+
+  embed $ C.infoMessage "Detected system dependences from target(s):"
+  embed $ putStrLn $ ppSysDependencies sysDepsToBePacked
+
+  sysDepsRef <- embed . newIORef $ toUnsolved <$> nubOrd (Map.foldMapWithKey (\_ x -> x) sysDepsToBePacked)
+
+  embed $
+    isAllSolved sysDepsRef >>= \b -> unless b $ do
+      C.infoMessage "Now finding corresponding system package(s):"
+      C.infoMessage "Loading core.files..."
+      coreFiles <- loadFilesDB Core defaultFilesDBDir
+      modifyIORef' sysDepsRef $ fmap (trySolve coreFiles)
+      b' <- isAllSolved sysDepsRef
+      unless b' $ do
+        C.infoMessage "Loading extra.files..."
+        extraFiles <- loadFilesDB Extra defaultFilesDBDir
+        modifyIORef' sysDepsRef $ fmap (trySolve extraFiles)
+        b'' <- isAllSolved sysDepsRef
+        unless b'' $ do
+          C.infoMessage "Loading community.files..."
+          communityFiles <- loadFilesDB Community defaultFilesDBDir
+          modifyIORef' sysDepsRef $ fmap (trySolve communityFiles)
+
+  sysDepsResult <- embed $ readIORef sysDepsRef
+
+  embed $ C.infoMessage "Done:"
+
+  embed . putStrLn . align2col $ ppEmergedSysDep <$> sysDepsResult
+
+  let sysDepsMapping = collectAllSolved sysDepsResult
+      getSysDeps name = catMaybes [sysDepsMapping Map.!? file | (SystemDependency file) <- fromMaybe [] $ sysDeps Map.!? name]
+
   flags <- filter (\(_, l) -> not $ null l) <$> mapM (\n -> (n,) <$> getPackageFlag n) flattened
 
   embed $
@@ -120,7 +156,7 @@ app target path aurSupport skip uusi force metaPath = do
   unless (null path) $
     mapM_
       ( \solved -> do
-          pkgBuild <- cabalToPkgBuild solved uusi
+          pkgBuild <- cabalToPkgBuild solved uusi $ getSysDeps (solved ^. pkgName)
           let pName = N._pkgName pkgBuild
               dir = path </> pName
               fileName = dir </> "PKGBUILD"
@@ -157,6 +193,30 @@ app target path aurSupport skip uusi force metaPath = do
       createDirectoryIfMissing True dir
       writeFile fileName (T.unpack txt)
       C.infoMessage $ "Write file: " <> T.pack fileName
+
+-----------------------------------------------------------------------------
+data EmergedSysDep = Solved File ArchLinuxName | Unsolved File
+  deriving stock (Eq, Ord, Show)
+
+toUnsolved :: SystemDependency -> EmergedSysDep
+toUnsolved (SystemDependency x) = Unsolved x
+
+trySolve :: FilesDB -> EmergedSysDep -> EmergedSysDep
+trySolve db dep
+  | (Unsolved x) <- dep,
+    (pkg : _) <- lookupPkg x db =
+    Solved x pkg
+  | otherwise = dep
+
+isAllSolved :: IORef [EmergedSysDep] -> IO Bool
+isAllSolved ref = readIORef ref >>= \xs -> return $ null [() | (Unsolved _) <- xs]
+
+collectAllSolved :: [EmergedSysDep] -> Map.Map File ArchLinuxName
+collectAllSolved xs = Map.fromList [(file, name) | (Solved file name) <- xs]
+
+ppEmergedSysDep :: EmergedSysDep -> (String, String)
+ppEmergedSysDep (Solved file (ArchLinuxName name)) = (C.formatWith [C.green] file, "   ⇒   " <> C.formatWith [C.cyan] name)
+ppEmergedSysDep (Unsolved file) = (C.formatWith [C.yellow, C.bold] file, C.formatWith [C.red] "       ✘")
 
 -----------------------------------------------------------------------------
 

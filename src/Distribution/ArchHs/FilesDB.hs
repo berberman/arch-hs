@@ -2,7 +2,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Distribution.ArchHs.FilesDB where
+module Distribution.ArchHs.FilesDB
+  ( defaultFilesDBDir,
+    loadFilesDB,
+    lookupPkg,
+    DBKind (..),
+    File,
+    FilesDB,
+  )
+where
 
 import Conduit
 import qualified Data.Conduit.Tar as Tar
@@ -37,12 +45,20 @@ loadFilesDBC db path = do
           x <- mconcat <$> sinkList
           let txt = decodeUtf8 x
           case t of
-            "files" -> yield . Files fp $ [T.unpack fname | (T.stripPrefix "usr/lib/lib" -> Just (T.stripSuffix ".so" -> Just (T.takeWhileEnd (/= '/') -> fname))) <- tail $ T.lines txt]
+            "files" -> yield . Files fp $ [T.unpack fname | (extract -> Just fname) <- tail $ T.lines txt]
             "desc" -> case runDescFieldsParser fp (T.unpack txt) of
               Right r | [name] <- r Map.! "NAME" -> yield . Desc fp $ ArchLinuxName name
               _ -> return ()
             _ -> return ()
       | otherwise = return ()
+    extract s
+      | Just x <- T.stripPrefix "usr/lib/" s,
+        T.isSuffixOf ".so" x =
+        Just $ T.takeWhileEnd (/= '/') x
+      | Just x <- T.stripPrefix "usr/lib/pkgconfig" s,
+        T.isSuffixOf ".pc" x =
+        Just $ T.takeWhileEnd (/= '/') x
+      | otherwise = Nothing
 
 mergeResult :: Monad m => ConduitT Result (ArchLinuxName, [File]) m ()
 mergeResult = do

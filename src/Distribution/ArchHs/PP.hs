@@ -13,7 +13,9 @@ module Distribution.ArchHs.PP
     prettyFlags,
     prettySolvedPkgs,
     prettyDeps,
+    ppSysDependencies,
     ppDiffColored,
+    align2col,
   )
 where
 
@@ -55,7 +57,7 @@ prettyFlag f = "⚐ " <> C.formatWith [C.yellow] name <> ":\n" <> mconcat (C.for
     manual = show $ flagManual f
 
 prettySolvedPkgs :: [SolvedPackage] -> String
-prettySolvedPkgs = con . mconcat . fmap prettySolvedPkg
+prettySolvedPkgs = align2col . mconcat . fmap prettySolvedPkg
 
 prettySolvedPkg :: SolvedPackage -> [(String, String)]
 prettySolvedPkg SolvedPackage {..} =
@@ -70,11 +72,17 @@ prettySolvedPkg SolvedPackage {..} =
     (zip [1 ..] _pkgDeps)
 prettySolvedPkg ProvidedPackage {..} = [(C.formatWith [C.green] (unPackageName _pkgName), C.formatWith [C.green] "✔ " <> C.formatWith [C.cyan] (show _pkgProvider))]
 
-con :: [(String, String)] -> String
-con l = mconcat complemented
+align2col :: [(String, String)] -> String
+align2col l = mconcat complemented
   where
     maxL = maximum $ fmap (length . fst) l
     complemented = (\(x, y) -> x <> replicate (maxL - length x) ' ' <> y <> "\n") <$> l
+
+ppSysDependencies :: Map.Map PackageName [SystemDependency] -> String
+ppSysDependencies m = align2col $ uncurry ppSysDependency <$> Map.toList m
+
+ppSysDependency :: PackageName -> [SystemDependency] -> (String, String)
+ppSysDependency name deps = (C.formatWith [C.bold, C.yellow] (unPackageName name) <> ": ", intercalate ", " (fmap (\(SystemDependency x) -> x) deps))
 
 ppDiffColored :: Diff [String] -> [String]
 ppDiffColored (First x) = C.formatWith [C.red] <$> x
