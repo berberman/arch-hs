@@ -50,7 +50,7 @@ common common-options
     , directory             ^>=1.3.6
     , filepath              ^>=1.4.2
     , hackage-db            ^>=2.1.0
-    , megaparsec            ^>=8.0.0
+    , megaparsec            ^>=9.0.0
     , microlens             ^>=0.4.11
     , microlens-th          ^>=0.4.3
     , neat-interpolation    ^>=0.5.1

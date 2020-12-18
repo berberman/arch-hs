@@ -109,7 +109,7 @@ data Aur m a where
 
 makeSem_ ''Aur
 
--- | Serach a package from AUR
+-- | Search a package from AUR
 searchByName :: Member Aur r => String -> Sem r (Maybe AurSearch)
 
 -- | Get package info from AUR
