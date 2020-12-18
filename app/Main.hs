@@ -115,23 +115,24 @@ app target path aurSupport skip uusi force metaPath = do
 
   let sysDepsToBePacked = Map.filterWithKey (\k _ -> k `elem` flattened) sysDeps
 
-  embed $ C.infoMessage "Detected system dependences from target(s):"
-  embed $ putStrLn $ ppSysDependencies sysDepsToBePacked
+  unless (null sysDepsToBePacked) $ do
+    embed $ C.infoMessage "Detected pkgconfigs or extra libraries from target(s):"
+    embed $ putStrLn $ ppSysDependencies sysDepsToBePacked
 
   sysDepsRef <- embed . newIORef $ toUnsolved <$> nubOrd (Map.foldMapWithKey (\_ x -> x) sysDepsToBePacked)
 
   embed $
-    isAllSolved sysDepsRef >>= \b -> unless b $ do
+    isAllSolvedM sysDepsRef >>= \b -> unless b $ do
       C.infoMessage "Now finding corresponding system package(s):"
       C.infoMessage "Loading core.files..."
       coreFiles <- loadFilesDB Core defaultFilesDBDir
       modifyIORef' sysDepsRef $ fmap (trySolve coreFiles)
-      b' <- isAllSolved sysDepsRef
+      b' <- isAllSolvedM sysDepsRef
       unless b' $ do
         C.infoMessage "Loading extra.files..."
         extraFiles <- loadFilesDB Extra defaultFilesDBDir
         modifyIORef' sysDepsRef $ fmap (trySolve extraFiles)
-        b'' <- isAllSolved sysDepsRef
+        b'' <- isAllSolvedM sysDepsRef
         unless b'' $ do
           C.infoMessage "Loading community.files..."
           communityFiles <- loadFilesDB Community defaultFilesDBDir
@@ -139,9 +140,10 @@ app target path aurSupport skip uusi force metaPath = do
 
   sysDepsResult <- embed $ readIORef sysDepsRef
 
-  embed $ C.infoMessage "Done:"
-
-  embed . putStrLn . align2col $ ppEmergedSysDep <$> sysDepsResult
+  embed . unless (null sysDepsToBePacked) $ do
+    C.infoMessage "Done:"
+    putStrLn . align2col $ ppEmergedSysDep <$> sysDepsResult
+    unless (isAllSolved sysDepsResult) $ C.warningMessage "Unable to obtain all required system packages"
 
   let sysDepsMapping = collectAllSolved sysDepsResult
       getSysDeps name = catMaybes [sysDepsMapping Map.!? file | (SystemDependency file) <- fromMaybe [] $ sysDeps Map.!? name]
@@ -208,8 +210,11 @@ trySolve db dep
     Solved x pkg
   | otherwise = dep
 
-isAllSolved :: IORef [EmergedSysDep] -> IO Bool
-isAllSolved ref = readIORef ref >>= \xs -> return $ null [() | (Unsolved _) <- xs]
+isAllSolved :: [EmergedSysDep] -> Bool
+isAllSolved xs = null [() | (Unsolved _) <- xs]
+
+isAllSolvedM :: IORef [EmergedSysDep] -> IO Bool
+isAllSolvedM ref = isAllSolved <$> readIORef ref
 
 collectAllSolved :: [EmergedSysDep] -> Map.Map File ArchLinuxName
 collectAllSolved xs = Map.fromList [(file, name) | (Solved file name) <- xs]
