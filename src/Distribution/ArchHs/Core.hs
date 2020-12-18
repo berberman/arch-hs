@@ -106,6 +106,7 @@ getDependencies skip parent name = do
   (subLibDeps, subLibToolsDeps, subLibSysDeps) <- collectSubLibDeps cabal skip
   (exeDeps, exeToolsDeps, exeSysDeps) <- collectExeDeps cabal skip
   (testDeps, testToolsDeps, testSysDeps) <- collectTestDeps cabal skip
+  setupDeps <- collectSetupDeps cabal
   -- Ignore benchmarks
   -- (benchDeps, benchToolsDeps) <- collectBenchMarkDeps cabal skip
   let uname :: (UnqualComponentName -> DependencyType) -> ComponentPkgList -> [(DependencyType, PkgList)]
@@ -129,13 +130,15 @@ getDependencies skip parent name = do
       filteredTestToolsDeps = ignoreFlatten CTest testToolsDeps
       filteredSubLibDeps = ignoreFlatten CSubLibs subLibDeps
       filteredSubLibToolsDeps = ignoreFlatten CSubLibsBuildTools subLibToolsDeps
+      filteredSetupDeps = ignore setupDeps
 
       filteredSubLibDepsNames = fmap (unqualComponentNameToPackageName . fst) subLibDeps
       ignoreSubLibs = filter (`notElem` filteredSubLibDepsNames)
       ignoreResolved = filter (`notElem` resolved)
 
       currentLib = G.edges $ zip3 (repeat $ Set.singleton CLib) (repeat name) filteredLibDeps
-      currentLibDeps = G.edges $ zip3 (repeat $ Set.singleton CLibBuildTools) (repeat name) filteredLibToolsDeps
+      currentLibToolDeps = G.edges $ zip3 (repeat $ Set.singleton CLibBuildTools) (repeat name) filteredLibToolsDeps
+      currentSetupDeps = G.edges $ zip3 (repeat $ Set.singleton CSetup) (repeat name) filteredSetupDeps
 
       componentialEdges =
         G.edges
@@ -156,17 +159,19 @@ getDependencies skip parent name = do
       processNext = mapM (getDependencies skip (Just name)) . ignoreResolved . ignoreSubLibs
       (<+>) = G.overlay
   nextLib <- processNext filteredLibDeps
+  nextSetup <- processNext filteredSetupDeps
   nextExe <- processNext $ fmap snd filteredExeDeps
   -- TODO: maybe unstable
   nextTest <- processNext $ fmap snd filteredTestDeps
   nextSubLibs <- mapM (getDependencies skip (Just name)) $ fmap snd filteredSubLibDeps
-  let temp = [nextLib, nextExe, nextTest, nextSubLibs]
+  let temp = [nextLib, nextSetup, nextExe, nextTest, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
       subsubs = temp ^. each ^.. each . _2 ^. each
       nextSys = temp ^. each ^.. each . _3 ^. each
   return
     ( currentLib
-        <+> currentLibDeps
+        <+> currentLibToolDeps
+        <+> currentSetupDeps
         <+> currentExe
         <+> currentExeTools
         <+> currentTest
@@ -230,6 +235,17 @@ collectTestDeps = collectComponentialDeps "test" condTestSuites
 collectSubLibDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
 collectSubLibDeps = collectComponentialDeps "sublib" condSubLibraries
 
+collectSetupDeps :: Member Trace r => GenericPackageDescription -> Sem r PkgList
+collectSetupDeps cabal = do
+  let name = getPkgName' cabal
+  trace' $ "Getting setup dependencies of " <> show name
+  case setupBuildInfo $ packageDescription cabal of
+    Just (SetupBuildInfo deps _) -> do
+      let result = fst . unDepV <$> deps
+      trace' $ "Found: " <> show result
+      return result
+    _ -> return []
+
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> VersionRange -> Sem r ()
 updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 
@@ -283,6 +299,7 @@ cabalToPkgBuild pkg uusi sysDeps = do
                            || depIsKind Test x
                            || depIsKind TestBuildTools x
                            || depIsKind SubLibsBuildTools x
+                           || depIsKind Setup x
                        )
               )
       depsToString k deps = deps <&> (wrap . unArchLinuxName . toArchLinuxName . k) & mconcat

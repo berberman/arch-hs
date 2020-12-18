@@ -16,7 +16,7 @@ module Distribution.ArchHs.Types
   ( PkgList,
     ComponentPkgList,
     ArchLinuxName (..),
-    SystemDependency(..),
+    SystemDependency (..),
     ArchLinuxVersion,
     CommunityDB,
     HackageEnv,
@@ -90,6 +90,7 @@ data DependencyType
     CExeBuildTools UnqualComponentName
   | -- | By a /library/
     CLib
+  | CSetup
   | -- | By a /test suit/
     CTest UnqualComponentName
   | -- | By a /benchmark/
@@ -112,6 +113,7 @@ data DependencyKind
   = Exe
   | ExeBuildTools
   | Lib
+  | Setup
   | Test
   | Benchmark
   | LibBuildTools
@@ -132,6 +134,7 @@ instance Show DependencyType where
   show (CSubLibsBuildTools x) = unUnqualComponentName x <> " :: SubLibsBuildTools"
   show CLib = "Lib"
   show CLibBuildTools = "LibBuildTools"
+  show CSetup = "Setup"
 
 -- | Provider of a dependency.
 data DependencyProvider = ByCommunity | ByAur

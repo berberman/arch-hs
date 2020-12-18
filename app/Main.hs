@@ -116,7 +116,7 @@ app target path aurSupport skip uusi force metaPath = do
   let sysDepsToBePacked = Map.filterWithKey (\k _ -> k `elem` flattened) sysDeps
 
   unless (null sysDepsToBePacked) $ do
-    embed $ C.infoMessage "Detected pkgconfigs or extra libraries from target(s):"
+    embed $ C.infoMessage "Detected pkgconfig or extraLib from target(s):"
     embed $ putStrLn $ ppSysDependencies sysDepsToBePacked
 
   sysDepsRef <- embed . newIORef $ toUnsolved <$> nubOrd (Map.foldMapWithKey (\_ x -> x) sysDepsToBePacked)
