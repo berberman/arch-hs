@@ -148,7 +148,7 @@ aurToIO = interpret $ \case
       1 -> Just . head $ r_results body
       _ -> Nothing
   (IsInAur name) -> do
-    result <- aurToIO . searchByName . unCommunityName . toCommunityName $ name
+    result <- aurToIO . searchByName . unArchLinuxName . toArchLinuxName $ name
     return $ case result of
       Just _ -> True
       _ -> False

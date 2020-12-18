@@ -1,3 +1,5 @@
+{-# LANGUAGE ViewPatterns #-}
+
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <1793913507@qq.com>
@@ -13,11 +15,13 @@ module Distribution.ArchHs.Utils
     unExeV,
     unLegacyExeV,
     unBuildTools,
+    unSystemDependency,
     unDepV,
     getUrl,
     getTwo,
     buildDependsIfBuild,
     buildToolsAndbuildToolDependsIfBuild,
+    pkgconfigDependsAndExtraLibsIfBuild,
     traceCallStack,
     trace',
     depNotInGHCLib,
@@ -45,6 +49,8 @@ import Distribution.Types.Dependency (Dependency, depPkgName, depVerRange)
 import Distribution.Types.ExeDependency (ExeDependency (..))
 import Distribution.Types.LegacyExeDependency
 import qualified Distribution.Types.PackageId as I
+import Distribution.Types.PkgconfigDependency
+import Distribution.Types.PkgconfigName
 import Distribution.Utils.ShortText (fromShortText)
 import GHC.Stack (callStack, prettyCallStack)
 
@@ -63,6 +69,9 @@ unLegacyExeV (LegacyExeDependency name v) = (mkPackageName name, v)
 -- | Extract and join package names and version ranges of '[LegacyExeDependency]' and '[ExeDependency]'.
 unBuildTools :: ([LegacyExeDependency], [ExeDependency]) -> [(PackageName, VersionRange)]
 unBuildTools (l, e) = (unLegacyExeV <$> l) <> (unExeV <$> e)
+
+unSystemDependency :: ([PkgconfigDependency], [String]) -> [SystemDependency]
+unSystemDependency (p, s) = [SystemDependency $ "Pkgconfig [" <>name <> "]" | (PkgconfigDependency (unPkgconfigName -> name) _) <- p] <> [SystemDependency $"ExtraLib [" <>name <> "]" | name <- s]
 
 -- | Extract the 'PackageName' and 'VersionRange' of a 'Dependency'.
 unDepV :: Dependency -> (PackageName, VersionRange)
@@ -112,12 +121,20 @@ getTwo l a b = (a, b) & both %~ (^. l)
 
 -- | Same as 'targetBuildDepends', but check if this is 'buildable'.
 buildDependsIfBuild :: BuildInfo -> [Dependency]
-buildDependsIfBuild info = if buildable info then targetBuildDepends info else []
+buildDependsIfBuild info = whenBuildable [] info targetBuildDepends
 
 -- | 'buildToolDepends' combined with 'buildTools', and check if this is 'buildable'.
 -- Actually, we should avoid accessing these two fields directly, in in favor of 'Distribution.Simple.BuildToolDepends.getAllToolDependencies'
 buildToolsAndbuildToolDependsIfBuild :: BuildInfo -> ([LegacyExeDependency], [ExeDependency])
-buildToolsAndbuildToolDependsIfBuild info = if buildable info then (buildTools info, buildToolDepends info) else ([], [])
+buildToolsAndbuildToolDependsIfBuild info = whenBuildable ([], []) info $ \i -> (buildTools i, buildToolDepends i)
+
+pkgconfigDependsAndExtraLibsIfBuild :: BuildInfo -> ([PkgconfigDependency], [String])
+pkgconfigDependsAndExtraLibsIfBuild info = whenBuildable ([], []) info $ \i -> (pkgconfigDepends i, extraLibs i)
+
+whenBuildable :: a -> BuildInfo -> (BuildInfo -> a) -> a
+whenBuildable def info f
+  | buildable info = f info
+  | otherwise = def
 
 -- | Trace with prefix @[TRACE]@.
 trace' :: MemberWithError Trace r => String -> Sem r ()
@@ -148,7 +165,7 @@ depIsKind k x = k `elem` (x ^. depType <&> dependencyTypeToKind)
 -- "8.10.2"
 -- >>> extractFromEVR "3:2.4.11-19"
 -- "2.4.11"
-extractFromEVR :: String -> CommunityVersion
+extractFromEVR :: String -> ArchLinuxVersion
 extractFromEVR evr =
   let ev = head $ splitOn "-" evr
    in if ':' `elem` ev then tail $ dropWhile (/= ':') ev else ev

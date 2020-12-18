@@ -48,11 +48,11 @@ foreign import ccall "wrapper"
 foreign import ccall "clib.h query_community"
   query_community :: FunPtr (CString -> CString -> IO ()) -> IO ()
 
-callback :: IORef (Seq.Seq (CommunityName, CommunityVersion)) -> CString -> CString -> IO ()
+callback :: IORef (Seq.Seq (ArchLinuxName, ArchLinuxVersion)) -> CString -> CString -> IO ()
 callback ref x y = do
   x' <- peekCString x
   y' <- peekCString y
-  modifyIORef' ref (Seq.|> (CommunityName x', extractFromEVR y'))
+  modifyIORef' ref (Seq.|> (ArchLinuxName x', extractFromEVR y'))
 
 -- | The same purpose as 'loadCommunity' but use alpm to query community db instead.
 loadCommunityDBFFI :: IO CommunityDB
@@ -82,7 +82,7 @@ defaultCommunityDBPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "co
 loadCommunityDBC ::
   (MonadResource m, PrimMonad m, MonadThrow m) =>
   FilePath ->
-  ConduitT i (CommunityName, CommunityVersion) m ()
+  ConduitT i (ArchLinuxName, ArchLinuxVersion) m ()
 loadCommunityDBC path = do
   sourceFileBS path .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
   where
@@ -100,7 +100,7 @@ loadCommunityDBC path = do
                     -- Drop it if failed to parse
                     Left _ -> []
 
-        yieldMany $ result & each . _1 %~ CommunityName
+        yieldMany $ result & each . _1 %~ ArchLinuxName
 
 -- | Load @community.db@ from @path@.
 -- @desc@ files in the db will be parsed by @descParser@.
@@ -112,12 +112,12 @@ loadCommunityDB path = Map.fromList <$> runConduitRes (loadCommunityDBC path .| 
 -- | Check if a package exists in archlinux community repo.
 -- See 'HasMyName'.
 isInCommunity :: (HasMyName n, Member CommunityEnv r) => n -> Sem r Bool
-isInCommunity name = ask @CommunityDB >>= \db -> return $ toCommunityName name `Map.member` db
+isInCommunity name = ask @CommunityDB >>= \db -> return $ toArchLinuxName name `Map.member` db
 
 -- | Get the version of a package in archlinux community repo.
 -- If the package does not exist, 'PkgNotFound' will be thrown.
-versionInCommunity :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n -> Sem r CommunityVersion
+versionInCommunity :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n -> Sem r ArchLinuxVersion
 versionInCommunity name =
-  ask @CommunityDB >>= \db -> case db Map.!? toCommunityName name of
+  ask @CommunityDB >>= \db -> case db Map.!? toArchLinuxName name of
     Just x -> return x
     _ -> throw $ PkgNotFound name

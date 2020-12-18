@@ -45,21 +45,21 @@ app ::
   FilePath ->
   Sem r ()
 app target path aurSupport skip uusi force metaPath = do
-  (deps, sublibs) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
-
+  (deps, sublibs, sysDeps) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
+  -- embed $ putStrLn $mconcat $ fmap (\(pkg,ls)-> unPackageName pkg <> ": " <> mconcat (fmap (\(SystemDependency x) -> x <>" " )ls) <> "\n") $ Map.toList sysDeps
   inCommunity <- isInCommunity target
 
-  when inCommunity $ 
+  when inCommunity $
     if force
       then embed $ C.warningMessage "Target has been provided by [community], ignore it"
       else throw $ TargetExist target ByCommunity
 
   when aurSupport $ do
     inAur <- isInAur target
-    when inAur $ 
+    when inAur $
       if force
-      then embed $ C.warningMessage "Target has been provided by [aur], ignore it"
-      else throw $ TargetExist target ByAur
+        then embed $ C.warningMessage "Target has been provided by [aur], ignore it"
+        else throw $ TargetExist target ByAur
 
   let removeSublibs list =
         list ^.. each . filtered (\x -> x ^. pkgName `notElem` sublibs) & each %~ (\x -> x & pkgDeps %~ filter (\d -> d ^. depName `notElem` sublibs))
@@ -141,7 +141,7 @@ app target path aurSupport skip uusi force metaPath = do
           pkg ^. pkgDeps
             ^.. each
               . filtered (\x -> depNotMyself (pkg ^. pkgName) x && depNotInGHCLib x && x ^. depProvider == Just ByCommunity)
-        toStr x = "'" <> (unCommunityName . toCommunityName . _depName) x <> "'"
+        toStr x = "'" <> (unArchLinuxName . toArchLinuxName . _depName) x <> "'"
         depends = case unwords . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked2 of
           [] -> ""
           xs -> " " <> xs

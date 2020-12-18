@@ -42,7 +42,7 @@ module Distribution.ArchHs.Name
   ( MyName,
     HasMyName,
     NameRep (..),
-    toCommunityName,
+    toArchLinuxName,
     toHackageName,
     isHaskellPackage,
   )
@@ -57,7 +57,7 @@ import Distribution.ArchHs.Types
 -- | The representation of a package name.
 data NameRep
   = -- |  archlinx community style
-    CommunityRep
+    ArchLinuxRep
   | -- | hackage style
     HackageRep
 
@@ -66,30 +66,30 @@ $(loadNamePreset)
 -- | Convert a name from community representation to hackage representation, according to the name preset.
 -- If the preset doesn't contain this mapping rule, the function will return 'Nothing'.
 -- This function is generated from @NAME_PRESET.json@
-communityToHackageP :: MyName 'CommunityRep -> Maybe (MyName 'HackageRep)
+communityToHackageP :: MyName 'ArchLinuxRep -> Maybe (MyName 'HackageRep)
 
 -- | Convert a name from hackage representation to community representation, according to the name preset.
 -- If the preset doesn't contain this mapping rule, the function will return 'Nothing'.
 --
 -- This function is generated from @NAME_PRESET.json@
-hackageToCommunityP :: MyName 'HackageRep -> Maybe (MyName 'CommunityRep)
+hackageToCommunityP :: MyName 'HackageRep -> Maybe (MyName 'ArchLinuxRep)
 
 -- | Special haskell packages in community reop, which should be ignored in the process.
 --
 -- This function is generated from @NAME_PRESET.json@
-falseListP :: [MyName 'CommunityRep]
+falseListP :: [MyName 'ArchLinuxRep]
 
 -- | Community haskell packages of in the name preset.
 --
 -- This function is generated from @NAME_PRESET.json@
-communityListP :: [MyName 'CommunityRep]
+communityListP :: [MyName 'ArchLinuxRep]
 
 -- | A general package name representation.
 -- It has a phantom @a@, which indexes this name.
 -- Normally, the index should be the data kinds of 'NameRep'.
 --
 -- In Cabal API, packages' names are represented by the type 'PackageName';
--- in arch-hs, names parsed from @community.db@ are represented by the type 'CommunityName'.
+-- in arch-hs, names parsed from @community.db@ are represented by the type 'ArchLinuxName'.
 -- It would be tedious to use two converting functions everywhere, so here comes a intermediate data type
 -- to unify them, with type level constraints as bonus.
 newtype MyName a = MyName
@@ -109,19 +109,19 @@ class HasMyName a where
   toHackageRep :: a -> MyName 'HackageRep
 
   -- | To 'MyName' in community style.
-  toCommunityRep :: a -> MyName 'CommunityRep
+  toArchLinuxRep :: a -> MyName 'ArchLinuxRep
 
-instance HasMyName (MyName 'CommunityRep) where
-  toHackageRep = toHackageRep . CommunityName . unsafeUnMyName
-  toCommunityRep = id
+instance HasMyName (MyName 'ArchLinuxRep) where
+  toHackageRep = toHackageRep . ArchLinuxName . unsafeUnMyName
+  toArchLinuxRep = id
 
 instance HasMyName (MyName 'HackageRep) where
   toHackageRep = id
-  toCommunityRep = toCommunityRep . mkPackageName . unsafeUnMyName
+  toArchLinuxRep = toArchLinuxRep . mkPackageName . unsafeUnMyName
 
 instance HasMyName PackageName where
   toHackageRep = MyName . unPackageName
-  toCommunityRep = go . unPackageName
+  toArchLinuxRep = go . unPackageName
     where
       go s = case hackageToCommunityP (MyName s) of
         Just x -> x
@@ -132,25 +132,25 @@ instance HasMyName PackageName where
                 else "haskell-" <> s
             )
 
-instance HasMyName CommunityName where
-  toHackageRep = go . unCommunityName
+instance HasMyName ArchLinuxName where
+  toHackageRep = go . unArchLinuxName
     where
       go s = case communityToHackageP (MyName s) of
         Just x -> x
         _ -> MyName $ drop 8 s
-  toCommunityRep = MyName . unCommunityName
+  toArchLinuxRep = MyName . unArchLinuxName
 
--- | Back to 'CommunityName'.
-mToCommunityName :: MyName 'CommunityRep -> CommunityName
-mToCommunityName = CommunityName . unsafeUnMyName
+-- | Back to 'ArchLinuxName'.
+mToArchLinuxName :: MyName 'ArchLinuxRep -> ArchLinuxName
+mToArchLinuxName = ArchLinuxName . unsafeUnMyName
 
 -- | Back to 'PackageName'.
 mToHackageName :: MyName 'HackageRep -> PackageName
 mToHackageName = mkPackageName . unsafeUnMyName
 
--- | Convert @n@ to 'CommunityName'.
-toCommunityName :: HasMyName n => n -> CommunityName
-toCommunityName = mToCommunityName . toCommunityRep
+-- | Convert @n@ to 'ArchLinuxName'.
+toArchLinuxName :: HasMyName n => n -> ArchLinuxName
+toArchLinuxName = mToArchLinuxName . toArchLinuxRep
 
 -- | Convert @n@ to 'PackageName'.
 toHackageName :: HasMyName n => n -> PackageName
@@ -159,7 +159,7 @@ toHackageName = mToHackageName . toHackageRep
 -- | Judge if a package in archlinux community repo is haskell package.
 --
 -- i.e. it is in @preset@ or have @haskell-@ prefix, and is not present in @falseList@ of @NAME_PRESET.json@.
-isHaskellPackage :: CommunityName -> Bool
+isHaskellPackage :: ArchLinuxName -> Bool
 isHaskellPackage name =
-  let rep = toCommunityRep name
+  let rep = toArchLinuxRep name
    in (rep `elem` communityListP || "haskell-" `isPrefixOf` unsafeUnMyName rep) && rep `notElem` falseListP

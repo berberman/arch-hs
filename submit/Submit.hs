@@ -127,12 +127,12 @@ genCSV = do
           <&> (_1 <<%~ toHackageName)
           & sortBy (\x y -> (x ^. _2 . _1) `compare` (y ^. _2 . _1))
       prefix = "https://www.archlinux.org/packages/community/x86_64/"
-      processField (communityName, (hackageName, version)) =
-        let communityName' =
+      processField (archLinuxName, (hackageName, version)) =
+        let archLinuxName' =
               if hackageName `elem` ghcLibList || hackageName == "ghc"
                 then "ghc"
-                else unCommunityName communityName
-         in (unPackageName hackageName, version, prefix <> communityName')
+                else unArchLinuxName archLinuxName
+         in (unPackageName hackageName, version, prefix <> archLinuxName')
   return $ processField <$> fields
 
 submit :: Members [HackageEnv, CommunityEnv, WithMyErr, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
@@ -162,7 +162,7 @@ check community = do
   embed $ C.infoMessage "Checking generated csv file..."
 
   let hackageNames = fmap (\(a, _, _) -> a) community
-      pipe = fmap (\case Left (PkgNotFound x) -> Just (unCommunityName $ toCommunityName x); _ -> Nothing)
+      pipe = fmap (\case Left (PkgNotFound x) -> Just (unArchLinuxName $ toArchLinuxName x); _ -> Nothing)
 
   failed <- catMaybes . pipe <$> mapM (\x -> try @MyException (getLatestCabal $ mkPackageName x)) hackageNames
 

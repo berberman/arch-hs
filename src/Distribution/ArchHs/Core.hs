@@ -41,6 +41,7 @@ import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
 import Distribution.Types.Dependency (Dependency)
 import Distribution.Utils.ShortText (fromShortText)
+import Data.Containers.ListUtils (nubOrd)
 
 archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
 archEnv _ (OS Linux) = Right True
@@ -93,7 +94,7 @@ getDependencies ::
   Maybe PackageName ->
   -- | Target
   PackageName ->
-  Sem r (G.AdjacencyMap (Set DependencyType) PackageName, Set PackageName)
+  Sem r (G.AdjacencyMap (Set DependencyType) PackageName, Set PackageName, Map.Map PackageName [SystemDependency])
 getDependencies skip parent name = do
   resolved <- get @(Set PackageName)
   modify' $ Set.insert name
@@ -101,10 +102,10 @@ getDependencies skip parent name = do
   trace' $ "Already resolved: " <> show resolved
   traceCallStack
   cabal <- getLatestCabal name
-  (libDeps, libToolsDeps) <- collectLibDeps cabal
-  (subLibDeps, subLibToolsDeps) <- collectSubLibDeps cabal skip
-  (exeDeps, exeToolsDeps) <- collectExeDeps cabal skip
-  (testDeps, testToolsDeps) <- collectTestDeps cabal skip
+  (libDeps, libToolsDeps, libSysDeps) <- collectLibDeps cabal
+  (subLibDeps, subLibToolsDeps, subLibSysDeps) <- collectSubLibDeps cabal skip
+  (exeDeps, exeToolsDeps, exeSysDeps) <- collectExeDeps cabal skip
+  (testDeps, testToolsDeps, testSysDeps) <- collectTestDeps cabal skip
   -- Ignore benchmarks
   -- (benchDeps, benchToolsDeps) <- collectBenchMarkDeps cabal skip
   let uname :: (UnqualComponentName -> DependencyType) -> ComponentPkgList -> [(DependencyType, PkgList)]
@@ -150,6 +151,8 @@ getDependencies skip parent name = do
 
       -- currentBench = componentialEdges Types.Benchmark benchDeps
       -- currentBenchTools = componentialEdges BenchmarkBuildTools benchToolsDeps
+
+      currentSysDeps = nubOrd $ libSysDeps <> subLibSysDeps <> exeSysDeps <> testSysDeps
       processNext = mapM (getDependencies skip (Just name)) . ignoreResolved . ignoreSubLibs
       (<+>) = G.overlay
   nextLib <- processNext filteredLibDeps
@@ -160,6 +163,7 @@ getDependencies skip parent name = do
   let temp = [nextLib, nextExe, nextTest, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
       subsubs = temp ^. each ^.. each . _2 ^. each
+      nextSys = temp ^. each ^.. each . _3 ^. each
   return
     ( currentLib
         <+> currentLibDeps
@@ -172,10 +176,11 @@ getDependencies skip parent name = do
         -- <+> currentBench
         -- <+> currentBenchTools
         <+> nexts,
-      Set.fromList filteredSubLibDepsNames <> subsubs
+      Set.fromList filteredSubLibDepsNames <> subsubs,
+      (if null currentSysDeps then Map.empty else Map.singleton name currentSysDeps) <> nextSys
     )
 
-collectLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord, Trace] r => GenericPackageDescription -> Sem r (PkgList, PkgList)
+collectLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord, Trace] r => GenericPackageDescription -> Sem r (PkgList, PkgList, [SystemDependency])
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
@@ -184,13 +189,14 @@ collectLibDeps cabal = do
       info <- evalConditionTree cabal lib
       let libDeps = unDepV <$> buildDependsIfBuild info
           toolDeps = unBuildTools $ buildToolsAndbuildToolDependsIfBuild info
+          systemDeps = unSystemDependency $ pkgconfigDependsAndExtraLibsIfBuild info
       mapM_ (uncurry updateDependencyRecord) libDeps
       mapM_ (uncurry updateDependencyRecord) toolDeps
-      let result = (fmap fst libDeps, fmap fst toolDeps)
+      let result = (fmap fst libDeps, fmap fst toolDeps, systemDeps)
       trace' $ "Found: " <> show result
       traceCallStack
       return result
-    Nothing -> return ([], [])
+    Nothing -> return ([], [], [])
 
 collectComponentialDeps ::
   (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) =>
@@ -198,7 +204,7 @@ collectComponentialDeps ::
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
-  Sem r (ComponentPkgList, ComponentPkgList)
+  Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
 collectComponentialDeps tag f cabal skip = do
   let conds = cabal & f
       name = getPkgName' cabal
@@ -206,21 +212,22 @@ collectComponentialDeps tag f cabal skip = do
   info <- filter (not . (`elem` skip) . fst) . zip (conds <&> fst) <$> mapM (evalConditionTree cabal . snd) conds
   let deps = info <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
       toolDeps = info <&> _2 %~ (unBuildTools . buildToolsAndbuildToolDependsIfBuild)
+      sysDeps = info <&> _2 %~ (unSystemDependency . pkgconfigDependsAndExtraLibsIfBuild)
       k = fmap (second $ fmap fst)
   mapM_ (uncurry updateDependencyRecord) $ deps ^.. each . _2 ^. each
   mapM_ (uncurry updateDependencyRecord) $ toolDeps ^.. each . _2 ^. each
-  let result = (k deps, k toolDeps)
+  let result = (k deps, k toolDeps, mconcat $ fmap snd sysDeps)
   trace' $ "Found: " <> show result
   traceCallStack
   return result
 
-collectExeDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectExeDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
 collectExeDeps = collectComponentialDeps "exe" condExecutables
 
-collectTestDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectTestDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
 collectTestDeps = collectComponentialDeps "test" condTestSuites
 
-collectSubLibDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList)
+collectSubLibDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
 collectSubLibDeps = collectComponentialDeps "sublib" condSubLibraries
 
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> VersionRange -> Sem r ()
@@ -238,7 +245,7 @@ cabalToPkgBuild pkg uusi = do
   cabal <- packageDescription <$> getLatestCabal name
   _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> tryMaybe (getLatestSHA256 name)
   let _hkgName = pkg ^. pkgName & unPackageName
-      _pkgName = unCommunityName . toCommunityName $ pkg ^. pkgName
+      _pkgName = unArchLinuxName . toArchLinuxName $ pkg ^. pkgName
       _pkgVer = prettyShow $ getPkgVersion cabal
       _pkgDesc = fromShortText $ synopsis cabal
       getL NONE = ""
@@ -278,7 +285,7 @@ cabalToPkgBuild pkg uusi = do
                            || depIsKind SubLibsBuildTools x
                        )
               )
-      depsToString deps = deps <&> (wrap . unCommunityName . toCommunityName . _depName) & mconcat
+      depsToString deps = deps <&> (wrap . unArchLinuxName . toArchLinuxName . _depName) & mconcat
       _depends = depsToString depends
       _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString makeDepends
       _url = getUrl cabal

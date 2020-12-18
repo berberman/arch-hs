@@ -15,10 +15,10 @@
 module Distribution.ArchHs.Types
   ( PkgList,
     ComponentPkgList,
-    CommunityName (..),
-    CommunityVersion,
+    ArchLinuxName (..),
+    SystemDependency(..),
+    ArchLinuxVersion,
     CommunityDB,
-    CommunityFiles,
     HackageEnv,
     CommunityEnv,
     FlagAssignmentsEnv,
@@ -49,21 +49,23 @@ type PkgList = [PackageName]
 -- | A list of component represented by 'UnqualComponentName' and its dependencies collected in a 'PkgList'
 type ComponentPkgList = [(UnqualComponentName, PkgList)]
 
--- | Name of packages in archlinux community repo, a wrapper of 'String'.
-newtype CommunityName = CommunityName
+-- | Name of packages in archlinux repo, a wrapper of 'String'.
+newtype ArchLinuxName = ArchLinuxName
   { -- | Unwrap the value
-    unCommunityName :: String
+    unArchLinuxName :: String
   }
   deriving stock (Show, Read, Eq, Ord, Generic)
   deriving anyclass (NFData)
 
+newtype SystemDependency = SystemDependency String
+  deriving stock (Show, Read, Eq, Ord, Generic)
+  deriving anyclass (NFData)
+
 -- | Version of packages in archlinux community repo
-type CommunityVersion = String
+type ArchLinuxVersion = String
 
 -- | Representation of @cummunity.db@
-type CommunityDB = Map CommunityName CommunityVersion
-
-type CommunityFiles = Map CommunityName [FilePath]
+type CommunityDB = Map ArchLinuxName ArchLinuxVersion
 
 -- | Reader effect of 'HackageDB'
 type HackageEnv = Reader HackageDB
