@@ -9,6 +9,8 @@ module Args
 where
 
 import qualified Data.Map.Strict as Map
+import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
+import Distribution.ArchHs.FilesDB (defaultFilesDBDir)
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.OptionReader
 import Distribution.ArchHs.Types
@@ -16,7 +18,8 @@ import Distribution.ArchHs.Types
 data Options = Options
   { optHackagePath :: FilePath,
 #ifndef ALPM
-    optCommunityPath :: FilePath,
+    optCommunityDBPath :: FilePath,
+    optFilesDBPath :: FilePath,
 #endif
     optOutputDir :: FilePath,
     optFlags :: FlagAssignments,
@@ -44,7 +47,7 @@ cmdOptions =
           <> short 'h'
           <> help "Path to hackage index tarball"
           <> showDefault
-          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/01-index.tar | 00-index.tar"
+          <> value ""
       )
 #ifndef ALPM
       <*> strOption
@@ -53,7 +56,15 @@ cmdOptions =
             <> short 'c'
             <> help "Path to community.db"
             <> showDefault
-            <> value "/var/lib/pacman/sync/community.db"
+            <> value defaultCommunityDBPath
+        )
+      <*> strOption
+        ( long "files"
+            <> metavar "PATH"
+            <> short 'f'
+            <> help "Path of dir that includes core.files, extra.files and community.files"
+            <> showDefault
+            <> value defaultFilesDBDir
         )
 #endif
       <*> strOption
@@ -105,7 +116,7 @@ cmdOptions =
       <*> switch
         ( long "uusi"
             <> help "Splice uusi into prepare()"
-        )      
+        )
       <*> switch
         ( long "force"
             <> help "Try to package even if target is provided"

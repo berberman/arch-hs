@@ -44,22 +44,23 @@ app ::
   Bool ->
   Bool ->
   FilePath ->
+  FilePath ->
   Sem r ()
-app target path aurSupport skip uusi force metaPath = do
+app target path aurSupport skip uusi force metaPath filesDB = do
   (deps, sublibs, sysDeps) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
 
   inCommunity <- isInCommunity target
 
   when inCommunity $
     if force
-      then embed $ C.warningMessage "Target has been provided by [community], ignore it"
+      then embed $ C.warningMessage "Target has been provided by [community], ignoring it"
       else throw $ TargetExist target ByCommunity
 
   when aurSupport $ do
     inAur <- isInAur target
     when inAur $
       if force
-        then embed $ C.warningMessage "Target has been provided by [aur], ignore it"
+        then embed $ C.warningMessage "Target has been provided by [aur], ignoring it"
         else throw $ TargetExist target ByAur
 
   let removeSublibs list =
@@ -123,7 +124,7 @@ app target path aurSupport skip uusi force metaPath = do
 
   embed $
     isAllSolvedM sysDepsRef >>= \b -> unless b $ do
-      C.infoMessage "Now finding corresponding system package(s):"
+      C.infoMessage $ "Now finding corresponding system package(s) using files db from " <> T.pack filesDB <> ":"
       C.infoMessage "Loading core.files..."
       coreFiles <- loadFilesDB Core defaultFilesDBDir
       modifyIORef' sysDepsRef $ fmap (trySolve coreFiles)
@@ -263,18 +264,9 @@ main = printHandledIOException $
       C.infoMessage $ "Trace will be dumped to " <> T.pack optFileTrace <> "."
       writeFile optFileTrace ""
 
-    let useDefaultHackage = "YOUR_HACKAGE_MIRROR" `isInfixOf` optHackagePath
-    when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
-
-#ifndef ALPM
-    let useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
-    when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
-#endif
-
     let isFlagEmpty = Map.null optFlags
         isSkipEmpty = null optSkip
 
-    when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag assignments may make difference in dependency resolving."
     unless isFlagEmpty $ do
       C.infoMessage "You assigned flags:"
       putStrLn . prettyFlagAssignments $ optFlags
@@ -287,8 +279,11 @@ main = printHandledIOException $
 
     when optUusi $ C.infoMessage "You passed --uusi, uusi will become makedepends of each package."
 
-    hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
-    C.infoMessage "Loading hackage..."
+    hackagePath <- if null optHackagePath then lookupHackagePath else return optHackagePath
+
+    C.infoMessage $ "Loading hackage from " <> T.pack hackagePath
+
+    hackage <- loadHackageDB hackagePath
 
     let isExtraEmpty = null optExtraCabalPath
 
@@ -300,19 +295,26 @@ main = printHandledIOException $
     let newHackage = foldr insertDB hackage parsedExtra
 
 #ifdef ALPM
-    when optAlpm $ C.infoMessage "Using alpm."
+    let src = T.pack $ if optAlpm then "libalpm" else defaultCommunityDBPath
+    C.infoMessage $ "Loading community.db from " <> src
     community <- if optAlpm then loadCommunityDBFFI else loadCommunityDB defaultCommunityDBPath
 #else
-    community <- loadCommunityDB $ if useDefaultCommunity then defaultCommunityDBPath else optCommunityPath
+    C.infoMessage $ "Loading community.db from " <> T.pack optCommunityDBPath
+    community <- loadCommunityDB optCommunityDBPath
 #endif
-
-    C.infoMessage "Loading community.db..."
 
     C.infoMessage "Start running..."
 
     empty <- newIORef Set.empty
 
-    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir) & printAppResult
+    let filesDB =
+#ifdef ALPM
+          defaultFilesDBDir
+#else
+          optFilesDBPath
+#endif
+
+    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir filesDB) & printAppResult
 
 -----------------------------------------------------------------------------
 
