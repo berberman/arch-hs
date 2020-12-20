@@ -13,7 +13,6 @@ module Distribution.ArchHs.CommunityDB
     loadCommunityDB,
     isInCommunity,
     versionInCommunity,
-    compiledWithAlpm,
 #ifdef ALPM
     loadCommunityDBFFI,
 #endif
@@ -62,15 +61,6 @@ loadCommunityDBFFI = do
   query_community callbackW
   freeHaskellFunPtr callbackW
   Map.fromList . toList <$> readIORef ref
-#endif
-
--- | Whether this program enables alpm support.
-compiledWithAlpm :: Bool
-compiledWithAlpm =
-#ifdef ALPM
-  True
-#else
-  False
 #endif
 
 -----------------------------------------------------------------------------

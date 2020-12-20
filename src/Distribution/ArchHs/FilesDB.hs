@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -5,6 +6,9 @@
 module Distribution.ArchHs.FilesDB
   ( defaultFilesDBDir,
     loadFilesDB,
+#ifdef ALPM
+    loadFilesDBFFI,
+#endif
     lookupPkg,
     DBKind (..),
     File,
@@ -21,14 +25,40 @@ import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PkgDesc (runDescFieldsParser)
 import Distribution.ArchHs.Types
 
+#ifdef ALPM
+{-# LANGUAGE ForeignFunctionInterface #-}
+import qualified Data.Sequence as Seq
+import Data.Foldable (toList)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Foreign.C.String (newCString, CString, peekCString)
+import Foreign.Ptr (FunPtr, freeHaskellFunPtr)
+
+foreign import ccall "wrapper"
+  wrap :: (CString -> CString -> IO ()) -> IO (FunPtr (CString -> CString -> IO ()))
+
+foreign import ccall "clib.h query_files"
+  query_files :: CString -> FunPtr (CString -> CString -> IO ()) -> IO ()
+
+callback :: IORef (Seq.Seq (ArchLinuxName, FilePath)) -> CString -> CString -> IO ()
+callback ref x y = do
+  x' <- peekCString x
+  y' <- peekCString y
+  modifyIORef' ref (Seq.|> (ArchLinuxName x', y'))
+
+loadFilesDBFFI :: DBKind -> IO FilesDB
+loadFilesDBFFI ( show -> db) = do
+  ref <- newIORef Seq.empty
+  db' <- newCString db
+  callbackW <- wrap $ callback ref
+  query_files db' callbackW
+  freeHaskellFunPtr callbackW
+  list <- toList <$> readIORef ref
+  return $ foldr (\(k,v)-> Map.insertWith (<>) k [v] ) Map.empty  list
+#endif
+
 -- | Default path to files db.
 defaultFilesDBDir :: FilePath
 defaultFilesDBDir = "/" </> "var" </> "lib" </> "pacman" </> "sync"
-
-dbPath :: DBKind -> FilePath
-dbPath Core = "core.files"
-dbPath Community = "community.files"
-dbPath Extra = "extra.files"
 
 loadFilesDBC ::
   (MonadResource m, PrimMonad m, MonadThrow m) =>
@@ -36,7 +66,7 @@ loadFilesDBC ::
   FilePath ->
   ConduitT i Result m ()
 loadFilesDBC db path = do
-  sourceFileBS (path </> dbPath db) .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
+  sourceFileBS (path </> show db <> ".files") .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
   where
     action header
       | Tar.FTNormal <- Tar.headerFileType header,
@@ -83,6 +113,11 @@ data Result = Files FilePath [FilePath] | Desc FilePath ArchLinuxName
   deriving stock (Show)
 
 data DBKind = Core | Community | Extra
+
+instance Show DBKind where
+  show Core = "core"
+  show Community = "community"
+  show Extra = "extra"
 
 type File = String
 
