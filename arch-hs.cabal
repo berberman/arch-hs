@@ -87,6 +87,7 @@ common common-options
     include-dirs:     cbits
     install-includes: cbits/clib.h
     cpp-options:      -DALPM
+    build-tools-depends: hsc2hs
 
 library
   import:          common-options
@@ -111,6 +112,10 @@ library
   other-modules:
     Data.Aeson.Ext
     Distribution.ArchHs.Internal.NamePresetLoader
+  if flag(alpm)
+    exposed-modules:  Distribution.ArchHs.Alpm
+                   Distribution.ArchHs.Alpm.Types
+
 
 executable arch-hs
   import:         common-options
