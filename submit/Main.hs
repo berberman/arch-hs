@@ -4,13 +4,13 @@
 
 module Main (main) where
 
-import qualified Colourista as C
 import Control.Monad (unless)
 import qualified Data.Text as T
 import Distribution.ArchHs.CommunityDB
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Submit
 import System.Directory (doesFileExist)
@@ -21,39 +21,37 @@ main = printHandledIOException $
   do
     Options {..} <- runArgsParser
 
-    let useDefaultHackage = "YOUR_HACKAGE_MIRROR" `isInfixOf` optHackagePath
-    when useDefaultHackage $ C.skipMessage "You didn't pass -h, use hackage index file from default path."
-
-#ifndef ALPM
-    let useDefaultCommunity = "/var/lib/pacman/sync/community.db" == optCommunityPath
-    when useDefaultCommunity $ C.skipMessage "You didn't pass -c, use community db file from default path."
-#endif
-
     token <- lookupEnv "HACKAGE_API_TOKEN"
 
-    when (null token) $ C.warningMessage "You didn't set HACKAGE_API_TOKEN, dry run only."
+    when (null token) $
+      printWarn "You didn't set HACKAGE_API_TOKEN, dry run only."
 
     let hasOutput = not $ null optOutput
     when hasOutput $ do
-      C.infoMessage $ "Output will be dumped to " <> T.pack optOutput <> "."
+      printInfo $ "Output will be dumped to " <> T.pack optOutput <> "."
       exist <- doesFileExist optOutput
       when exist $
-        C.warningMessage $ "File " <> T.pack optOutput <> " already existed, overwrite it."
-    C.infoMessage "Start running..."
+        printWarn $ "File " <> T.pack optOutput <> " already existed, overwrite it."
+    printInfo "Start running..."
     unless (optUpload || hasOutput) $
-      C.warningMessage "Run diff and check only."
+      printWarn "Run diff and check only."
 
 #ifdef ALPM
-    when optAlpm $ C.infoMessage "Using alpm."
+    let src = T.pack $ if optAlpm then "libalpm" else defaultCommunityDBPath
+    printInfo $ "Loading community.db from " <> src
     community <- if optAlpm then loadCommunityDBFFI else loadCommunityDB defaultCommunityDBPath
 #else
-    community <- loadCommunityDB $ if useDefaultCommunity then defaultCommunityDBPath else optCommunityPath
+    printInfo $ "Loading community.db from " <> T.pack optCommunityDBPath
+    community <- loadCommunityDB optCommunityDBPath
 #endif
 
-    C.infoMessage "Loading community.db..."
+    printInfo "Loading community.db..."
 
-    hackage <- loadHackageDB =<< if useDefaultHackage then lookupHackagePath else return optHackagePath
-    C.infoMessage "Loading hackage..."
+    hackagePath <- if null optHackagePath then lookupHackagePath else return optHackagePath
+
+    printInfo $ "Loading hackage from " <> T.pack hackagePath
+
+    hackage <- loadHackageDB hackagePath
 
     runSubmit community hackage (submit token optOutput optUpload) & printAppResult
 

@@ -19,6 +19,7 @@ module Distribution.ArchHs.PP
     align2col,
     dui,
     cuo,
+    ppCommunity,
     annYellow,
     annGreen,
     annMagneta,
@@ -32,6 +33,8 @@ module Distribution.ArchHs.PP
     ppFromTo,
     printInfo,
     printWarn,
+    printError,
+    printSuccess,
     module Prettyprinter,
     module Prettyprinter.Render.Terminal,
   )
@@ -159,5 +162,14 @@ ppFromTo i a b = a <> hcat (replicate i space) <> "⇒" <> hcat (replicate i spa
 printInfo :: (MonadIO m) => T.Text -> m ()
 printInfo msg = liftIO . putDoc . annBlue $ "ⓘ" <+> pretty msg <> line
 
+ppCommunity :: Doc AnsiStyle
+ppCommunity = annCyan $ viaShow ByCommunity
+
 printWarn :: (MonadIO m) => T.Text -> m ()
 printWarn msg = liftIO . putDoc . annYellow $ "⚠" <+> pretty msg <> line
+
+printError :: (MonadIO m) => T.Text -> m ()
+printError msg = liftIO . putDoc . annYellow $ "🛑" <+> pretty msg <> line
+
+printSuccess :: (MonadIO m) => T.Text -> m ()
+printSuccess msg = liftIO . putDoc . annGreen $ dui <+> pretty msg <> line

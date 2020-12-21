@@ -9,12 +9,11 @@ module Diff
   )
 where
 
-import qualified Colourista as C
 import Data.Algorithm.Diff
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import qualified Data.Text as T
-import Distribution.ArchHs.CommunityDB (versionInCommunity)
+import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath, versionInCommunity)
 import Distribution.ArchHs.Core (evalConditionTree)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
@@ -34,7 +33,7 @@ data Options = Options
 #ifdef ALPM
     optAlpm          :: Bool,
 #else
-    optCommunityPath :: FilePath,
+    optCommunityDBPath :: FilePath,
 #endif
     optPackageName :: PackageName,
     optVersionA :: Version,
@@ -59,7 +58,7 @@ cmdOptions =
           <> short 'c'
           <> help "Path to community.db"
           <> showDefault
-          <> value "/var/lib/pacman/sync/community.db"
+          <> value defaultCommunityDBPath
       )
 #else
       <*> switch
@@ -132,7 +131,7 @@ getCabalFromHackage name version = do
   let urlPath = T.pack $ unPackageName name <> "-" <> prettyShow version
       api = https "hackage.haskell.org" /: "package" /: urlPath /: "revision" /: "0.cabal"
       r = req GET api NoReqBody bsResponse mempty
-  embed $ C.infoMessage $ "Downloading cabal file from " <> renderUrl api <> "..."
+  printInfo $ "Downloading cabal file from " <> renderUrl api <> "..."
   response <- interceptHttpException (runReq defaultHttpConfig r)
   case parseGenericPackageDescriptionMaybe $ responseBody response of
     Just x -> return x
@@ -161,7 +160,7 @@ directDependencies cabal = do
 
 -----------------------------------------------------------------------------
 
-diffCabal :: Members [CommunityEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Embed IO] r => PackageName -> Version -> Version -> Sem r String
+diffCabal :: Members [CommunityEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Embed IO] r => PackageName -> Version -> Version -> Sem r ()
 diffCabal name a b = do
   ga <- getCabalFromHackage name a
   gb <- getCabalFromHackage name b
@@ -173,19 +172,18 @@ diffCabal name a b = do
   (bb, mb) <- directDependencies gb
   queryb <- lookupDiffCommunity ba bb
   querym <- lookupDiffCommunity ma mb
-  return $
-    T.unpack $render $
-      vsep
-        [ annMagneta "Package" <> colon <+> viaPretty name,
-          ver pa pb,
-          desc pa pb,
-          url pa pb,
-          dep "Depends" ba bb,
-          queryb,
-          dep "MakeDepends" ma mb,
-          querym,
-          flags name fa fb
-        ]
+  embed . putDoc $
+    vsep
+      [ annMagneta "Package" <> colon <+> viaPretty name,
+        ver pa pb,
+        desc pa pb,
+        url pa pb,
+        dep "Depends" ba bb,
+        queryb,
+        dep "MakeDepends" ma mb,
+        querym,
+        flags name fa fb
+      ]
 
 diffTerm :: String -> (a -> String) -> a -> a -> Doc AnsiStyle
 diffTerm s f a b =
@@ -223,7 +221,9 @@ lookupDiffCommunity va vb = do
           <+> "is required to be in range"
           <+> parens (annF b $ viaPretty range)
           <> comma
-          <+> "but [community] provides"
+          <+> "but"
+          <+> ppCommunity
+          <+> "provides"
           <+> parens (annF b $ viaPretty v)
           <> dot
       pp _ (Right _) = ""
@@ -232,12 +232,14 @@ lookupDiffCommunity va vb = do
           <+> "is required to be in range"
           <+> parens (annF b $ viaPretty range)
           <> comma
-          <+> "but [community] does not provide this package"
+          <+> "but"
+          <+> ppCommunity
+          <+> "does not provide this package"
           <> comma
 
   new <- fmap (pp True) <$> mapM inRange diffNew
   old <- fmap (pp False) <$> mapM inRange diffOld
-  return $ hcat [hcat old, hcat new]
+  return $ hsep [hsep old, hsep new]
 
 dep :: Doc AnsiStyle -> VersionedList -> VersionedList -> Doc AnsiStyle
 dep s va vb =

@@ -18,7 +18,12 @@ jobs:
     - name: Install build dependencies
       run: |
         pacman -Syu --noconfirm
-        pacman -S  --needed --noconfirm ghc base-devel ghc-libs haskell-aeson haskell-algebraic-graphs haskell-colourista haskell-conduit haskell-conduit-extra haskell-hackage-db haskell-megaparsec haskell-microlens haskell-microlens-th haskell-neat-interpolation haskell-optparse-applicative haskell-polysemy haskell-req haskell-split haskell-tar-conduit haskell-diff
+        pacman -S --needed --noconfirm ghc base-devel ghc-libs \
+          haskell-aeson haskell-algebraic-graphs haskell-conduit \
+          haskell-conduit-extra haskell-hackage-db haskell-megaparsec \
+          haskell-microlens haskell-microlens-th haskell-neat-interpolation \
+          haskell-optparse-applicative haskell-polysemy haskell-req haskell-split \
+          haskell-tar-conduit haskell-diff haskell-prettyprinter haskell-prettyprinter-ansi-terminal
 
     - name: Build
       run: |

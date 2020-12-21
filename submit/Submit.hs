@@ -9,7 +9,6 @@ module Submit
   )
 where
 
-import qualified Colourista as C
 import Control.Monad (unless)
 import Data.Algorithm.Diff (getGroupedDiff)
 import qualified Data.ByteString.Char8 as BS
@@ -17,12 +16,13 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromJust)
 import qualified Data.Text as T
 import Data.Void (Void)
+import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local
 import Distribution.ArchHs.Name
-import Distribution.ArchHs.PP (ppDiffColored)
+import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (filterFirstDiff, filterSecondDiff, mapDiff, noDiff)
 import Network.HTTP.Req
@@ -34,7 +34,7 @@ import Text.Megaparsec.Char as M
 data Options = Options
   { optHackagePath :: FilePath,
 #ifndef ALPM
-    optCommunityPath :: FilePath,
+    optCommunityDBPath :: FilePath,
 #else
     optAlpm :: Bool,
 #endif
@@ -51,7 +51,7 @@ cmdOptions =
           <> short 'h'
           <> help "Path to hackage index tarball"
           <> showDefault
-          <> value "~/.cabal/packages/YOUR_HACKAGE_MIRROR/01-index.tar | 00-index.tar"
+          <> value ""
       )
 #ifndef ALPM
     <*> strOption
@@ -60,7 +60,7 @@ cmdOptions =
           <> short 'c'
           <> help "Path to community.db"
           <> showDefault
-          <> value "/var/lib/pacman/sync/community.db"
+          <> value defaultCommunityDBPath
       )
 #else
       <*> switch
@@ -141,40 +141,39 @@ submit token output upload = do
   let v = renderDistroCSV csv
   embed $
     unless (null output) $ do
-      C.infoMessage $ "Write file: " <> T.pack output
+      printInfo $ "Write file: " <> T.pack output
       writeFile output v
   check csv
   interceptHttpException $
     when ((not . null) token && upload) $ do
-      C.infoMessage "Uploading..."
+      printInfo "Uploading..."
       let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages"
           r =
             req PUT api (ReqBodyBs . BS.pack $ v) bsResponse $
               header "Authorization" (BS.pack $ "X-ApiKey " <> fromJust token) <> header "Content-Type" "text/csv"
       result <- runReq defaultHttpConfig r
-      C.infoMessage $ "StatusCode: " <> (T.pack . show $ responseStatusCode result)
-      C.infoMessage $ "ResponseMessage: " <> decodeUtf8 (responseStatusMessage result)
-      C.infoMessage "ResponseBody:"
+      printInfo $ "StatusCode: " <> (T.pack . show $ responseStatusCode result)
+      printInfo $ "ResponseMessage: " <> decodeUtf8 (responseStatusMessage result)
+      printInfo "ResponseBody:"
       putStrLn . BS.unpack $ responseBody result
 
 check :: Members [HackageEnv, WithMyErr, Embed IO] r => DistroCSV -> Sem r ()
 check community = do
-  embed $ C.infoMessage "Checking generated csv file..."
+  printInfo "Checking generated csv file..."
 
   let hackageNames = fmap (\(a, _, _) -> a) community
-      pipe = fmap (\case Left (PkgNotFound x) -> Just (unArchLinuxName $ toArchLinuxName x); _ -> Nothing)
+      f = fmap (\case Left (PkgNotFound x) -> Just (unArchLinuxName $ toArchLinuxName x); _ -> Nothing)
 
-  failed <- catMaybes . pipe <$> mapM (\x -> try @MyException (getLatestCabal $ mkPackageName x)) hackageNames
+  failed <- catMaybes . f <$> mapM (\x -> try @MyException (getLatestCabal $ mkPackageName x)) hackageNames
 
-  embed $
-    unless (null failed) $
-      C.warningMessage "Following packages in community are not linked to hackage:"
+  unless (null failed) $
+    printWarn "Following packages in community are not linked to hackage:"
 
   embed . putStrLn . unlines $ failed
 
   let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages.csv"
       r = req GET api NoReqBody bsResponse mempty
-  embed $ C.infoMessage "Downloading csv from hackage..."
+  printInfo "Downloading csv from hackage..."
   result <- interceptHttpException $ runReq defaultHttpConfig r
   let bs = responseBody result
       hackage = parseDistroCSV . T.unpack $ decodeUtf8 bs
@@ -183,14 +182,23 @@ check community = do
       diffOld = mconcat . ppDiffColored . mapDiff (fmap ppRecord) <$> filterFirstDiff diff
       diffNew = mconcat . ppDiffColored . mapDiff (fmap ppRecord) <$> filterSecondDiff diff
       ppRecord (name, version, url) = "(" <> name <> ", " <> version <> ", " <> url <> ")\n"
+      j g x = if null x then "[]" else g x
 
-  embed . putStrLn $ C.formatWith [C.magenta] "Diff:"
-  embed $
+  embed . putDoc . annMagneta $ "Diff" <> colon <> line
+  embed . putDoc . indent 2 $
     if noDiff diff
-      then putStrLn "[]"
-      else do
-        putStr . mconcat $ diffOld
-        putStrLn $ replicate 68 '-'
-        putStr . mconcat $ diffNew
+      then "[]"
+      else
+        j hsep diffOld
+          <> splitLine
+          <> j hsep diffNew
 
-  embed . putStrLn $ "Found " <> show (length hackage) <> " packages with submitted distribution information in hackage, and " <> show (length community) <> " haskell packages in [community]."
+  embed . putDoc $
+    "Found"
+      <+> pretty (length hackage)
+      <+> "packages with submitted distribution information in hackage, and"
+      <+> pretty (length community)
+      <+> "haskell packages in"
+      <+> ppCommunity
+      <> dot
+      <> line

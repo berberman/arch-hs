@@ -19,11 +19,11 @@ module Distribution.ArchHs.Exception
   )
 where
 
-import qualified Colourista as C
 import qualified Control.Exception as CE
 import qualified Data.Text as T
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Name
+import Distribution.ArchHs.PP (printError, printSuccess)
 import Distribution.ArchHs.Types
 import Network.HTTP.Req (HttpException (..))
 
@@ -46,18 +46,18 @@ instance Show MyException where
   show (CyclicExist c) = "Graph contains a cycle \"" <> show (fmap unPackageName c) <> "\""
   show (NetworkException (JsonHttpException s)) = "Failed to parse response " <> s
   show (NetworkException (VanillaHttpException e)) = show e
-  show (TargetDisappearException name)= "Target \"" <> unPackageName name <> "\" is discarded during the dependency resolving"
+  show (TargetDisappearException name) = "Target \"" <> unPackageName name <> "\" is discarded during the dependency resolving"
 
 -- | Catch 'CE.IOException' and print it.
 printHandledIOException :: IO () -> IO ()
-printHandledIOException = CE.handle @CE.IOException (\e -> C.errorMessage $ "IOException: " <> (T.pack . show $ e))
+printHandledIOException = CE.handle @CE.IOException (\e -> printError $ "IOException: " <> (T.pack . show $ e))
 
 -- | Print the result of 'errorToIOFinal'.
 printAppResult :: IO (Either MyException ()) -> IO ()
 printAppResult io =
   io >>= \case
-    Left x -> C.errorMessage $ "Runtime Exception: " <> (T.pack . show $ x)
-    _ -> C.successMessage "Success!"
+    Left x -> printError $ "Runtime Exception: " <> (T.pack . show $ x)
+    _ -> printSuccess "Success!"
 
 -- | Catch the 'HttpException' thrown in 'IO' monad, then re-throw it with 'NetworkException'.
 interceptHttpException :: Members [WithMyErr, Embed IO] r => IO a -> Sem r a
