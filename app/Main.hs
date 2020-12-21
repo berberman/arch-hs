@@ -10,7 +10,6 @@ module Main (main) where
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.Labelled.AdjacencyMap as GL
 import Args
-import qualified Colourista as C
 import Control.Monad (filterM, forM_, unless)
 import Data.Containers.ListUtils (nubOrd)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
@@ -34,6 +33,7 @@ import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName)
+import qualified Data.Text.IO as T
 
 app ::
   Members '[Embed IO, State (Set.Set PackageName), CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
@@ -53,18 +53,18 @@ app target path aurSupport skip uusi force metaPath filesDB = do
 
   when inCommunity $
     if force
-      then embed $ C.warningMessage "Target has been provided by [community], ignoring it"
+      then printWarn "Target has been provided by [community], ignoring it"
       else throw $ TargetExist target ByCommunity
 
   when aurSupport $ do
     inAur <- isInAur target
     when inAur $
       if force
-        then embed $ C.warningMessage "Target has been provided by [aur], ignoring it"
+        then printWarn "Target has been provided by [aur], ignoring it"
         else throw $ TargetExist target ByAur
 
-  let removeSublibs list =
-        list ^.. each . filtered (\x -> x ^. pkgName `notElem` sublibs) & each %~ (\x -> x & pkgDeps %~ filter (\d -> d ^. depName `notElem` sublibs))
+  let removeSublibs pkgs =
+        pkgs ^.. each . filtered (\x -> x ^. pkgName `notElem` sublibs) & each %~ (\x -> x & pkgDeps %~ filter (\d -> d ^. depName `notElem` sublibs))
       grouped = removeSublibs $ groupDeps deps
       namesFromSolved x = x ^.. each . pkgName <> x ^.. each . pkgDeps . each . depName
       allNames = nubOrd $ namesFromSolved grouped
@@ -75,13 +75,13 @@ app target path aurSupport skip uusi force metaPath filesDB = do
         mapMaybe
           ( \x -> case filter (`notElem` communityProvideList) (x ^. pkgDeps ^.. each . depName) of
               [] -> Nothing
-              list -> Just (x ^. pkgName, list)
+              pkgs -> Just (x ^. pkgName, pkgs)
           )
           providedPackages
 
   embed $
     forM_ abnormalDependencies $ \(T.pack . unPackageName -> parent, childs) -> do
-      C.warningMessage $ "Package \"" <> parent <> "\" is provided without:"
+      printWarn $ "Package \"" <> parent <> "\" is provided without:"
       forM_ childs $ putStrLn . unPackageName
 
   let fillProvidedPkgs provideList provider = map (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
@@ -89,10 +89,10 @@ app target path aurSupport skip uusi force metaPath filesDB = do
       filledByCommunity = fillProvidedPkgs communityProvideList ByCommunity . fillProvidedDeps communityProvideList ByCommunity $ grouped
       toBePacked1 = filledByCommunity ^.. each . filtered (not . isProvided)
   (filledByBoth, toBePacked2) <- do
-    embed . when aurSupport $ C.infoMessage "Start searching AUR..."
+    when aurSupport $ printInfo "Start searching AUR..."
     aurProvideList <-
       if aurSupport
-        then filterM (\n -> do embed $ C.infoMessage ("Searching " <> T.pack (unPackageName n)); isInAur n) $ filter (\x -> not $ x == target && force) $ toBePacked1 ^.. each . pkgName
+        then filterM (\n -> do printInfo ("Searching " <> T.pack (unPackageName n)); isInAur n) $ filter (\x -> not $ x == target && force) $ toBePacked1 ^.. each . pkgName
         else return []
     let a = fillProvidedPkgs aurProvideList ByAur . fillProvidedDeps aurProvideList ByAur $ filledByCommunity
         b = a ^.. each . filtered (not . isProvided)
@@ -101,10 +101,10 @@ app target path aurSupport skip uusi force metaPath filesDB = do
   when (null filledByBoth) $
     throw $ TargetDisappearException target
 
-  embed $ C.infoMessage "Solved:"
-  embed $ putStrLn . prettySolvedPkgs $ filledByBoth
+  printInfo "Solved:"
+  embed $ T.putStrLn . prettySolvedPkgs $ filledByBoth
 
-  embed $ C.infoMessage "Recommended package order:"
+  printInfo "Recommended package order:"
   let vertexesToBeRemoved = filledByBoth ^.. each . filtered isProvided ^.. each . pkgName
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
@@ -112,39 +112,39 @@ app target path aurSupport skip uusi force metaPath filesDB = do
     Left c -> throw . CyclicExist $ toList c
     Right x -> return $ filter (`notElem` sublibs) x
 
-  embed $ putStrLn . prettyDeps . reverse $ flattened
+  embed . putDoc $ (prettyDeps . reverse $ flattened) <> line
 
   let sysDepsToBePacked = Map.filterWithKey (\k _ -> k `elem` flattened) sysDeps
 
   unless (null sysDepsToBePacked) $ do
-    embed $ C.infoMessage "Detected pkgconfig or extraLib from target(s):"
-    embed $ putStrLn $ ppSysDependencies sysDepsToBePacked
+    printInfo "Detected pkgconfig or extraLib from target(s):"
+    embed $ T.putStrLn $ ppSysDependencies sysDepsToBePacked
 
   sysDepsRef <- embed . newIORef $ toUnsolved <$> nubOrd (Map.foldMapWithKey (\_ x -> x) sysDepsToBePacked)
 
   embed $
     isAllSolvedM sysDepsRef >>= \b -> unless b $ do
-      C.infoMessage $ "Now finding corresponding system package(s) using files db from " <> T.pack filesDB <> ":"
-      C.infoMessage "Loading core.files..."
+      printInfo $ "Now finding corresponding system package(s) using files db from " <> T.pack filesDB <> ":"
+      printInfo "Loading core.files..."
       coreFiles <- loadFilesDB Core defaultFilesDBDir
       modifyIORef' sysDepsRef $ fmap (trySolve coreFiles)
       b' <- isAllSolvedM sysDepsRef
       unless b' $ do
-        C.infoMessage "Loading extra.files..."
+        printInfo "Loading extra.files..."
         extraFiles <- loadFilesDB Extra defaultFilesDBDir
         modifyIORef' sysDepsRef $ fmap (trySolve extraFiles)
         b'' <- isAllSolvedM sysDepsRef
         unless b'' $ do
-          C.infoMessage "Loading community.files..."
+          printInfo "Loading community.files..."
           communityFiles <- loadFilesDB Community defaultFilesDBDir
           modifyIORef' sysDepsRef $ fmap (trySolve communityFiles)
 
   sysDepsResult <- embed $ readIORef sysDepsRef
 
   embed . unless (null sysDepsToBePacked) $ do
-    C.infoMessage "Done:"
-    putStrLn . align2col $ ppEmergedSysDep <$> sysDepsResult
-    unless (isAllSolved sysDepsResult) $ C.warningMessage "Unable to obtain all required system packages"
+    printInfo "Done:"
+    T.putStrLn . align2col $ ppEmergedSysDep <$> sysDepsResult
+    unless (isAllSolved sysDepsResult) $ printWarn "Unable to obtain all required system packages"
 
   let sysDepsMapping = collectAllSolved sysDepsResult
       getSysDeps name = catMaybes [sysDepsMapping Map.!? file | (SystemDependency file) <- fromMaybe [] $ sysDeps Map.!? name]
@@ -153,8 +153,8 @@ app target path aurSupport skip uusi force metaPath filesDB = do
 
   embed $
     unless (null flags) $ do
-      C.infoMessage "Detected flag(s) from targets:"
-      putStrLn . prettyFlags $ flags
+      printInfo "Detected flag(s) from targets:"
+      putDoc $ prettyFlags  flags <> line
 
   unless (null path) $
     mapM_
@@ -167,7 +167,7 @@ app target path aurSupport skip uusi force metaPath filesDB = do
           embed $ do
             createDirectoryIfMissing True dir
             writeFile fileName txt
-            C.infoMessage $ "Write file: " <> T.pack fileName
+            printInfo $ "Write file: " <> T.pack fileName
       )
       toBePacked2
 
@@ -195,7 +195,7 @@ app target path aurSupport skip uusi force metaPath filesDB = do
     embed $ do
       createDirectoryIfMissing True dir
       writeFile fileName (T.unpack txt)
-      C.infoMessage $ "Write file: " <> T.pack fileName
+      printInfo $ "Write file: " <> T.pack fileName
 
 -----------------------------------------------------------------------------
 data EmergedSysDep = Solved File ArchLinuxName | Unsolved File
@@ -220,9 +220,9 @@ isAllSolvedM ref = isAllSolved <$> readIORef ref
 collectAllSolved :: [EmergedSysDep] -> Map.Map File ArchLinuxName
 collectAllSolved xs = Map.fromList [(file, name) | (Solved file name) <- xs]
 
-ppEmergedSysDep :: EmergedSysDep -> (String, String)
-ppEmergedSysDep (Solved file (ArchLinuxName name)) = (C.formatWith [C.green] file, "   ⇒   " <> C.formatWith [C.cyan] name)
-ppEmergedSysDep (Unsolved file) = (C.formatWith [C.yellow, C.bold] file, C.formatWith [C.red] "       ✘")
+ppEmergedSysDep :: EmergedSysDep -> (Doc AnsiStyle, Doc AnsiStyle)
+ppEmergedSysDep (Solved file (ArchLinuxName name)) = (annGreen . pretty $ file, "   ⇒   " <> (annCyan . pretty $ name))
+ppEmergedSysDep (Unsolved file) = (annYellow . annBold . pretty $ file, indent 19 cuo)
 
 -----------------------------------------------------------------------------
 
@@ -261,34 +261,34 @@ main = printHandledIOException $
     Options {..} <- runArgsParser
 
     unless (null optFileTrace) $ do
-      C.infoMessage $ "Trace will be dumped to " <> T.pack optFileTrace <> "."
+      printInfo $ "Trace will be dumped to " <> T.pack optFileTrace <> "."
       writeFile optFileTrace ""
 
     let isFlagEmpty = Map.null optFlags
         isSkipEmpty = null optSkip
 
     unless isFlagEmpty $ do
-      C.infoMessage "You assigned flags:"
-      putStrLn . prettyFlagAssignments $ optFlags
+      printInfo "You assigned flags:"
+      putDoc $ prettyFlagAssignments optFlags <> line
 
     unless isSkipEmpty $ do
-      C.infoMessage "You chose to skip:"
-      putStrLn $ prettySkip optSkip
+      printInfo "You chose to skip:"
+      putDoc $ prettySkip optSkip <> line
 
-    when optAur $ C.infoMessage "You passed -a, searching AUR may takes a long time."
+    when optAur $ printInfo "You passed -a, searching AUR may takes a long time."
 
-    when optUusi $ C.infoMessage "You passed --uusi, uusi will become makedepends of each package."
+    when optUusi $ printInfo "You passed --uusi, uusi will become makedepends of each package."
 
     hackagePath <- if null optHackagePath then lookupHackagePath else return optHackagePath
 
-    C.infoMessage $ "Loading hackage from " <> T.pack hackagePath
+    printInfo $ "Loading hackage from " <> T.pack hackagePath
 
     hackage <- loadHackageDB hackagePath
 
     let isExtraEmpty = null optExtraCabalPath
 
     unless isExtraEmpty $
-      C.infoMessage $ "You added " <> (T.pack . intercalate ", " $ map takeFileName optExtraCabalPath) <> " as extra cabal file(s), starting parsing right now."
+      printInfo $ "You added " <> (T.pack . intercalate ", " $ map takeFileName optExtraCabalPath) <> " as extra cabal file(s), starting parsing right now."
 
     parsedExtra <- mapM parseCabalFile optExtraCabalPath
 
@@ -296,14 +296,14 @@ main = printHandledIOException $
 
 #ifdef ALPM
     let src = T.pack $ if optAlpm then "libalpm" else defaultCommunityDBPath
-    C.infoMessage $ "Loading community.db from " <> src
+    printInfo $ "Loading community.db from " <> src
     community <- if optAlpm then loadCommunityDBFFI else loadCommunityDB defaultCommunityDBPath
 #else
-    C.infoMessage $ "Loading community.db from " <> T.pack optCommunityDBPath
+    printInfo $ "Loading community.db from " <> T.pack optCommunityDBPath
     community <- loadCommunityDB optCommunityDBPath
 #endif
 
-    C.infoMessage "Start running..."
+    printInfo "Start running..."
 
     empty <- newIORef Set.empty
 

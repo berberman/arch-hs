@@ -8,12 +8,14 @@ import qualified Colourista as C
 import Control.Monad (unless)
 import qualified Data.Map as Map
 import qualified Data.Text as T
+import Data.Text.Prettyprint.Doc.Render.Terminal
 import Diff
 import Distribution.ArchHs.CommunityDB
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP (prettyFlagAssignments)
 import Distribution.ArchHs.Types
+import Prettyprinter
 
 main :: IO ()
 main = printHandledIOException $
@@ -29,7 +31,7 @@ main = printHandledIOException $
     when isFlagEmpty $ C.skipMessage "You didn't pass -f, different flag values may make difference in dependency resolving."
     unless isFlagEmpty $ do
       C.infoMessage "You assigned flags:"
-      putStrLn . prettyFlagAssignments $ optFlags
+      putDoc $ prettyFlagAssignments optFlags <> line
 
 #ifdef ALPM
     when optAlpm $ C.infoMessage "Using alpm."
@@ -37,7 +39,7 @@ main = printHandledIOException $
 #else
     community <- loadCommunityDB $ if useDefaultCommunity then defaultCommunityDBPath else optCommunityPath
 #endif
-    
+
     C.infoMessage "Loading community.db..."
 
     C.infoMessage "Start running..."

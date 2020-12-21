@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
@@ -16,75 +17,147 @@ module Distribution.ArchHs.PP
     ppSysDependencies,
     ppDiffColored,
     align2col,
+    dui,
+    cuo,
+    annYellow,
+    annGreen,
+    annMagneta,
+    annRed,
+    annBold,
+    annCyan,
+    annBlue,
+    render,
+    viaPretty,
+    splitLine,
+    ppFromTo,
+    printInfo,
+    printWarn,
+    module Prettyprinter,
+    module Prettyprinter.Render.Terminal,
   )
 where
 
-import qualified Colourista as C
+import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Algorithm.Diff
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types
+import qualified Distribution.Pretty as DPretty
+import Prettyprinter
+import Prettyprinter.Render.Terminal
 
-prettySkip :: [String] -> String
-prettySkip = C.formatWith [C.magenta] . intercalate ", "
+annYellow :: Doc AnsiStyle -> Doc AnsiStyle
+annYellow = annotate (color Yellow)
 
-prettyFlagAssignments :: Map.Map PackageName FlagAssignment -> String
+annCyan :: Doc AnsiStyle -> Doc AnsiStyle
+annCyan = annotate (color Cyan)
+
+annMagneta :: Doc AnsiStyle -> Doc AnsiStyle
+annMagneta = annotate (color Magenta)
+
+annRed :: Doc AnsiStyle -> Doc AnsiStyle
+annRed = annotate (color Red)
+
+annGreen :: Doc AnsiStyle -> Doc AnsiStyle
+annGreen = annotate (color Green)
+
+annBold :: Doc AnsiStyle -> Doc AnsiStyle
+annBold = annotate bold
+
+annBlue :: Doc AnsiStyle -> Doc AnsiStyle
+annBlue = annotate (color Blue)
+
+cuo :: Doc AnsiStyle
+cuo = annRed "✘"
+
+dui :: Doc AnsiStyle
+dui = annGreen "✔"
+
+prettySkip :: [String] -> Doc AnsiStyle
+prettySkip = hsep . punctuate comma . fmap (annotate (color Magenta) . pretty)
+
+prettyFlagAssignments :: Map.Map PackageName FlagAssignment -> Doc AnsiStyle
 prettyFlagAssignments m =
-  mconcat $
-    fmap (fmap (\(n, a) -> C.formatWith [C.magenta] (unPackageName n) <> "\n" <> prettyFlagAssignment a)) Map.toList m
+  vsep $
+    fmap (fmap (\(n, a) -> annMagneta (viaPretty n) <> line <> indent 2 (prettyFlagAssignment a))) Map.toList m
 
-prettyFlagAssignment :: FlagAssignment -> String
-prettyFlagAssignment m =
-  mconcat $
-    (\(n, v) -> "    ⚐ " <> C.formatWith [C.yellow] (unFlagName n) <> " : " <> C.formatWith [C.cyan] (show v) <> "\n") <$> unFlagAssignment m
+prettyFlagAssignment :: FlagAssignment -> Doc AnsiStyle
+prettyFlagAssignment = vsep . fmap (\(n, v) -> "⚐" <+> annotate (color Yellow) (viaPretty n) <> colon <+> annotate (color Cyan) (pretty v)) . unFlagAssignment
 
-prettyDeps :: [PackageName] -> String
+prettyDeps :: [PackageName] -> Doc AnsiStyle
 prettyDeps =
-  mconcat
-    . fmap (\(i, n) -> show (i :: Int) <> ". " <> unPackageName n <> "\n")
+  vsep
+    . fmap (\(i :: Int, n) -> pretty i <> dot <+> viaPretty n)
     . zip [1 ..]
 
-prettyFlags :: [(PackageName, [Flag])] -> String
-prettyFlags = mconcat . fmap (\(name, flags) -> C.formatWith [C.magenta] (unPackageName name <> "\n") <> mconcat (C.formatWith [C.indent 4] . prettyFlag <$> flags))
+prettyFlags :: [(PackageName, [Flag])] -> Doc AnsiStyle
+prettyFlags = vsep . fmap (\(name, flags) -> annMagneta (viaPretty name) <> line <> indent 2 (vsep (prettyFlag <$> flags)))
 
-prettyFlag :: Flag -> String
-prettyFlag f = "⚐ " <> C.formatWith [C.yellow] name <> ":\n" <> mconcat (C.formatWith [C.indent 6] <$> ["description:\n" <> desc, "default: " <> def <> "\n", "isManual: " <> manual <> "\n"])
+prettyFlag :: Flag -> Doc AnsiStyle
+prettyFlag f =
+  "⚐" <+> annYellow name <> colon <> line
+    <> indent
+      4
+      ( vsep
+          [ "description" <> colon <> line <> indent 2 desc,
+            "default" <> colon <+> def,
+            "isManual" <> colon <+> manual
+          ]
+      )
   where
-    name = unFlagName . flagName $ f
-    desc = unlines . fmap (C.formatWith [C.indent 8]) . lines $ flagDescription f
-    def = show $ flagDefault f
-    manual = show $ flagManual f
+    name = viaPretty . flagName $ f
+    desc = pretty $ flagDescription f
+    def = viaShow $ flagDefault f
+    manual = viaShow $ flagManual f
 
-prettySolvedPkgs :: [SolvedPackage] -> String
+prettySolvedPkgs :: [SolvedPackage] -> T.Text
 prettySolvedPkgs = align2col . mconcat . fmap prettySolvedPkg
 
-prettySolvedPkg :: SolvedPackage -> [(String, String)]
+prettySolvedPkg :: SolvedPackage -> [(Doc AnsiStyle, Doc AnsiStyle)]
 prettySolvedPkg SolvedPackage {..} =
-  (C.formatWith [C.bold, C.yellow] (unPackageName _pkgName), C.formatWith [C.red] "    ✘") :
+  (annYellow . annBold . viaPretty $ _pkgName, indent 16 cuo) :
   fmap
     ( \(i :: Int, SolvedDependency {..}) ->
         let prefix = if i == length _pkgDeps then " └─" else " ├─"
          in case _depProvider of
-              (Just x) -> (C.formatWith [C.green] $ T.unpack prefix <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.green] "✔ " <> C.formatWith [C.cyan] (show x))
-              _ -> (C.formatWith [C.bold, C.yellow] $ T.unpack prefix <> unPackageName _depName <> " " <> show _depType, C.formatWith [C.red] "    ✘")
+              (Just x) -> (annGreen $ prefix <> viaPretty _depName <+> viaShow _depType, dui <+> annCyan (viaShow x))
+              _ -> (annYellow . annBold $ prefix <> viaPretty _depName <+> viaShow _depType, indent 16 cuo)
     )
     (zip [1 ..] _pkgDeps)
-prettySolvedPkg ProvidedPackage {..} = [(C.formatWith [C.green] (unPackageName _pkgName), C.formatWith [C.green] "✔ " <> C.formatWith [C.cyan] (show _pkgProvider))]
+prettySolvedPkg ProvidedPackage {..} = [(annGreen $ viaPretty _pkgName, dui <+> annCyan (viaShow _pkgProvider))]
 
-align2col :: [(String, String)] -> String
-align2col l = mconcat complemented
+render :: Doc AnsiStyle -> T.Text
+render = renderStrict . layoutPretty defaultLayoutOptions
+
+viaPretty :: DPretty.Pretty a => a -> Doc AnsiStyle
+viaPretty = pretty . prettyShow
+
+align2col :: [(Doc AnsiStyle, Doc AnsiStyle)] -> T.Text
+align2col (fmap (both %~ render) -> l) = T.concat complemented
   where
-    maxL = maximum $ fmap (length . fst) l
-    complemented = (\(x, y) -> x <> replicate (maxL - length x) ' ' <> y <> "\n") <$> l
+    maxL = maximum $ fmap (T.length . fst) l
+    complemented = (\(x, y) -> x <> T.replicate (maxL - T.length x) " " <> y <> "\n") <$> l
 
-ppSysDependencies :: Map.Map PackageName [SystemDependency] -> String
+ppSysDependencies :: Map.Map PackageName [SystemDependency] -> T.Text
 ppSysDependencies m = align2col $ uncurry ppSysDependency <$> Map.toList m
 
-ppSysDependency :: PackageName -> [SystemDependency] -> (String, String)
-ppSysDependency name deps = (C.formatWith [C.bold, C.yellow] (unPackageName name) <> ": ", intercalate ", " (fmap (\(SystemDependency x) -> x) deps))
+ppSysDependency :: PackageName -> [SystemDependency] -> (Doc AnsiStyle, Doc AnsiStyle)
+ppSysDependency name deps = ((annBold . annYellow $ viaPretty name) <> colon, hsep $ punctuate comma (fmap (\(SystemDependency x) -> pretty x) deps))
 
-ppDiffColored :: Diff [String] -> [String]
-ppDiffColored (First x) = C.formatWith [C.red] <$> x
-ppDiffColored (Second x) = C.formatWith [C.green] <$> x
-ppDiffColored (Both x _) = x
+ppDiffColored :: Diff [String] -> [Doc AnsiStyle]
+ppDiffColored (First x) = annRed . pretty <$> x
+ppDiffColored (Second x) = annGreen . pretty <$> x
+ppDiffColored (Both x _) = pretty <$> x
+
+splitLine :: Doc AnsiStyle
+splitLine = line <> pretty (replicate 38 '-') <> line
+
+ppFromTo :: Int -> Doc AnsiStyle -> Doc AnsiStyle -> Doc AnsiStyle
+ppFromTo i a b = a <> hcat (replicate i space) <> "⇒" <> hcat (replicate i space) <> b
+
+printInfo :: (MonadIO m) => T.Text -> m ()
+printInfo msg = liftIO . putDoc . annBlue $ "ⓘ" <+> pretty msg <> line
+
+printWarn :: (MonadIO m) => T.Text -> m ()
+printWarn msg = liftIO . putDoc . annYellow $ "⚠" <+> pretty msg <> line

@@ -35,6 +35,7 @@ module Distribution.ArchHs.Utils
     filterSecondAndBothDiff,
     noDiff,
     mapDiff,
+    unDiff,
   )
 where
 
@@ -195,3 +196,8 @@ mapDiff :: (a -> b) -> Diff a -> Diff b
 mapDiff f (First x) = First $ f x
 mapDiff f (Second x) = Second $ f x
 mapDiff f (Both x y) = Both (f x) (f y)
+
+unDiff :: Diff a -> a
+unDiff (First x) = x
+unDiff (Second x) = x
+unDiff (Both x _) = x

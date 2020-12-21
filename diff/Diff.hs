@@ -19,7 +19,7 @@ import Distribution.ArchHs.Core (evalConditionTree)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.OptionReader
-import Distribution.ArchHs.PP (ppDiffColored, prettyFlags)
+import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import Distribution.PackageDescription (CondTree, ConfVar)
@@ -174,38 +174,36 @@ diffCabal name a b = do
   queryb <- lookupDiffCommunity ba bb
   querym <- lookupDiffCommunity ma mb
   return $
-    unlines
-      [ C.formatWith [C.magenta] "Package: " <> unPackageName name,
-        ver pa pb,
-        desc pa pb,
-        url pa pb,
-        dep "Depends: \n" ba bb,
-        "",
-        queryb,
-        dep "MakeDepends: \n" ma mb,
-        "",
-        querym,
-        flags name fa fb
-      ]
+    T.unpack $render $
+      vsep
+        [ annMagneta "Package" <> colon <+> viaPretty name,
+          ver pa pb,
+          desc pa pb,
+          url pa pb,
+          dep "Depends" ba bb,
+          queryb,
+          dep "MakeDepends" ma mb,
+          querym,
+          flags name fa fb
+        ]
 
-diffTerm :: String -> (a -> String) -> a -> a -> String
+diffTerm :: String -> (a -> String) -> a -> a -> Doc AnsiStyle
 diffTerm s f a b =
-  let f' = T.unpack . T.strip . T.pack . f
-      (ra, rb) = (f' a, f' b)
-   in C.formatWith [C.magenta] s
-        <> (if ra == rb then ra else C.formatWith [C.red] ra <> "  ⇒  " <> C.formatWith [C.green] rb)
+  let (ra, rb) = (f a, f b)
+   in annMagneta (pretty s) <> colon
+        <+> ( if ra == rb
+                then pretty ra
+                else ppFromTo 2 (annRed (pretty ra)) (annGreen (pretty rb))
+            )
 
-desc :: PackageDescription -> PackageDescription -> String
-desc = diffTerm "Synopsis: " $ fromShortText . synopsis
+desc :: PackageDescription -> PackageDescription -> Doc AnsiStyle
+desc = diffTerm "Synopsis" $ fromShortText . synopsis
 
-ver :: PackageDescription -> PackageDescription -> String
-ver = diffTerm "Version: " (prettyShow . getPkgVersion)
+ver :: PackageDescription -> PackageDescription -> Doc AnsiStyle
+ver = diffTerm "Version" (prettyShow . getPkgVersion)
 
-url :: PackageDescription -> PackageDescription -> String
-url = diffTerm "URL: " getUrl
-
-splitLine :: String
-splitLine = "\n" <> replicate 38 '-' <> "\n"
+url :: PackageDescription -> PackageDescription -> Doc AnsiStyle
+url = diffTerm "URL" getUrl
 
 inRange :: Members [CommunityEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (Either (PackageName, VersionRange) (PackageName, VersionRange, Version, Bool))
 inRange (name, hRange) =
@@ -214,43 +212,41 @@ inRange (name, hRange) =
       Right y -> let version = fromJust . simpleParsec $ y in return . Right $ (name, hRange, version, withinRange version hRange)
       Left _ -> return . Left $ (name, hRange)
 
-lookupDiffCommunity :: Members [CommunityEnv, WithMyErr] r => VersionedList -> VersionedList -> Sem r String
+lookupDiffCommunity :: Members [CommunityEnv, WithMyErr] r => VersionedList -> VersionedList -> Sem r (Doc AnsiStyle)
 lookupDiffCommunity va vb = do
-  let diffNew = vb \\ va
-      diffOld = va \\ vb
-      color b = C.formatWith [if b then C.green else C.red]
+  let diff = getGroupedDiff va vb
+      diffOld = mconcat $ unDiff <$> filterFirstDiff diff
+      diffNew = mconcat $ unDiff <$> filterSecondDiff diff
+      annF b = if b then annGreen else annRed
       pp b (Right (name, range, v, False)) =
-        "\""
-          <> color b (unPackageName name)
-          <> "\" is required to be in range ("
-          <> color b (prettyShow range)
-          <> "), "
-          <> "but [community] provides ("
-          <> color b (prettyShow v)
-          <> ")."
+        dquotes (annF b $ viaPretty name)
+          <+> "is required to be in range"
+          <+> parens (annF b $ viaPretty range)
+          <> comma
+          <+> "but [community] provides"
+          <+> parens (annF b $ viaPretty v)
+          <> dot
       pp _ (Right _) = ""
       pp b (Left (name, range)) =
-        "\""
-          <> color b (unPackageName name)
-          <> "\" is required to be in range ("
-          <> color b (prettyShow range)
-          <> "), "
-          <> "but [community] does not provide this package."
+        dquotes (annF b $ viaPretty name)
+          <+> "is required to be in range"
+          <+> parens (annF b $ viaPretty range)
+          <> comma
+          <+> "but [community] does not provide this package"
+          <> comma
 
   new <- fmap (pp True) <$> mapM inRange diffNew
   old <- fmap (pp False) <$> mapM inRange diffOld
-  let join = unlines . filter (not . null)
-  return $ join old <> join new
+  return $ hcat [hcat old, hcat new]
 
-dep :: String -> VersionedList -> VersionedList -> String
+dep :: Doc AnsiStyle -> VersionedList -> VersionedList -> Doc AnsiStyle
 dep s va vb =
-  C.formatWith [C.magenta] s <> "    "
+  annMagneta s <> colon <> line
     <> if noDiff diff
       then joinToString []
       else
         joinToString da
           <> splitLine
-          <> "    "
           <> joinToString db
   where
     a = joinVersionWithName <$> va
@@ -258,21 +254,20 @@ dep s va vb =
     da = mconcat $ ppDiffColored <$> filterFirstAndBothDiff diff
     db = mconcat $ ppDiffColored <$> filterSecondAndBothDiff diff
     diff = getGroupedDiff a b
-    joinToString [] = "[]"
-    joinToString xs = intercalate "\n    " $ sort xs
+    joinToString [] = indent 2 "[]"
+    joinToString xs = indent 2 $ vsep xs
     joinVersionWithName (n, range) = unPackageName n <> "  " <> prettyShow range
 
-flags :: PackageName -> [Flag] -> [Flag] -> String
+flags :: PackageName -> [Flag] -> [Flag] -> Doc AnsiStyle
 flags name a b =
-  C.formatWith [C.magenta] "Flags:\n" <> "  "
+  annMagneta "Flags" <> colon <> line
     <> if noDiff diff
       then joinToString a
       else
         joinToString a
           <> splitLine
-          <> "    "
           <> joinToString b
   where
     diff = getGroupedDiff a b
-    joinToString [] = "[]"
-    joinToString xs = prettyFlags [(name, xs)]
+    joinToString [] = indent 2 "[]"
+    joinToString xs = indent 2 $ prettyFlags [(name, xs)]
