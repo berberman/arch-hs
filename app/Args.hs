@@ -9,11 +9,14 @@ module Args
 where
 
 import qualified Data.Map.Strict as Map
-import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
-import Distribution.ArchHs.FilesDB (defaultFilesDBDir)
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.OptionReader
 import Distribution.ArchHs.Types
+
+#ifndef ALPM
+import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
+import Distribution.ArchHs.FilesDB (defaultFilesDBDir)
+#endif
 
 data Options = Options
   { optHackagePath :: FilePath,

@@ -16,7 +16,6 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromJust)
 import qualified Data.Text as T
 import Data.Void (Void)
-import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
@@ -30,6 +29,10 @@ import Options.Applicative hiding (header)
 import qualified Options.Applicative
 import qualified Text.Megaparsec as M
 import Text.Megaparsec.Char as M
+
+#ifndef ALPM
+import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
+#endif
 
 data Options = Options
   { optHackagePath :: FilePath,

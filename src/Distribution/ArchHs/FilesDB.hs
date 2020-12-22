@@ -46,14 +46,14 @@ callback ref x y = do
   modifyIORef' ref (Seq.|> (ArchLinuxName x', y'))
 
 loadFilesDBFFI :: DBKind -> IO FilesDB
-loadFilesDBFFI ( show -> db) = do
+loadFilesDBFFI (show -> db) = do
   ref <- newIORef Seq.empty
   db' <- newCString db
   callbackW <- wrap $ callback ref
   query_files db' callbackW
   freeHaskellFunPtr callbackW
   list <- toList <$> readIORef ref
-  return $ foldr (\(k,v)-> Map.insertWith (<>) k [v] ) Map.empty  list
+  return $ foldr (\(k,v)-> Map.insertWith (<>) k [v]) Map.empty list
 #endif
 
 -- | Default path to files db.
@@ -81,12 +81,10 @@ loadFilesDBC db path = do
               _ -> return ()
             _ -> return ()
       | otherwise = return ()
+    extract :: T.Text -> Maybe T.Text
     extract s
       | Just x <- T.stripPrefix "usr/lib/" s,
-        T.isSuffixOf ".so" x =
-        Just $ T.takeWhileEnd (/= '/') x
-      | Just x <- T.stripPrefix "usr/lib/pkgconfig" s,
-        T.isSuffixOf ".pc" x =
+        T.isSuffixOf ".so" x || T.isSuffixOf ".pc" x =
         Just $ T.takeWhileEnd (/= '/') x
       | otherwise = Nothing
 

@@ -13,7 +13,7 @@ import Data.Algorithm.Diff
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import qualified Data.Text as T
-import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath, versionInCommunity)
+import Distribution.ArchHs.CommunityDB (versionInCommunity)
 import Distribution.ArchHs.Core (evalConditionTree)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
@@ -27,6 +27,10 @@ import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.Dependency (Dependency)
 import Distribution.Utils.ShortText (fromShortText)
 import Network.HTTP.Req hiding (header)
+
+#ifndef ALPM
+import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
+#endif
 
 data Options = Options
   { optFlags :: FlagAssignments,
@@ -156,7 +160,8 @@ directDependencies cabal = do
       distinct = filter (notMyself . fst) . nub
       depends = distinct $ l <> e
       makedepends = distinct (lt <> et <> t <> tt) \\ depends
-  return (depends, makedepends)
+      sort' = sortBy (\x y -> uncurry compare $ getTwo _1 x y)
+  return (sort' depends, sort' makedepends)
 
 -----------------------------------------------------------------------------
 
@@ -183,7 +188,7 @@ diffCabal name a b = do
         dep "MakeDepends" ma mb,
         querym,
         flags name fa fb
-      ]
+      ] <> line
 
 diffTerm :: String -> (a -> String) -> a -> a -> Doc AnsiStyle
 diffTerm s f a b =

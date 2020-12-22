@@ -44,9 +44,9 @@ app ::
   Bool ->
   Bool ->
   FilePath ->
-  FilePath ->
+  (DBKind -> IO FilesDB) ->
   Sem r ()
-app target path aurSupport skip uusi force metaPath filesDB = do
+app target path aurSupport skip uusi force metaPath loadFilesDB' = do
   (deps, sublibs, sysDeps) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
 
   inCommunity <- isInCommunity target
@@ -124,19 +124,16 @@ app target path aurSupport skip uusi force metaPath filesDB = do
 
   embed $
     isAllSolvedM sysDepsRef >>= \b -> unless b $ do
-      printInfo $ "Now finding corresponding system package(s) using files db from " <> T.pack filesDB <> ":"
-      printInfo "Loading core.files..."
-      coreFiles <- loadFilesDB Core defaultFilesDBDir
+      printInfo "Now finding corresponding system package(s) using files db:"
+      coreFiles <- loadFilesDB' Core
       modifyIORef' sysDepsRef $ fmap (trySolve coreFiles)
       b' <- isAllSolvedM sysDepsRef
       unless b' $ do
-        printInfo "Loading extra.files..."
-        extraFiles <- loadFilesDB Extra defaultFilesDBDir
+        extraFiles <- loadFilesDB' Extra
         modifyIORef' sysDepsRef $ fmap (trySolve extraFiles)
         b'' <- isAllSolvedM sysDepsRef
         unless b'' $ do
-          printInfo "Loading community.files..."
-          communityFiles <- loadFilesDB Community defaultFilesDBDir
+          communityFiles <- loadFilesDB' Community
           modifyIORef' sysDepsRef $ fmap (trySolve communityFiles)
 
   sysDepsResult <- embed $ readIORef sysDepsRef
@@ -307,14 +304,17 @@ main = printHandledIOException $
 
     empty <- newIORef Set.empty
 
-    let filesDB =
+    let loadF db = do
 #ifdef ALPM
-          defaultFilesDBDir
+          printInfo $ "Loading " <> T.pack (show db) <>" files from libalpm..." 
+          if optAlpm then loadFilesDBFFI db else loadFilesDB db defaultFilesDBDir
 #else
-          optFilesDBPath
+          printInfo $ "Loading " <> T.pack (show db) <>" files from " <> optFilesDBPath <> "..." 
+          loadFilesDB db optFilesDBPath
+
 #endif
 
-    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir filesDB) & printAppResult
+    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir loadF) & printAppResult
 
 -----------------------------------------------------------------------------
 
