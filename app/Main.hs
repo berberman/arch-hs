@@ -309,7 +309,7 @@ main = printHandledIOException $
           printInfo $ "Loading " <> T.pack (show db) <>" files from libalpm..." 
           if optAlpm then loadFilesDBFFI db else loadFilesDB db defaultFilesDBDir
 #else
-          printInfo $ "Loading " <> T.pack (show db) <>" files from " <> optFilesDBPath <> "..." 
+          printInfo $ "Loading " <> T.pack (show db) <>" files from " <> T.pack optFilesDBPath <> "..." 
           loadFilesDB db optFilesDBPath
 
 #endif

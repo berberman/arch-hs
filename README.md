@@ -1,9 +1,12 @@
 # arch-hs
 
-[![GitHub CI](https://github.com/berberman/arch-hs/workflows/CI/badge.svg)](https://github.com/berberman/arch-hs/actions)
-[![Build Status](https://travis-ci.com/berberman/arch-hs.svg?branch=master)](https://travis-ci.com/berberman/arch-hs)
 [![Hackage](https://img.shields.io/hackage/v/arch-hs.svg?logo=haskell)](https://hackage.haskell.org/package/arch-hs)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+| Env              | CI                                                           |
+| ---------------- | ------------------------------------------------------------ |
+| pacman (-f alpm) | [![GitHub CI](https://github.com/berberman/arch-hs/workflows/CI/badge.svg)](https://github.com/berberman/arch-hs/actions) |
+| cabal-install    | [![Build Status](https://travis-ci.com/berberman/arch-hs.svg?branch=master)](https://travis-ci.com/berberman/arch-hs) |
 
 A program generating PKGBUILD for hackage packages. Special thanks to [felixonmars](https://github.com/felixonmars/).
 
