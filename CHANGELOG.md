@@ -15,11 +15,11 @@ The changelog is available [on GitHub][2].
 
 * Adopt [Diff](https://hackage.haskell.org/package/Diff) in `arch-hs-diff` and `arch-hs-submit`
 
-* Fix the bug that `ghc` missing in depends
+* Fix the bug that `ghc` is missing in depends
 
 * Fix typo ([#35](https://github.com/berberman/arch-hs/pull/35))
 
-* Update dependencies ([#35](https://github.com/berberman/arch-hs/pull/34))
+* Update dependencies ([#34](https://github.com/berberman/arch-hs/pull/34))
 
 ## 0.5.0.0
 
