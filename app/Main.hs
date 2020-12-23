@@ -18,6 +18,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Distribution.ArchHs.Aur (Aur, aurToIO, isInAur)
 import Distribution.ArchHs.CommunityDB
 import Distribution.ArchHs.Core
@@ -33,7 +34,6 @@ import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName)
-import qualified Data.Text.IO as T
 
 app ::
   Members '[Embed IO, State (Set.Set PackageName), CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
@@ -112,7 +112,7 @@ app target path aurSupport skip uusi force metaPath loadFilesDB' = do
     Left c -> throw . CyclicExist $ toList c
     Right x -> return $ filter (`notElem` sublibs) x
 
-  embed . putDoc $ (prettyDeps . reverse $ flattened) <> line
+  embed . putDoc $ (prettyDeps . reverse $ flattened) <> line <> line
 
   let sysDepsToBePacked = Map.filterWithKey (\k _ -> k `elem` flattened) sysDeps
 
@@ -144,14 +144,14 @@ app target path aurSupport skip uusi force metaPath loadFilesDB' = do
     unless (isAllSolved sysDepsResult) $ printWarn "Unable to obtain all required system packages"
 
   let sysDepsMapping = collectAllSolved sysDepsResult
-      getSysDeps name = catMaybes [sysDepsMapping Map.!? file | (SystemDependency file) <- fromMaybe [] $ sysDeps Map.!? name]
+      getSysDeps name = nubOrd $ catMaybes [sysDepsMapping Map.!? file | (SystemDependency file) <- fromMaybe [] $ sysDeps Map.!? name]
 
   flags <- filter (\(_, l) -> not $ null l) <$> mapM (\n -> (n,) <$> getPackageFlag n) flattened
 
   embed $
     unless (null flags) $ do
       printInfo "Detected flag(s) from targets:"
-      putDoc $ prettyFlags  flags <> line
+      putDoc $ prettyFlags flags <> line <> line
 
   unless (null path) $
     mapM_
@@ -266,11 +266,11 @@ main = printHandledIOException $
 
     unless isFlagEmpty $ do
       printInfo "You assigned flags:"
-      putDoc $ prettyFlagAssignments optFlags <> line
+      putDoc $ prettyFlagAssignments optFlags <> line <> line
 
     unless isSkipEmpty $ do
       printInfo "You chose to skip:"
-      putDoc $ prettySkip optSkip <> line
+      putDoc $ prettySkip optSkip <> line <> line
 
     when optAur $ printInfo "You passed -a, searching AUR may takes a long time."
 
@@ -306,10 +306,10 @@ main = printHandledIOException $
 
     let loadF db = do
 #ifdef ALPM
-          printInfo $ "Loading " <> T.pack (show db) <>" files from libalpm..." 
+          printInfo $ "Loading " <> T.pack (show db) <>" files from libalpm..."
           if optAlpm then loadFilesDBFFI db else loadFilesDB db defaultFilesDBDir
 #else
-          printInfo $ "Loading " <> T.pack (show db) <>" files from " <> T.pack optFilesDBPath <> "..." 
+          printInfo $ "Loading " <> T.pack (show db) <>" files from " <> T.pack optFilesDBPath <> "..."
           loadFilesDB db optFilesDBPath
 
 #endif

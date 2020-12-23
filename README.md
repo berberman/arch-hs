@@ -16,7 +16,7 @@ A program generating PKGBUILD for hackage packages. Special thanks to [felixonma
 ## Introduction
 
 Given the name of a package in hackage, `arch-hs` can generate PKGBUILD files, not only for the package
-whose name is given, but also for all dependencies missing in [\[community\]](https://www.archlinux.org/packages/).
+whose name is given, but also for all dependencies missing in [[community]](https://www.archlinux.org/packages/).
 `arch-hs` has a naive built-in dependency solver, which can fetch those dependencies and find out which are required to be packaged.
 During the dependency calculation, all version constraints will be discarded due to the arch haskell packaging strategy,
 thus there is no guarantee of dependencies' version consistency.
@@ -25,7 +25,7 @@ thus there is no guarantee of dependencies' version consistency.
 
 `arch-hs` is a PKGBUILD text file generator, which is not integrated with `pacman`(See [Alpm Support](#Alpm-Support)), depending on nothing than:
 
-* Pacman database (`community.db`)
+* Pacman databases (`community.db`, `community.files`, `core.files`, and `extra.files`)
 
 * Hackage index tarball (`01-index.tar`, or `00-index.tar` previously) -- usually provided by `cabal-install`
 
@@ -33,7 +33,7 @@ thus there is no guarantee of dependencies' version consistency.
 
 `arch-hs` is portable, which means it's not restricted to Arch Linux.
 However, `arch-hs` can use libalpm to load pacman database on Arch Linux,
-and if you want to run them on other systems, you have to build it from source.
+and if you want to run on other systems, you have to build it from source.
 
 ### Install the latest release
 
@@ -41,7 +41,7 @@ and if you want to run them on other systems, you have to build it from source.
 # pacman -S arch-hs
 ```
 
-`arch-hs` is available in [\[community\]](https://www.archlinux.org/packages/community/x86_64/arch-hs/), so you can install it using `pacman`.
+`arch-hs` is available in [[community]](https://www.archlinux.org/packages/community/x86_64/arch-hs/), so you can install it using `pacman`.
 
 ### Install the development version
 
@@ -49,7 +49,7 @@ and if you want to run them on other systems, you have to build it from source.
 # pacman -S arch-hs-git
 ```
 
-The `-git` version is available in [\[archlinuxcn\]](https://github.com/archlinuxcn/repo), following the latest git commit.
+The `-git` version is available in [[archlinuxcn]](https://github.com/archlinuxcn/repo), following the latest git commit.
 
 ## Build
 
@@ -72,61 +72,102 @@ $ cabal build
 
 ## Usage
 
+**Please ignore `hsc2hs`. This package may emerge unexpectedly, since it is missing in provide list of `ghc`.**
+**This will be fixed in next GHC release by haskell maintainers of Arch Linux.**
+
 Just run `arch-hs` in command line with options and a target. Here is an example:
-we will create the archlinux package of [accelerate](https://hackage.haskell.org/package/accelerate):
+we will create the archlinux package of [gi-gdk](https://hackage.haskell.org/package/gi-gdk):
 
 ```
-$ arch-hs -o ~/test accelerate
+$ arch-hs -o ~/test --alpm gi-gdk
 
 ......
 
-  ⓘ Recommended package order (from topological sort):
-1. unique
-2. tasty-kat
-3. accelerate
+ⓘ Recommended package order:
+1. hsc2hs
+2. gi-glib
+3. gi-gobject
+4. gi-harfbuzz
+5. gi-pango
+6. gi-gio
+7. gi-gdkpixbuf
+8. gi-gdk
 
 ......
 
-  ⓘ Write file: /home/berberman/test/haskell-accelerate/PKGBUILD
-  ⓘ Write file: /home/berberman/test/haskell-unique/PKGBUILD
-  ⓘ Write file: /home/berberman/test/haskell-tasty-kat/PKGBUILD
-  ✔ Success!
+ⓘ Now finding corresponding system package(s) using files db:
+ⓘ Loading core files from libalpm...
+ⓘ Loading extra files from libalpm...
+ⓘ Loading community files from libalpm...
+ⓘ Done:
+gtk4.pc                   ✘
+gdk-pixbuf-2.0.pc         ⇒   gdk-pixbuf2
+gio-2.0.pc                ⇒   glib2
+glib-2.0.pc               ⇒   glib2
+gobject-2.0.pc            ⇒   glib2
+harfbuzz.pc               ⇒   harfbuzz
+harfbuzz-gobject.pc       ⇒   harfbuzz
+pango.pc                  ⇒   pango
+
+⚠ Unable to obtain all required system packages
+
+......
+
+ⓘ Write file: /home/berberman/test/haskell-gi-gdk/PKGBUILD
+ⓘ Write file: /home/berberman/test/haskell-gi-gdkpixbuf/PKGBUILD
+ⓘ Write file: /home/berberman/test/haskell-gi-gio/PKGBUILD
+ⓘ Write file: /home/berberman/test/haskell-gi-glib/PKGBUILD
+ⓘ Write file: /home/berberman/test/haskell-gi-gobject/PKGBUILD
+ⓘ Write file: /home/berberman/test/haskell-gi-harfbuzz/PKGBUILD
+ⓘ Write file: /home/berberman/test/haskell-gi-pango/PKGBUILD
+ⓘ Write file: /home/berberman/test/haskell-hsc2hs/PKGBUILD
+✔ Success!
 
 ```
 
-This message tells us that in order to package `accelerate`, we must package `unique`
-and `tasty-kat` first sequentially, because `accelerate` dependents on them to build or test,
-whereas they are not present in archlinux \[community\] repo.
+This message tells us that in order to package `gi-gdk`, we must package its dependencies
+listed in package order, which are not present in [community] repo. Particularly, `gi-gdk`
+requires external system dependencies, so `arch-hs` can map them to system packages using files db.
 
 ```
 $ tree ~/test
-/home/berberman/Desktop/test
-├── haskell-accelerate
+/home/berberman/test
+├── haskell-gi-gdk
 │   └── PKGBUILD
-├── haskell-tasty-kat
+├── haskell-gi-gdkpixbuf
 │   └── PKGBUILD
-└── haskell-unique
+├── haskell-gi-gio
+│   └── PKGBUILD
+├── haskell-gi-glib
+│   └── PKGBUILD
+├── haskell-gi-gobject
+│   └── PKGBUILD
+├── haskell-gi-harfbuzz
+│   └── PKGBUILD
+├── haskell-gi-pango
+│   └── PKGBUILD
+└── haskell-hsc2hs
     └── PKGBUILD
 ```
 
-`arch-hs` will generate PKGBUILD for each package. Let's see what we have in `./haskell-accelerate/PKGBUILD`:
+`arch-hs` generates PKGBUILD for each package. Let's see what we have in `./haskell-gi-gdk/PKGBUILD`:
 
 ``` bash
-# This file was generated by arch-hs, please check it manually.
+# This file was generated by https://github.com/berberman/arch-hs, please check it manually.
 # Maintainer: Your Name <youremail@domain.com>
 
-_hkgname=accelerate
-pkgname=haskell-accelerate
-pkgver=1.3.0.0
+_hkgname=gi-harfbuzz
+pkgname=haskell-gi-harfbuzz
+pkgver=0.0.3
 pkgrel=1
-pkgdesc="An embedded language for accelerated array processing"
-url="https://github.com/AccelerateHS/accelerate/"
-license=("custom:BSD3")
+pkgdesc="HarfBuzz bindings"
+url="https://github.com/haskell-gi/haskell-gi"
+license=("LGPL2.1")
 arch=('x86_64')
-depends=('ghc-libs' 'haskell-ansi-terminal' 'haskell-base-orphans' 'haskell-cryptonite' 'haskell-half' 'haskell-hashable' 'haskell-hashtables' 'haskell-hedgehog' 'haskell-lens' 'haskell-prettyprinter' 'haskell-prettyprinter-ansi-terminal' 'haskell-primitive' 'haskell-tasty' 'haskell-terminal-size' 'haskell-unique' 'haskell-unordered-containers' 'haskell-vector')
-makedepends=('ghc' 'haskell-doctest')
+depends=('ghc-libs' 'haskell-gi-glib' 'haskell-gi-gobject' 'haskell-gi' 'haskell-gi-base' 'haskell-gi-overloading' 'harfbuzz')
+makedepends=('ghc')
 source=("https://hackage.haskell.org/packages/archive/$_hkgname/$pkgver/$_hkgname-$pkgver.tar.gz")
-sha256sums=('4b97161f145c81f7554679802059598587e06d49b2c153e7bafc4dd6974bad92')
+sha256sums=('5f61c7b07427d0b77f867c3bc560043239c6184f98921295ce28fc8c9ce257e5')
 
 build() {
   cd $_hkgname-$pkgver
@@ -144,11 +185,6 @@ build() {
   sed -i -r -e "s|ghc-pkg.*unregister[^ ]* |&'--force' |" unregister.sh
 }
 
-check() {
-  cd $_hkgname-$pkgver
-  runhaskell Setup test
-}
-
 package() {
   cd $_hkgname-$pkgver
 
@@ -163,7 +199,7 @@ package() {
 `arch-hs` will collect the information from hackage db, and apply it into a fixed template after some processing steps
 including renaming, matching license, and filling out dependencies etc.
 However, packaging haven't been done so far.
-`arch-hs` may does well statically, but we should guarantee that this package can be built by ghc with the latest dependencies;
+`arch-hs` can't guarantee that this package can be built by ghc with the latest dependencies;
 hence some patchs may be required in `prepare()`, such as [uusi](#Uusi).
 
 
@@ -267,76 +303,102 @@ whose name conform to above-mentioned situation, the name preset should be upgra
 
 ## Diff
 
-`arch-hs` also provides a component called `arch-hs-diff`. `arch-hs-diff` can show the differences of package description between two versions of a package.
-This is useful in the subsequent maintenance of a package. Example:
+`arch-hs` also provides a component called `arch-hs-diff`. `arch-hs-diff` can show the differences of package description between two versions of a package,
+and remind us if some required packages in community repo can't satisfy the version constraints, or they are non-existent.
+This is useful in the subsequent maintenance of a package. For example:
 
 ```
-$ arch-hs-diff HTTP 4000.3.14 4000.3.15
-  ▶ You didn't pass -f, different flag values may make difference in dependency resolving.
-  ⓘ Start running...
-  ⓘ Downloading cabal file from https://hackage.haskell.org/package/HTTP-4000.3.14/revision/0.cabal...
-  ⓘ Downloading cabal file from https://hackage.haskell.org/package/HTTP-4000.3.15/revision/0.cabal...
-Package: HTTP
-Version: 4000.3.14  ⇒  4000.3.15
-Synopsis: A library for client-side HTTP
-URL: https://github.com/haskell/HTTP
+$ arch-hs-diff --alpm comonad 5.0.6 5.0.7
+ⓘ Loading community.db from libalpm
+ⓘ Start running...
+ⓘ Downloading cabal file from https://hackage.haskell.org/package/comonad-5.0.6/revision/0.cabal...
+ⓘ Downloading cabal file from https://hackage.haskell.org/package/comonad-5.0.7/revision/0.cabal...
+Package: comonad
+Version: 5.0.6  ⇒  5.0.7
+Synopsis: Comonads
+URL: http://github.com/ekmett/comonad/
 Depends:
-    base  >=4.3.0.0 && <4.14
-    time  >=1.1.2.3 && <1.10
-    array  >=0.3.0.2 && <0.6
-    bytestring  >=0.9.1.5 && <0.11
-    mtl  >=2.0 && <2.3
-    network  >=2.6 && <3.2
-    network-uri  ==2.6.*
-    parsec  >=2.0 && <3.2
+  base  >=4 && <5
+  containers  >=0.3 && <0.7
+  distributive  >=0.2.2 && <1
+  tagged  >=0.7 && <1
+  transformers  >=0.2 && <0.6
+  transformers-compat  >=0.3 && <1
 --------------------------------------
-    base  >=4.3.0.0 && <4.15
-    time  >=1.1.2.3 && <1.11
-    array  >=0.3.0.2 && <0.6
-    bytestring  >=0.9.1.5 && <0.11
-    mtl  >=2.0 && <2.3
-    network  >=2.6 && <3.2
-    network-uri  ==2.6.*
-    parsec  >=2.0 && <3.2
+  base  >=4 && <5
+  containers  >=0.3 && <0.7
+  distributive  >=0.2.2 && <1
+  indexed-traversable  >=0.1 && <0.2
+  tagged  >=0.7 && <1
+  transformers  >=0.2 && <0.6
+  transformers-compat  >=0.3 && <1
+ 
 MakeDepends:
-    HUnit  >=1.2.0.1 && <1.7
-    deepseq  >=1.3.0.0 && <1.5
-    httpd-shed  >=0.4 && <0.5
-    mtl  >=1.1.1.0 && <2.3
-    pureMD5  >=0.2.4 && <2.2
-    split  >=0.1.3 && <0.3
-    test-framework  >=0.2.0 && <0.9
-    test-framework-hunit  >=0.3.0 && <0.4
+  base  -any
+  doctest  >=0.11.1 && <0.17
+--------------------------------------
+  base  -any
+  doctest  >=0.11.1 && <0.18
+"doctest" is required to be in range (>=0.11.1 && <0.17), but [community] provides (0.17). 
 Flags:
-  HTTP
-    ⚐ mtl1:
-      description:
-        Use the old mtl version 1.
-      default: False
-      isManual: False
-    ⚐ warn-as-error:
-      description:
-        Build with warnings-as-errors
-      default: False
-      isManual: True
-    ⚐ conduit10:
-      description:
-        Use version 1.0.x or below of the conduit package (for the test suite)
-      default: False
-      isManual: False
-    ⚐ warp-tests:
-      description:
-        Test against warp
-      default: False
-      isManual: True
-    ⚐ network-uri:
-      description:
-        Get Network.URI from the network-uri package
-      default: True
-      isManual: False
+  comonad
+    ⚐ test-doctests:
+        description:
+          
+        default: True
+        isManual: True
+    ⚐ containers:
+        description:
+          You can disable the use of the `containers` package using `-f-containers`.
 
+          Disabing this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
+        default: True
+        isManual: True
+    ⚐ distributive:
+        description:
+          You can disable the use of the `distributive` package using `-f-distributive`.
 
-  ✔ Success!
+          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
+
+          If disabled we will not supply instances of `Distributive`
+
+        default: True
+        isManual: True
+--------------------------------------
+  comonad
+    ⚐ test-doctests:
+        description:
+          
+        default: True
+        isManual: True
+    ⚐ containers:
+        description:
+          You can disable the use of the `containers` package using `-f-containers`.
+
+          Disabing this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
+        default: True
+        isManual: True
+    ⚐ distributive:
+        description:
+          You can disable the use of the `distributive` package using `-f-distributive`.
+
+          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
+
+          If disabled we will not supply instances of `Distributive`
+
+        default: True
+        isManual: True
+    ⚐ indexed-traversable:
+        description:
+          You can disable the use of the `indexed-traversable` package using `-f-indexed-traversable`.
+
+          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
+
+          If disabled we will not supply instances of `FunctorWithIndex`
+
+        default: True
+        isManual: True
+✔ Success!
 ```
 
 `arch-hs-diff` does not require hackage db, it downloads cabal files from hackage server instead. 
@@ -348,7 +410,7 @@ For hackage distribution maintainers only.
 ## Limitations
 
 * `arch-hs` will run into error, if solved targets contain cycle. Indeed, circular dependency lies ubiquitously in hackage because of tests,
-but basic cycles are resolved manually in \[community\] by maintainers. So after the provider simplification, `arch-hs` can eliminate these cycles.
+but basic cycles are resolved manually in [community] by maintainers. So after the provider simplification, `arch-hs` can eliminate these cycles.
 Nevertheless, if the target introduces new cycle or it dependens on a package in an unknown cycle, `arch-hs` will throw `CyclicExist` exception.
 
 * `arch-hs` is not able to handle with complicated situations: the libraries of a package partially exist in hackage, some libraries include external sources, etc. 
@@ -359,7 +421,7 @@ file patches, version range processes, etc. They need to be done manually, so **
 ## Alpm Support
 
 [alpm](https://www.archlinux.org/pacman/libalpm.3.html) is Arch Linux Package Management library.
-When running on Arch Linux, loading `community.db` through this library is slightly faster than using the internal parser of `arch-hs`.
+When running on Arch Linux, loading `community.db` and files dbs through this library is slightly faster than using the internal parser of `arch-hs`.
 Thus, `arch-hs` provides a flag `alpm` to enable this feature:
 
 ```
@@ -369,15 +431,7 @@ cabal build -f alpm
 This flag is enabled by default in `arch-hs` Arch Linux package.
 Compiled with `alpm`, `arch-hs` can accept runtime flag `--alpm`.
 **That said, if you want to use alpm to boost `arch-hs`, you need compile `arch-hs` with cabal flag `alpm`, and pass `--aplm` to `arch-hs` when running.**
-> When `alpm` is enabled, `arch-hs` will lose the capability of specifying the path of `community.db`.
-
-## ToDoList
-
-- [ ] **Standardized pretty printing**.
-
-- [x] AUR support.
-
-- [x] Working with given `.cabal` files which haven't been released to hackage.
+> When `alpm` is enabled, `arch-hs` will lose the capability of specifying the path of `community.db` and directory of files db.
 
 
 ## Contributing
