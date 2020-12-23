@@ -7,7 +7,7 @@
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
--- Maintainer: berberman <1793913507@qq.com>
+-- Maintainer: berberman <berberman@yandex.com>
 -- Stability: experimental
 -- Portability: portable
 --
@@ -27,12 +27,12 @@
 --
 -- @NAME_PRESET.json@ will be loaded during the compilation, generating haskell code to be called in runtime.
 --
--- Converting a community name to hackage name following these steps:
+-- Converting a archlinux community name to hackage name following these steps:
 --
 --   (1) Find if the name preset contains this rule
 --   (2) If it contains, then use it; or remove the @haskell-@ prefix
 --
--- Converting a hackage name to community name following these steps:
+-- Converting a hackage name to archlinux community name following these steps:
 --
 --   (1) Find if the name preset contains this rule
 --   (2) If it contains, then use it; or add the @haskell-@ prefix
@@ -68,13 +68,13 @@ $(loadNamePreset)
 -- This function is generated from @NAME_PRESET.json@
 communityToHackageP :: MyName 'ArchLinuxRep -> Maybe (MyName 'HackageRep)
 
--- | Convert a name from hackage representation to community representation, according to the name preset.
+-- | Convert a name from hackage representation to archlinux community representation, according to the name preset.
 -- If the preset doesn't contain this mapping rule, the function will return 'Nothing'.
 --
 -- This function is generated from @NAME_PRESET.json@
 hackageToCommunityP :: MyName 'HackageRep -> Maybe (MyName 'ArchLinuxRep)
 
--- | Special haskell packages in community reop, which should be ignored in the process.
+-- | Special haskell packages in community repo, which should be ignored in the process.
 --
 -- This function is generated from @NAME_PRESET.json@
 falseListP :: [MyName 'ArchLinuxRep]

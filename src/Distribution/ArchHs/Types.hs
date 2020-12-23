@@ -8,7 +8,7 @@
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
--- Maintainer: berberman <1793913507@qq.com>
+-- Maintainer: berberman <berberman@yandex.com>
 -- Stability: experimental
 -- Portability : portable
 -- Types used in this project.
@@ -57,6 +57,8 @@ newtype ArchLinuxName = ArchLinuxName
   deriving stock (Show, Read, Eq, Ord, Generic)
   deriving anyclass (NFData)
 
+-- | A external dependency provided by system,
+-- which is converted from package config (.pc) or extra lib (.so).
 newtype SystemDependency = SystemDependency String
   deriving stock (Show, Read, Eq, Ord, Generic)
   deriving anyclass (NFData)
@@ -90,7 +92,8 @@ data DependencyType
     CExeBuildTools UnqualComponentName
   | -- | By a /library/
     CLib
-  | CSetup
+  | -- By a /custom setup/
+    CSetup
   | -- | By a /test suit/
     CTest UnqualComponentName
   | -- | By a /benchmark/

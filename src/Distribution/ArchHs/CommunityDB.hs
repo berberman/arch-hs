@@ -4,7 +4,7 @@
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
--- Maintainer: berberman <1793913507@qq.com>
+-- Maintainer: berberman <berberman@yandex.com>
 -- Stability: experimental
 -- Portability: portable
 -- This module provides functions operating with @community.db@ of pacman.

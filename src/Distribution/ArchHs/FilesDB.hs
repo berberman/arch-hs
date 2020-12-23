@@ -2,7 +2,12 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-
+-- | Copyright: (c) 2020 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <berberman@yandex.com>
+-- Stability: experimental
+-- Portability: portable
+-- This module provides functions operating with 'FilesDB' of pacman.
 module Distribution.ArchHs.FilesDB
   ( defaultFilesDBDir,
     loadFilesDB,
@@ -45,6 +50,7 @@ callback ref x y = do
   y' <- peekCString y
   modifyIORef' ref (Seq.|> (ArchLinuxName x', y'))
 
+-- | The same purpose as 'loadFilesDB' but use alpm to query files db instead.
 loadFilesDBFFI :: DBKind -> IO FilesDB
 loadFilesDBFFI (show -> db) = do
   ref <- newIORef Seq.empty
@@ -56,7 +62,7 @@ loadFilesDBFFI (show -> db) = do
   return $ foldr (\(k,v)-> Map.insertWith (<>) k [v]) Map.empty list
 #endif
 
--- | Default path to files db.
+-- | Default directory containing files dbs (@/var/lib/pacman/sync@).
 defaultFilesDBDir :: FilePath
 defaultFilesDBDir = "/" </> "var" </> "lib" </> "pacman" </> "sync"
 
@@ -65,8 +71,8 @@ loadFilesDBC ::
   DBKind ->
   FilePath ->
   ConduitT i Result m ()
-loadFilesDBC db path = do
-  sourceFileBS (path </> show db <> ".files") .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
+loadFilesDBC db dir = do
+  sourceFileBS (dir </> show db <> ".files") .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
   where
     action header
       | Tar.FTNormal <- Tar.headerFileType header,
@@ -100,16 +106,19 @@ mergeResult = do
         when (files /= []) (yield (name, files)) >> mergeResult
     _ -> return ()
 
+-- | Load a @db@ from @dir@
 loadFilesDB :: DBKind -> FilePath -> IO FilesDB
-loadFilesDB db path = Map.fromList <$> runConduitRes (loadFilesDBC db path .| mergeResult .| sinkList)
+loadFilesDB db dir = Map.fromList <$> runConduitRes (loadFilesDBC db dir .| mergeResult .| sinkList)
 
--- Bad in performace
+-- | Lookup which Arch Linux package contains this @file@ from given files db.
+-- This query is bad in performance, since it traverses the entire db. 
 lookupPkg :: File -> FilesDB -> [ArchLinuxName]
 lookupPkg file = Map.foldrWithKey (\k v acc -> if file `elem` v then k : acc else acc) []
 
-data Result = Files FilePath [FilePath] | Desc FilePath ArchLinuxName
+data Result = Files FilePath [File] | Desc FilePath ArchLinuxName
   deriving stock (Show)
 
+-- | Three files repos: @core@, @community@, and @extra@
 data DBKind = Core | Community | Extra
 
 instance Show DBKind where
@@ -117,6 +126,8 @@ instance Show DBKind where
   show Community = "community"
   show Extra = "extra"
 
+-- | A file's name
 type File = String
 
+-- | Representation of @repo.db@.
 type FilesDB = Map.Map ArchLinuxName [File]

@@ -14,7 +14,7 @@ bug-reports:        https://github.com/berberman/arch-hs/issues
 license:            MIT
 license-file:       LICENSE
 author:             berberman
-maintainer:         berberman <1793913507@qq.com>
+maintainer:         berberman <berberman@yandex.com>
 copyright:          2020 berberman
 category:           Distribution
 build-type:         Simple

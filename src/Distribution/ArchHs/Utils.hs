@@ -2,7 +2,7 @@
 
 -- | Copyright: (c) 2020 berberman
 -- SPDX-License-Identifier: MIT
--- Maintainer: berberman <1793913507@qq.com>
+-- Maintainer: berberman <berberman@yandex.com>
 -- Stability: experimental
 -- Portability: portable
 -- Miscellaneous functions used crossing modules.
@@ -71,6 +71,9 @@ unLegacyExeV (LegacyExeDependency name v) = (mkPackageName name, v)
 unBuildTools :: ([LegacyExeDependency], [ExeDependency]) -> [(PackageName, VersionRange)]
 unBuildTools (l, e) = (unLegacyExeV <$> l) <> (unExeV <$> e)
 
+-- | Extract dependency names from '[PkgconfigDependency]' and '[SystemDependency]'.
+-- >>> (PkgconfigDependency "foo" _ver) --> (SystemDependency "foo.pc")
+-- >>> "foo" --> (SystemDependency "libfoo.so")
 unSystemDependency :: ([PkgconfigDependency], [String]) -> [SystemDependency]
 unSystemDependency (p, s) = [SystemDependency $ name <> ".pc" | (PkgconfigDependency (unPkgconfigName -> name) _) <- p] <> [SystemDependency $ "lib" <> name <> ".so" | name <- s]
 
@@ -130,6 +133,7 @@ buildDependsIfBuild info = whenBuildable [] info targetBuildDepends
 buildToolsAndbuildToolDependsIfBuild :: BuildInfo -> ([LegacyExeDependency], [ExeDependency])
 buildToolsAndbuildToolDependsIfBuild info = whenBuildable ([], []) info $ \i -> (buildTools i, buildToolDepends i)
 
+-- | 'pkgconfigDepends' combined with 'extraLibs', and check if this is 'buildable'.
 pkgconfigDependsAndExtraLibsIfBuild :: BuildInfo -> ([PkgconfigDependency], [String])
 pkgconfigDependsAndExtraLibsIfBuild info = whenBuildable ([], []) info $ \i -> (pkgconfigDepends i, extraLibs i)
 
@@ -177,26 +181,33 @@ isProvided :: SolvedPackage -> Bool
 isProvided (ProvidedPackage _ _) = True
 isProvided _ = False
 
+-- | Filter values from only 'First' list
 filterFirstDiff :: [Diff a] -> [Diff a]
 filterFirstDiff = filter (\case First _ -> True; _ -> False)
 
+-- | Filter values from only 'Second' list
 filterSecondDiff :: [Diff a] -> [Diff a]
 filterSecondDiff = filter (\case Second _ -> True; _ -> False)
 
+-- | Filter values from 'First' and 'Both' list
 filterFirstAndBothDiff :: [Diff a] -> [Diff a]
 filterFirstAndBothDiff = filter (\case Second _ -> False; _ -> True)
 
+-- | Filter values from 'Second' and 'Both' list
 filterSecondAndBothDiff :: [Diff a] -> [Diff a]
 filterSecondAndBothDiff = filter (\case First _ -> False; _ -> True)
 
+-- | Whether it only has 'Both'
 noDiff :: [Diff a] -> Bool
 noDiff = all (\case Both _ _ -> True; _ -> False)
 
+-- | Map value of diff
 mapDiff :: (a -> b) -> Diff a -> Diff b
 mapDiff f (First x) = First $ f x
 mapDiff f (Second x) = Second $ f x
 mapDiff f (Both x y) = Both (f x) (f y)
 
+-- | Extract value from diff
 unDiff :: Diff a -> a
 unDiff (First x) = x
 unDiff (Second x) = x
