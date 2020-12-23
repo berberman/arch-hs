@@ -3,6 +3,24 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.6.0.0
+
+* Adopt [prettyprinter](https://hackage.haskell.org/package/prettyprinter)
+
+* Support resolving `pkgconfigDepends` and `extraLibs` using pacman files db
+
+* Support resolving custom-setup dependencies
+
+* Add an option to force `arch-hs` to run even if the target is in [community] 
+
+* Adopt [Diff](https://hackage.haskell.org/package/Diff) in `arch-hs-diff` and `arch-hs-submit`
+
+* Fix the bug that `ghc` missing in depends
+
+* Fix typo ([#35](https://github.com/berberman/arch-hs/pull/35))
+
+* Update dependencies ([#35](https://github.com/berberman/arch-hs/pull/34))
+
 ## 0.5.0.0
 
 * Add `TargetDisappearException` to complain if target is clearly not reachable
