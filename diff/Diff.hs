@@ -250,7 +250,7 @@ dep :: Doc AnsiStyle -> VersionedList -> VersionedList -> Doc AnsiStyle
 dep s va vb =
   annMagneta s <> colon <> line
     <> if noDiff diff
-      then joinToString []
+      then joinToString da
       else
         joinToString da
           <> splitLine
