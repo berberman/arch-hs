@@ -3,6 +3,10 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.6.1.0
+
+This minor version includes a tiny fix in `arch-hs-diff` and bumping ghc version to 8.10.3.
+
 ## 0.6.0.0
 
 * Adopt [prettyprinter](https://hackage.haskell.org/package/prettyprinter)

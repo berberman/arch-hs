@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               arch-hs
-version:            0.6.0.0
+version:            0.6.1.0
 synopsis:           Distribute hackage packages to archlinux
 description:
   @arch-hs@ is a command-line program, which simplifies the process of producing
@@ -23,7 +23,7 @@ extra-doc-files:
   CHANGELOG.md
   README.md
 
-tested-with:        GHC ==8.10.2
+tested-with:        GHC ==8.10.3
 
 source-repository head
   type:     git
@@ -54,9 +54,9 @@ common common-options
     , microlens-th                 ^>=0.4.3
     , neat-interpolation           ^>=0.5.1
     , optparse-applicative         ^>=0.16.0
-    , polysemy
-    , prettyprinter
-    , prettyprinter-ansi-terminal
+    , polysemy                     ^>=1.4.0
+    , prettyprinter                ^>=1.7.0
+    , prettyprinter-ansi-terminal  ^>=1.1.2
     , req                          ^>=3.8.0
     , split                        ^>=0.2.3
     , tar-conduit                  ^>=0.3.2
