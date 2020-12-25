@@ -5,7 +5,11 @@ The changelog is available [on GitHub][2].
 
 ## 0.6.1.0
 
-This minor version includes a tiny fix in `arch-hs-diff` and bumping ghc version to 8.10.3.
+* Show dependens and makedepends in `arch-hs-diff` even if there is no difference between two target versions
+
+* Bump ghc version to 8.10.3
+
+* Fix an alignment error in `arch-hs-submit`
 
 ## 0.6.0.0
 

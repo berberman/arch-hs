@@ -9,7 +9,7 @@ module Submit
   )
 where
 
-import Control.Monad (unless)
+import Control.Monad (join, unless)
 import Data.Algorithm.Diff (getGroupedDiff)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map.Strict as Map
@@ -23,7 +23,7 @@ import Distribution.ArchHs.Local
 import Distribution.ArchHs.Name
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils (filterFirstDiff, filterSecondDiff, mapDiff, noDiff)
+import Distribution.ArchHs.Utils (filterFirstDiff, filterSecondDiff, mapDiff, noDiff, unDiff)
 import Network.HTTP.Req
 import Options.Applicative hiding (header)
 import qualified Options.Applicative
@@ -172,7 +172,7 @@ check community = do
   unless (null failed) $
     printWarn "Following packages in community are not linked to hackage:"
 
-  embed . putStrLn . unlines $ failed
+  embed . putStr . unlines $ failed
 
   let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages.csv"
       r = req GET api NoReqBody bsResponse mempty
@@ -182,19 +182,19 @@ check community = do
       hackage = parseDistroCSV . T.unpack $ decodeUtf8 bs
 
   let diff = getGroupedDiff hackage community
-      diffOld = mconcat . ppDiffColored . mapDiff (fmap ppRecord) <$> filterFirstDiff diff
-      diffNew = mconcat . ppDiffColored . mapDiff (fmap ppRecord) <$> filterSecondDiff diff
-      ppRecord (name, version, url) = "(" <> name <> ", " <> version <> ", " <> url <> ")\n"
+      diffOld = filterFirstDiff diff >>= (ppDiffColored . mapDiff (fmap ppRecord))
+      diffNew = filterSecondDiff diff >>= (ppDiffColored . mapDiff (fmap ppRecord))
+      ppRecord (name, version, url) = "(" <> name <> ", " <> version <> ", " <> url <> ")"
       j g x = if null x then "[]" else g x
-
   embed . putDoc . annMagneta $ "Diff" <> colon <> line
   embed . putDoc . indent 2 $
     if noDiff diff
       then "[]"
       else
-        j hsep diffOld
+        j cat diffOld
           <> splitLine
-          <> j hsep diffNew
+          <> j cat diffNew
+          <> line
 
   embed . putDoc $
     "Found"
