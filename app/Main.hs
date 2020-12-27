@@ -53,14 +53,14 @@ app target path aurSupport skip uusi force metaPath loadFilesDB' = do
 
   when inCommunity $
     if force
-      then printWarn "Target has been provided by [community], ignoring it"
+      then printWarn $ "Target has been provided by" <+> ppCommunity <> comma <+> "but you passed --force"
       else throw $ TargetExist target ByCommunity
 
   when aurSupport $ do
     inAur <- isInAur target
     when inAur $
       if force
-        then printWarn "Target has been provided by [aur], ignoring it"
+        then printWarn $ "Target has been provided by" <+> ppAur <> comma <+> "but you passed --force"
         else throw $ TargetExist target ByAur
 
   let removeSublibs pkgs =
@@ -81,7 +81,7 @@ app target path aurSupport skip uusi force metaPath loadFilesDB' = do
 
   embed $
     forM_ abnormalDependencies $ \(T.pack . unPackageName -> parent, childs) -> do
-      printWarn $ "Package \"" <> parent <> "\" is provided without:"
+      printWarn $ "Package" <+> dquotes (pretty parent) <+> "is provided without" <> colon
       forM_ childs $ putStrLn . unPackageName
 
   let fillProvidedPkgs provideList provider = map (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
@@ -92,7 +92,7 @@ app target path aurSupport skip uusi force metaPath loadFilesDB' = do
     when aurSupport $ printInfo "Start searching AUR..."
     aurProvideList <-
       if aurSupport
-        then filterM (\n -> do printInfo ("Searching " <> T.pack (unPackageName n)); isInAur n) $ filter (\x -> not $ x == target && force) $ toBePacked1 ^.. each . pkgName
+        then filterM (\n -> do printInfo ("Searching" <+> viaPretty n); isInAur n) $ filter (\x -> not $ x == target && force) $ toBePacked1 ^.. each . pkgName
         else return []
     let a = fillProvidedPkgs aurProvideList ByAur . fillProvidedDeps aurProvideList ByAur $ filledByCommunity
         b = a ^.. each . filtered (not . isProvided)
@@ -164,7 +164,7 @@ app target path aurSupport skip uusi force metaPath loadFilesDB' = do
           embed $ do
             createDirectoryIfMissing True dir
             writeFile fileName txt
-            printInfo $ "Write file: " <> T.pack fileName
+            printInfo $ "Write file" <> colon <+> pretty fileName
       )
       toBePacked2
 
@@ -192,7 +192,7 @@ app target path aurSupport skip uusi force metaPath loadFilesDB' = do
     embed $ do
       createDirectoryIfMissing True dir
       writeFile fileName (T.unpack txt)
-      printInfo $ "Write file: " <> T.pack fileName
+      printInfo $ "Write file" <> colon <+> pretty fileName
 
 -----------------------------------------------------------------------------
 data EmergedSysDep = Solved File ArchLinuxName | Unsolved File
@@ -258,7 +258,7 @@ main = printHandledIOException $
     Options {..} <- runArgsParser
 
     unless (null optFileTrace) $ do
-      printInfo $ "Trace will be dumped to " <> T.pack optFileTrace <> "."
+      printInfo $ "Trace will be dumped to" <+> pretty optFileTrace
       writeFile optFileTrace ""
 
     let isFlagEmpty = Map.null optFlags
@@ -272,20 +272,20 @@ main = printHandledIOException $
       printInfo "You chose to skip:"
       putDoc $ prettySkip optSkip <> line <> line
 
-    when optAur $ printInfo "You passed -a, searching AUR may takes a long time."
+    when optAur $ printInfo "You passed -a, searching AUR may takes a long time"
 
-    when optUusi $ printInfo "You passed --uusi, uusi will become makedepends of each package."
+    when optUusi $ printInfo "You passed --uusi, uusi will become makedepends of each package"
 
     hackagePath <- if null optHackagePath then lookupHackagePath else return optHackagePath
 
-    printInfo $ "Loading hackage from " <> T.pack hackagePath
+    printInfo $ "Loading hackage from" <+> pretty hackagePath
 
     hackage <- loadHackageDB hackagePath
 
     let isExtraEmpty = null optExtraCabalPath
 
     unless isExtraEmpty $
-      printInfo $ "You added " <> (T.pack . intercalate ", " $ map takeFileName optExtraCabalPath) <> " as extra cabal file(s), starting parsing right now."
+      printInfo $ "You added" <+> hsep (punctuate comma $ pretty . takeFileName <$> optExtraCabalPath) <+> "as extra cabal file(s), starting parsing right now"
 
     parsedExtra <- mapM parseCabalFile optExtraCabalPath
 
@@ -293,10 +293,10 @@ main = printHandledIOException $
 
 #ifdef ALPM
     let src = T.pack $ if optAlpm then "libalpm" else defaultCommunityDBPath
-    printInfo $ "Loading community.db from " <> src
+    printInfo $ "Loading community.db from " <> pretty src
     community <- if optAlpm then loadCommunityDBFFI else loadCommunityDB defaultCommunityDBPath
 #else
-    printInfo $ "Loading community.db from " <> T.pack optCommunityDBPath
+    printInfo $ "Loading community.db from" <+> pretty optCommunityDBPath
     community <- loadCommunityDB optCommunityDBPath
 #endif
 
@@ -306,10 +306,10 @@ main = printHandledIOException $
 
     let loadF db = do
 #ifdef ALPM
-          printInfo $ "Loading " <> T.pack (show db) <>" files from libalpm..."
+          printInfo $ "Loading" <+> ppDBKind db <+> "files from libalpm"
           if optAlpm then loadFilesDBFFI db else loadFilesDB db defaultFilesDBDir
 #else
-          printInfo $ "Loading " <> T.pack (show db) <>" files from " <> T.pack optFilesDBPath <> "..."
+          printInfo $ "Loading" <+> ppDBKind db <+> "files from" <+> pretty optFilesDBPath
           loadFilesDB db optFilesDBPath
 
 #endif

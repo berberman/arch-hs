@@ -9,7 +9,7 @@ module Submit
   )
 where
 
-import Control.Monad (join, unless)
+import Control.Monad (unless)
 import Data.Algorithm.Diff (getGroupedDiff)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map.Strict as Map
@@ -23,7 +23,7 @@ import Distribution.ArchHs.Local
 import Distribution.ArchHs.Name
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils (filterFirstDiff, filterSecondDiff, mapDiff, noDiff, unDiff)
+import Distribution.ArchHs.Utils (filterFirstDiff, filterSecondDiff, mapDiff, noDiff)
 import Network.HTTP.Req
 import Options.Applicative hiding (header)
 import qualified Options.Applicative
@@ -144,7 +144,7 @@ submit token output upload = do
   let v = renderDistroCSV csv
   embed $
     unless (null output) $ do
-      printInfo $ "Write file: " <> T.pack output
+      printInfo $ "Write file" <> colon <+> pretty output
       writeFile output v
   check csv
   interceptHttpException $
@@ -155,8 +155,8 @@ submit token output upload = do
             req PUT api (ReqBodyBs . BS.pack $ v) bsResponse $
               header "Authorization" (BS.pack $ "X-ApiKey " <> fromJust token) <> header "Content-Type" "text/csv"
       result <- runReq defaultHttpConfig r
-      printInfo $ "StatusCode: " <> (T.pack . show $ responseStatusCode result)
-      printInfo $ "ResponseMessage: " <> decodeUtf8 (responseStatusMessage result)
+      printInfo $ "StatusCode" <> colon <+> pretty (responseStatusCode result)
+      printInfo $ "ResponseMessage" <> colon <+> pretty (decodeUtf8 (responseStatusMessage result))
       printInfo "ResponseBody:"
       putStrLn . BS.unpack $ responseBody result
 

@@ -5,7 +5,6 @@
 module Main (main) where
 
 import Control.Monad (unless)
-import qualified Data.Text as T
 import Distribution.ArchHs.CommunityDB
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
@@ -28,28 +27,26 @@ main = printHandledIOException $
 
     let hasOutput = not $ null optOutput
     when hasOutput $ do
-      printInfo $ "Output will be dumped to " <> T.pack optOutput <> "."
+      printInfo $ "Output will be dumped to" <+> pretty optOutput
       exist <- doesFileExist optOutput
       when exist $
-        printWarn $ "File " <> T.pack optOutput <> " already existed, overwrite it."
+        printWarn $ "File" <+> pretty optOutput <+> "already existed" <+> "overwrite it"
     printInfo "Start running..."
     unless (optUpload || hasOutput) $
-      printWarn "Run diff and check only."
+      printWarn "Run diff and check only"
 
 #ifdef ALPM
-    let src = T.pack $ if optAlpm then "libalpm" else defaultCommunityDBPath
-    printInfo $ "Loading community.db from " <> src
+    let src = if optAlpm then "libalpm" else defaultCommunityDBPath
+    printInfo $ "Loading community.db from" <+> pretty src
     community <- if optAlpm then loadCommunityDBFFI else loadCommunityDB defaultCommunityDBPath
 #else
-    printInfo $ "Loading community.db from " <> T.pack optCommunityDBPath
+    printInfo $ "Loading community.db from" <+> pretty optCommunityDBPath
     community <- loadCommunityDB optCommunityDBPath
 #endif
 
-    printInfo "Loading community.db..."
-
     hackagePath <- if null optHackagePath then lookupHackagePath else return optHackagePath
 
-    printInfo $ "Loading hackage from " <> T.pack hackagePath
+    printInfo $ "Loading hackage from" <+> pretty hackagePath
 
     hackage <- loadHackageDB hackagePath
 

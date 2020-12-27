@@ -20,6 +20,8 @@ module Distribution.ArchHs.PP
     dui,
     cuo,
     ppCommunity,
+    ppAur,
+    ppDBKind,
     annYellow,
     annGreen,
     annMagneta,
@@ -44,6 +46,7 @@ import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Algorithm.Diff
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
+import Distribution.ArchHs.FilesDB (DBKind)
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types
 import qualified Distribution.Pretty as DPretty
@@ -159,17 +162,23 @@ splitLine = line <> pretty (replicate 38 '-') <> line
 ppFromTo :: Int -> Doc AnsiStyle -> Doc AnsiStyle -> Doc AnsiStyle
 ppFromTo i a b = a <> hcat (replicate i space) <> "⇒" <> hcat (replicate i space) <> b
 
-printInfo :: (MonadIO m) => T.Text -> m ()
-printInfo msg = liftIO . putDoc . annBlue $ "ⓘ" <+> pretty msg <> line
+printInfo :: (MonadIO m) => Doc AnsiStyle -> m ()
+printInfo msg = liftIO . putDoc . annBlue $ "ⓘ" <+> msg <> line
 
 ppCommunity :: Doc AnsiStyle
 ppCommunity = annCyan $ viaShow ByCommunity
 
-printWarn :: (MonadIO m) => T.Text -> m ()
-printWarn msg = liftIO . putDoc . annYellow $ "⚠" <+> pretty msg <> line
+ppDBKind :: DBKind -> Doc AnsiStyle
+ppDBKind x = annCyan . brackets $ viaShow x
 
-printError :: (MonadIO m) => T.Text -> m ()
-printError msg = liftIO . putDoc . annYellow $ "🛑" <+> pretty msg <> line
+ppAur :: Doc AnsiStyle
+ppAur = annCyan $ viaShow ByAur
 
-printSuccess :: (MonadIO m) => T.Text -> m ()
-printSuccess msg = liftIO . putDoc . annGreen $ dui <+> pretty msg <> line
+printWarn :: (MonadIO m) => Doc AnsiStyle -> m ()
+printWarn msg = liftIO . putDoc . annYellow $ "⚠" <+> msg <> line
+
+printError :: (MonadIO m) => Doc AnsiStyle -> m ()
+printError msg = liftIO . putDoc . annRed $ "🛑" <+> msg <> line
+
+printSuccess :: (MonadIO m) => Doc AnsiStyle -> m ()
+printSuccess msg = liftIO . putDoc . annGreen $ dui <+> msg <> line

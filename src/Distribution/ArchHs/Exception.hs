@@ -20,10 +20,9 @@ module Distribution.ArchHs.Exception
 where
 
 import qualified Control.Exception as CE
-import qualified Data.Text as T
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Name
-import Distribution.ArchHs.PP (printError, printSuccess)
+import Distribution.ArchHs.PP (colon, printError, printSuccess, viaShow, (<+>))
 import Distribution.ArchHs.Types
 import Network.HTTP.Req (HttpException (..))
 
@@ -50,13 +49,13 @@ instance Show MyException where
 
 -- | Catch 'CE.IOException' and print it.
 printHandledIOException :: IO () -> IO ()
-printHandledIOException = CE.handle @CE.IOException (\e -> printError $ "IOException: " <> (T.pack . show $ e))
+printHandledIOException = CE.handle @CE.IOException (\e -> printError $ "IOException" <> colon <+> viaShow e)
 
 -- | Print the result of 'errorToIOFinal'.
 printAppResult :: IO (Either MyException ()) -> IO ()
 printAppResult io =
   io >>= \case
-    Left x -> printError $ "Runtime Exception: " <> (T.pack . show $ x)
+    Left x -> printError $ "Runtime Exception" <> colon <+> viaShow x
     _ -> printSuccess "Success!"
 
 -- | Catch the 'HttpException' thrown in 'IO' monad, then re-throw it with 'NetworkException'.

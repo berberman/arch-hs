@@ -6,7 +6,6 @@ module Main (main) where
 
 import Control.Monad (unless)
 import qualified Data.Map as Map
-import qualified Data.Text as T
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Diff
 import Distribution.ArchHs.CommunityDB
@@ -26,11 +25,11 @@ main = printHandledIOException $
       putDoc $ prettyFlagAssignments optFlags <> line
 
 #ifdef ALPM
-    let src = T.pack $ if optAlpm then "libalpm" else defaultCommunityDBPath
-    printInfo $ "Loading community.db from " <> src
+    let src = if optAlpm then "libalpm" else defaultCommunityDBPath
+    printInfo $ "Loading community.db from" <+> pretty src
     community <- if optAlpm then loadCommunityDBFFI else loadCommunityDB defaultCommunityDBPath
 #else
-    printInfo $ "Loading community.db from " <> T.pack optCommunityDBPath
+    printInfo $ "Loading community.db from" <+> pretty optCommunityDBPath
     community <- loadCommunityDB optCommunityDBPath
 #endif
 

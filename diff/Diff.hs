@@ -135,7 +135,7 @@ getCabalFromHackage name version = do
   let urlPath = T.pack $ unPackageName name <> "-" <> prettyShow version
       api = https "hackage.haskell.org" /: "package" /: urlPath /: "revision" /: "0.cabal"
       r = req GET api NoReqBody bsResponse mempty
-  printInfo $ "Downloading cabal file from " <> renderUrl api <> "..."
+  printInfo $ "Downloading cabal file from" <+> pretty (renderUrl api)
   response <- interceptHttpException (runReq defaultHttpConfig r)
   case parseGenericPackageDescriptionMaybe $ responseBody response of
     Just x -> return x
@@ -244,7 +244,7 @@ lookupDiffCommunity va vb = do
 
   new <- fmap (pp True) <$> mapM inRange diffNew
   old <- fmap (pp False) <$> mapM inRange diffOld
-  return $ hsep [hsep old, hsep new]
+  return $ hsep [cat old, cat new]
 
 dep :: Doc AnsiStyle -> VersionedList -> VersionedList -> Doc AnsiStyle
 dep s va vb =
