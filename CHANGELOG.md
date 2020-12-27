@@ -3,6 +3,12 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.6.2.0
+
+* Use `Doc` to print prompt messages
+
+* Fix wrong line feeds in `arch-hs-diff`
+
 ## 0.6.1.0
 
 * Show dependens and makedepends in `arch-hs-diff` even if there is no difference between two target versions
