@@ -30,6 +30,7 @@ import Network.HTTP.Req hiding (header)
 
 #ifndef ALPM
 import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
+import Distribution.Types.SetupBuildInfo
 #endif
 
 data Options = Options
@@ -125,6 +126,17 @@ collectExeDeps = collectRunnableDeps condExecutables
 collectTestDeps :: Members [FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectTestDeps = collectRunnableDeps condTestSuites
 
+collectSetupDeps :: Member Trace r => GenericPackageDescription -> Sem r VersionedList
+collectSetupDeps cabal = do
+  let name = getPkgName' cabal
+  trace' $ "Getting setup dependencies of " <> show name
+  case setupBuildInfo $ packageDescription cabal of
+    Just (SetupBuildInfo deps _) -> do
+      let result = unDepV <$> deps
+      trace' $ "Found: " <> show result
+      return result
+    _ -> return []
+
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> VersionRange -> Sem r ()
 updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 
@@ -149,6 +161,7 @@ directDependencies cabal = do
   (libDeps, libToolsDeps) <- collectLibDeps cabal
   (exeDeps, exeToolsDeps) <- collectExeDeps cabal []
   (testDeps, testToolsDeps) <- collectTestDeps cabal []
+  setupDeps <- collectSetupDeps cabal
   let flatten = mconcat . fmap snd
       l = libDeps
       lt = libToolsDeps
@@ -159,7 +172,7 @@ directDependencies cabal = do
       notMyself = (/= getPkgName' cabal)
       distinct = filter (notMyself . fst) . nub
       depends = distinct $ l <> e
-      makedepends = distinct (lt <> et <> t <> tt) \\ depends
+      makedepends = distinct (lt <> et <> t <> tt <> setupDeps) \\ depends
       sort' = sortBy (\x y -> uncurry compare $ getTwo _1 x y)
   return (sort' depends, sort' makedepends)
 
@@ -188,7 +201,8 @@ diffCabal name a b = do
         dep "MakeDepends" ma mb,
         querym,
         flags name fa fb
-      ] <> line
+      ]
+      <> line
 
 diffTerm :: String -> (a -> String) -> a -> a -> Doc AnsiStyle
 diffTerm s f a b =
