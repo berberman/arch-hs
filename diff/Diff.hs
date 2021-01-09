@@ -27,10 +27,10 @@ import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.Dependency (Dependency)
 import Distribution.Utils.ShortText (fromShortText)
 import Network.HTTP.Req hiding (header)
+import Distribution.Types.SetupBuildInfo
 
 #ifndef ALPM
 import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
-import Distribution.Types.SetupBuildInfo
 #endif
 
 data Options = Options
