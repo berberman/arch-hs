@@ -254,11 +254,11 @@ lookupDiffCommunity va vb = do
           <+> "but"
           <+> ppCommunity
           <+> "does not provide this package"
-          <> comma
+          <> dot
 
   new <- fmap (pp True) <$> mapM inRange diffNew
   old <- fmap (pp False) <$> mapM inRange diffOld
-  return $ hsep [cat old, cat new]
+  return $ vsep [cat old, cat new]
 
 dep :: Doc AnsiStyle -> VersionedList -> VersionedList -> Doc AnsiStyle
 dep s va vb =
