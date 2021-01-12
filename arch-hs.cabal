@@ -117,7 +117,10 @@ executable arch-hs
   import:         common-options
   hs-source-dirs: app
   main-is:        Main.hs
-  other-modules:  Args
+  other-modules:
+    Args
+    Json
+
   build-depends:  arch-hs
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
 

@@ -34,6 +34,7 @@ data Options = Options
     optUusi :: Bool,
     optForce :: Bool,
     optMetaDir :: FilePath,
+    optJson :: FilePath,
 #ifdef ALPM
     optAlpm :: Bool,
 #endif
@@ -128,6 +129,12 @@ cmdOptions =
         ( long "meta"
             <> metavar "PATH"
             <> help "Path to target meta package"
+            <> value ""
+        )
+      <*> strOption
+        ( long "json"
+            <> metavar "PATH"
+            <> help "Path to json output (empty means do not write output as json to file)"
             <> value ""
         )
 #ifdef ALPM

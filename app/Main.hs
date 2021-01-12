@@ -11,6 +11,8 @@ import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.Labelled.AdjacencyMap as GL
 import Args
 import Control.Monad (filterM, forM_, unless)
+import qualified Data.Aeson as A
+import qualified Data.ByteString.Lazy as LBS
 import Data.Containers.ListUtils (nubOrd)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty (toList)
@@ -32,6 +34,7 @@ import Distribution.ArchHs.PP
 import qualified Distribution.ArchHs.PkgBuild as N
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
+import Json
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName)
 
@@ -44,9 +47,10 @@ app ::
   Bool ->
   Bool ->
   FilePath ->
+  FilePath ->
   (DBKind -> IO FilesDB) ->
   Sem r ()
-app target path aurSupport skip uusi force metaPath loadFilesDB' = do
+app target path aurSupport skip uusi force metaPath jsonPath loadFilesDB' = do
   (deps, sublibs, sysDeps) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
 
   inCommunity <- isInCommunity target
@@ -153,6 +157,19 @@ app target path aurSupport skip uusi force metaPath loadFilesDB' = do
       printInfo "Detected flag(s) from targets:"
       putDoc $ prettyFlags flags <> line <> line
 
+  let jsonOutput =
+        ArchHSOutput
+          (fromAbnormalDependency <$> abnormalDependencies)
+          (fromSolvedPackage <$> filledByBoth)
+          (reverse flattened)
+          (fromEmergedSysDep <$> sysDepsResult)
+          (fromFlag <$> flags)
+
+  embed $
+    unless (null jsonPath) $ do
+      LBS.writeFile jsonPath $ A.encode jsonOutput
+      printInfo $ "Write file" <> colon <+> pretty jsonPath
+
   unless (null path) $
     mapM_
       ( \solved -> do
@@ -221,6 +238,10 @@ ppEmergedSysDep :: EmergedSysDep -> (Doc AnsiStyle, Doc AnsiStyle)
 ppEmergedSysDep (Solved file (ArchLinuxName name)) = (annGreen . pretty $ file, "   ⇒   " <> (annCyan . pretty $ name))
 ppEmergedSysDep (Unsolved file) = (annYellow . annBold . pretty $ file, indent 19 cuo)
 
+fromEmergedSysDep :: EmergedSysDep -> SysDepsS
+fromEmergedSysDep (Unsolved file) = SysDepsS file Nothing
+fromEmergedSysDep (Solved file pkg) = SysDepsS file (Just pkg)
+
 -----------------------------------------------------------------------------
 
 runApp ::
@@ -260,6 +281,10 @@ main = printHandledIOException $
     unless (null optFileTrace) $ do
       printInfo $ "Trace will be dumped to" <+> pretty optFileTrace
       writeFile optFileTrace ""
+
+    unless (null optJson) $ do
+      printInfo $ "Output will be dumped to" <+> pretty optJson <+> "as json"
+      writeFile optJson ""
 
     let isFlagEmpty = Map.null optFlags
         isSkipEmpty = null optSkip
@@ -314,7 +339,15 @@ main = printHandledIOException $
 
 #endif
 
-    runApp newHackage community optFlags optStdoutTrace optFileTrace empty (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir loadF) & printAppResult
+    runApp
+      newHackage
+      community
+      optFlags
+      optStdoutTrace
+      optFileTrace
+      empty
+      (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir optJson loadF)
+      & printAppResult
 
 -----------------------------------------------------------------------------
 
