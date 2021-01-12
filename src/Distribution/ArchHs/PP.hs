@@ -127,8 +127,8 @@ prettySolvedPkg SolvedPackage {..} =
     ( \(i :: Int, SolvedDependency {..}) ->
         let prefix = if i == length _pkgDeps then " └─" else " ├─"
          in case _depProvider of
-              (Just x) -> (annGreen $ prefix <> viaPretty _depName <+> viaShow _depType, dui <+> annCyan (viaShow x))
-              _ -> (annYellow . annBold $ prefix <> viaPretty _depName <+> viaShow _depType, indent 16 cuo)
+              (Just x) -> (annGreen $ prefix <> viaPretty _depName <+> tupled (viaShow <$> _depType), dui <+> annCyan (viaShow x))
+              _ -> (annYellow . annBold $ prefix <> viaPretty _depName <+> tupled (viaShow <$> _depType), indent 16 cuo)
     )
     (zip [1 ..] _pkgDeps)
 prettySolvedPkg ProvidedPackage {..} = [(annGreen $ viaPretty _pkgName, dui <+> annCyan (viaShow _pkgProvider))]
