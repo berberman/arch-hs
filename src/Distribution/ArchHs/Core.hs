@@ -259,7 +259,7 @@ cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => Solv
 cabalToPkgBuild pkg uusi sysDeps = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> getLatestCabal name
-  _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> tryMaybe (getLatestSHA256 name)
+  _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> getLatestSHA256 name
   let _hkgName = pkg ^. pkgName & unPackageName
       _pkgName = unArchLinuxName . toArchLinuxName $ pkg ^. pkgName
       _pkgVer = prettyShow $ getPkgVersion cabal

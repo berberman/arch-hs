@@ -84,9 +84,9 @@ app target path aurSupport skip uusi force metaPath jsonPath loadFilesDB' = do
           providedPackages
 
   embed $
-    forM_ abnormalDependencies $ \(T.pack . unPackageName -> parent, childs) -> do
+    forM_ abnormalDependencies $ \(T.pack . unPackageName -> parent, children) -> do
       printWarn $ "Package" <+> dquotes (pretty parent) <+> "is provided without" <> colon
-      forM_ childs $ putStrLn . unPackageName
+      forM_ children $ putStrLn . unPackageName
 
   let fillProvidedPkgs provideList provider = map (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = map (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))

@@ -32,7 +32,9 @@ ignoreList =
           "ghc-bignum",
           "hans",
           "Win32",
-          "ghc-heap"
+          "ghc-heap",
+          -- a build-tools of "zip-archive", which is not haskell package
+          "unzip"
         ]
 
 -- | Packages already provided by <https://www.archlinux.org/packages/community/x86_64/ghc-libs/ ghc-libs>.
