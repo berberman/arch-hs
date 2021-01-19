@@ -23,7 +23,8 @@ jobs:
           haskell-conduit-extra haskell-hackage-db haskell-megaparsec \
           haskell-microlens haskell-microlens-th haskell-neat-interpolation \
           haskell-optparse-applicative haskell-polysemy haskell-req haskell-split \
-          haskell-tar-conduit haskell-diff haskell-prettyprinter haskell-prettyprinter-ansi-terminal
+          haskell-tar-conduit haskell-diff haskell-prettyprinter haskell-prettyprinter-ansi-terminal \
+          haskell-arch-web
 
     - name: Build
       run: |
