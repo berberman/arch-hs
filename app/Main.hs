@@ -35,6 +35,8 @@ import qualified Distribution.ArchHs.PkgBuild as N
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import Json
+import Network.HTTP.Client (Manager)
+import Network.HTTP.Client.TLS (newTlsManager)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName)
 
@@ -251,13 +253,14 @@ runApp ::
   Bool ->
   FilePath ->
   IORef (Set.Set PackageName) ->
+  Manager ->
   Sem '[CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, State (Set.Set PackageName), Aur, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runApp hackage community flags traceStdout tracePath ref =
+runApp hackage community flags traceStdout tracePath ref manager =
   runFinal
     . embedToFinal
     . errorToIOFinal
-    . aurToIO
+    . aurToIO manager
     . runStateIORef ref
     . runTrace traceStdout tracePath
     . evalState Map.empty
@@ -339,6 +342,8 @@ main = printHandledIOException $
 
 #endif
 
+    manager <- newTlsManager
+
     runApp
       newHackage
       community
@@ -346,6 +351,7 @@ main = printHandledIOException $
       optStdoutTrace
       optFileTrace
       empty
+      manager
       (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir optJson loadF)
       & printAppResult
 

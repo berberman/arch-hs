@@ -10,7 +10,11 @@
     in with pkgs; {
       overlay = self: super:
         let
-          hpkgs = super.haskellPackages;
+          hpkgs = super.haskellPackages.override{
+            overrides = hself: hsuper:{
+              arch-web = with super.haskell.lib; disableLibraryProfiling (dontCheck hsuper.arch-web);
+            };
+          };
           arch-hs = hpkgs.callCabal2nix "arch-hs" ./. { };
         in with super;
         with haskell.lib; {

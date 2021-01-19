@@ -10,17 +10,20 @@
 -- Template of PKGBUILD file.
 module Distribution.ArchHs.PkgBuild
   ( PkgBuild (..),
-    ArchLicense,
     mapLicense,
+    showArchLicense,
     applyTemplate,
     felixTemplate,
     metaTemplate,
   )
 where
 
+import qualified Data.Aeson as A
 import Data.Text (Text, pack, unpack)
+import qualified Data.Text as T
 import Distribution.SPDX.LicenseId
 import NeatInterpolation (text)
+import qualified Web.ArchLinux.Types as Arch
 
 -- | PkgBuild data type, representing needed information in filling the 'felixTemplate'.
 data PkgBuild = PkgBuild
@@ -50,83 +53,38 @@ data PkgBuild = PkgBuild
     _enableCheck :: Bool
   }
 
--- | Licenses available in <https://www.archlinux.org/packages/core/any/licenses/ licenses>.
-data ArchLicense
-  = AGPL3
-  | Apache
-  | Artistic2_0
-  | CDDL
-  | CPL
-  | EPL
-  | FDL1_2
-  | FDL1_3
-  | GPL2
-  | GPL3
-  | LGPL2_1
-  | LGPL3
-  | LPPL
-  | MPL
-  | MPL2
-  | PHP
-  | PSF
-  | PerlArtistic
-  | RUBY
-  | Unlicense
-  | W3C
-  | ZPL
-  | Custom String
-
-instance Show ArchLicense where
-  show AGPL3 = "AGPL"
-  show Apache = "Apache"
-  show Artistic2_0 = "Artistic2.0"
-  show CDDL = "CDDL"
-  show CPL = "CPL"
-  show EPL = "EPL"
-  show FDL1_2 = "FDL1.2"
-  show FDL1_3 = "FDL1.3"
-  show GPL2 = "GPL2"
-  show GPL3 = "GPL3"
-  show LGPL2_1 = "LGPL2.1"
-  show LGPL3 = "LGPL3"
-  show LPPL = "LPPL"
-  show MPL = "MPL"
-  show MPL2 = "MPL2"
-  show PHP = "PHP"
-  show PSF = "PSF"
-  show PerlArtistic = "PerlArtistic"
-  show RUBY = "RUBY"
-  show Distribution.ArchHs.PkgBuild.Unlicense = "Unlicense"
-  show Distribution.ArchHs.PkgBuild.W3C = "W3C"
-  show ZPL = "ZPL"
-  show (Custom x) = "custom:" <> x
-
 -- | Map 'LicenseId' to 'ArchLicense'. License not provided by system will be mapped to @custom:...@.
-mapLicense :: LicenseId -> ArchLicense
-mapLicense AGPL_3_0_only = AGPL3
-mapLicense Apache_2_0 = Apache
-mapLicense Artistic_2_0 = Artistic2_0
-mapLicense CDDL_1_0 = CDDL
-mapLicense CPL_1_0 = CPL
-mapLicense EPL_1_0 = EPL
-mapLicense GFDL_1_2_only = FDL1_2
-mapLicense GFDL_1_3_only = FDL1_3
-mapLicense GPL_2_0_only = GPL2
-mapLicense GPL_3_0_only = GPL3
-mapLicense LGPL_2_1_only = LGPL2_1
-mapLicense LGPL_3_0_only = LGPL3
-mapLicense LPPL_1_3c = LPPL
-mapLicense MPL_1_0 = MPL
-mapLicense MPL_2_0 = MPL2
-mapLicense PHP_3_01 = PHP
-mapLicense Python_2_0 = PSF
-mapLicense Artistic_1_0_Perl = PerlArtistic
-mapLicense Ruby = RUBY
-mapLicense ZPL_2_1 = ZPL
-mapLicense Distribution.SPDX.LicenseId.Unlicense = Distribution.ArchHs.PkgBuild.Unlicense
-mapLicense Distribution.SPDX.LicenseId.W3C = Distribution.ArchHs.PkgBuild.W3C
-mapLicense BSD_3_Clause = Custom "BSD3"
-mapLicense x = Custom $ show x
+mapLicense :: LicenseId -> Arch.License
+mapLicense AGPL_3_0_only = Arch.AGPL3
+mapLicense Apache_2_0 = Arch.Apache
+mapLicense Artistic_2_0 = Arch.Artistic2_0
+mapLicense CDDL_1_0 = Arch.CDDL
+mapLicense CPL_1_0 = Arch.CPL
+mapLicense EPL_1_0 = Arch.EPL
+mapLicense GFDL_1_2_only = Arch.FDL1_2
+mapLicense GFDL_1_3_only = Arch.FDL1_3
+mapLicense GPL_2_0_only = Arch.GPL2
+mapLicense GPL_3_0_only = Arch.GPL3
+mapLicense LGPL_2_1_only = Arch.LGPL2_1
+mapLicense LGPL_3_0_only = Arch.LGPL3
+mapLicense LPPL_1_3c = Arch.LPPL
+mapLicense MPL_1_0 = Arch.MPL
+mapLicense MPL_2_0 = Arch.MPL2
+mapLicense PHP_3_01 = Arch.PHP
+mapLicense Python_2_0 = Arch.PSF
+mapLicense Artistic_1_0_Perl = Arch.PerlArtistic
+mapLicense Ruby = Arch.RUBY
+mapLicense ZPL_2_1 = Arch.ZPL
+mapLicense Unlicense = Arch.Unlicense
+mapLicense W3C = Arch.W3C
+mapLicense BSD_3_Clause = Arch.Custom "BSD3"
+mapLicense x = Arch.Custom . T.pack $ show x
+
+-- | Show an archlinux license
+showArchLicense :: Arch.License -> String
+showArchLicense license = case A.toJSON license of
+  (A.String x) -> T.unpack x
+  _ -> error "impossible"
 
 -- | Apply 'PkgBuild' to 'felixTemplate'.
 applyTemplate :: PkgBuild -> String

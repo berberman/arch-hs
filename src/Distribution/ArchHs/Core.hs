@@ -31,6 +31,7 @@ import Distribution.ArchHs.Name
 import Distribution.ArchHs.PkgBuild
   ( PkgBuild (..),
     mapLicense,
+    showArchLicense,
   )
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
@@ -266,8 +267,8 @@ cabalToPkgBuild pkg uusi sysDeps = do
       _pkgDesc = fromShortText $ synopsis cabal
       getL NONE = ""
       getL (License e) = getE e
-      getE (ELicense (ELicenseId x) _) = show . mapLicense $ x
-      getE (ELicense (ELicenseIdPlus x) _) = show . mapLicense $ x
+      getE (ELicense (ELicenseId x) _) = showArchLicense . mapLicense $ x
+      getE (ELicense (ELicenseIdPlus x) _) = showArchLicense . mapLicense $ x
       getE (ELicense (ELicenseRef x) _) = "custom:" <> licenseRef x
       getE (EAnd x y) = getE x <> " " <> getE y
       getE (EOr x y) = getE x <> " " <> getE y
