@@ -12,6 +12,7 @@ where
 import Control.Monad (unless)
 import Data.Algorithm.Diff (getGroupedDiff)
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromJust)
 import qualified Data.Text as T
@@ -32,7 +33,6 @@ import Text.Megaparsec.Char as M
 
 #ifndef ALPM
 import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
-import qualified Data.ByteString.Lazy as LBS
 #endif
 
 data Options = Options
