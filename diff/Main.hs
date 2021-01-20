@@ -13,6 +13,8 @@ import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
+import Network.HTTP.Client (Manager)
+import Network.HTTP.Client.TLS (newTlsManager)
 
 main :: IO ()
 main = printHandledIOException $
@@ -33,8 +35,23 @@ main = printHandledIOException $
     community <- loadCommunityDB optCommunityDBPath
 #endif
 
-    printInfo "Start running..."
-    runDiff community optFlags (diffCabal optPackageName optVersionA optVersionB) & printAppResult
+    manager <- newTlsManager
 
-runDiff :: CommunityDB -> FlagAssignments -> Sem '[CommunityEnv, FlagAssignmentsEnv, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a -> IO (Either MyException a)
-runDiff community flags = runFinal . embedToFinal . errorToIOFinal . evalState Map.empty . ignoreTrace . runReader flags . runReader community
+    printInfo "Start running..."
+    runDiff community optFlags manager (diffCabal optPackageName optVersionA optVersionB) & printAppResult
+
+runDiff ::
+  CommunityDB ->
+  FlagAssignments ->
+  Manager ->
+  Sem '[CommunityEnv, FlagAssignmentsEnv, Reader Manager, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
+  IO (Either MyException a)
+runDiff community flags manager =
+  runFinal
+    . embedToFinal
+    . errorToIOFinal
+    . evalState Map.empty
+    . ignoreTrace
+    . runReader manager
+    . runReader flags
+    . runReader community

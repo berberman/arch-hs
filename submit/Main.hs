@@ -11,6 +11,8 @@ import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
+import Network.HTTP.Client (Manager)
+import Network.HTTP.Client.TLS (newTlsManager)
 import Submit
 import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
@@ -50,7 +52,20 @@ main = printHandledIOException $
 
     hackage <- loadHackageDB hackagePath
 
-    runSubmit community hackage (submit token optOutput optUpload) & printAppResult
+    manager <- newTlsManager
 
-runSubmit :: CommunityDB -> HackageDB -> Sem '[CommunityEnv, HackageEnv, WithMyErr, Embed IO, Final IO] a -> IO (Either MyException a)
-runSubmit community hackage = runFinal . embedToFinal . errorToIOFinal . runReader hackage . runReader community
+    runSubmit community hackage manager (submit token optOutput optUpload) & printAppResult
+
+runSubmit ::
+  CommunityDB ->
+  HackageDB ->
+  Manager ->
+  Sem '[CommunityEnv, HackageEnv, Reader Manager, WithMyErr, Embed IO, Final IO] a ->
+  IO (Either MyException a)
+runSubmit community hackage manager =
+  runFinal
+    . embedToFinal
+    . errorToIOFinal
+    . runReader manager
+    . runReader hackage
+    . runReader community

@@ -10,9 +10,9 @@ module Diff
 where
 
 import Data.Algorithm.Diff
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
-import qualified Data.Text as T
 import Distribution.ArchHs.CommunityDB (versionInCommunity)
 import Distribution.ArchHs.Core (evalConditionTree)
 import Distribution.ArchHs.Exception
@@ -25,9 +25,9 @@ import Distribution.PackageDescription (CondTree, ConfVar)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.Dependency (Dependency)
-import Distribution.Utils.ShortText (fromShortText)
-import Network.HTTP.Req hiding (header)
 import Distribution.Types.SetupBuildInfo
+import Distribution.Utils.ShortText (fromShortText)
+import Network.HTTP.Client
 
 #ifndef ALPM
 import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
@@ -142,16 +142,17 @@ updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 
 -----------------------------------------------------------------------------
 
-getCabalFromHackage :: Members [Embed IO, WithMyErr] r => PackageName -> Version -> Sem r GenericPackageDescription
+getCabalFromHackage :: Members [Embed IO, WithMyErr, Reader Manager] r => PackageName -> Version -> Sem r GenericPackageDescription
 getCabalFromHackage name version = do
-  let urlPath = T.pack $ unPackageName name <> "-" <> prettyShow version
-      api = https "hackage.haskell.org" /: "package" /: urlPath /: "revision" /: "0.cabal"
-      r = req GET api NoReqBody bsResponse mempty
-  printInfo $ "Downloading cabal file from" <+> pretty (renderUrl api)
-  response <- interceptHttpException (runReq defaultHttpConfig r)
-  case parseGenericPackageDescriptionMaybe $ responseBody response of
+  let urlPath = unPackageName name <> "-" <> prettyShow version
+      s = "https://hackage.haskell.org/package/" <> urlPath <> "/revision/0.cabal"
+  req <- interceptHttpException $ parseRequest s
+  printInfo $ "Downloading cabal file from" <+> pretty s
+  manager <- ask @Manager
+  response <- interceptHttpException $ httpLbs req manager
+  case parseGenericPackageDescriptionMaybe . LBS.toStrict $ responseBody response of
     Just x -> return x
-    _ -> error $ "Failed to parse .cabal file from " <> show api
+    _ -> error "Failed to parse .cabal file"
 
 directDependencies ::
   Members [FlagAssignmentsEnv, Trace, DependencyRecord] r =>
@@ -178,7 +179,7 @@ directDependencies cabal = do
 
 -----------------------------------------------------------------------------
 
-diffCabal :: Members [CommunityEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Embed IO] r => PackageName -> Version -> Version -> Sem r ()
+diffCabal :: Members [CommunityEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Reader Manager, Embed IO] r => PackageName -> Version -> Version -> Sem r ()
 diffCabal name a b = do
   ga <- getCabalFromHackage name a
   gb <- getCabalFromHackage name b

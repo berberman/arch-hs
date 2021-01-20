@@ -24,7 +24,7 @@ import Distribution.ArchHs.Name
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (filterFirstDiff, filterSecondDiff, mapDiff, noDiff)
-import Network.HTTP.Req
+import Network.HTTP.Client
 import Options.Applicative hiding (header)
 import qualified Options.Applicative
 import qualified Text.Megaparsec as M
@@ -32,6 +32,7 @@ import Text.Megaparsec.Char as M
 
 #ifndef ALPM
 import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
+import qualified Data.ByteString.Lazy as LBS
 #endif
 
 data Options = Options
@@ -138,7 +139,7 @@ genCSV = do
          in (unPackageName hackageName, version, prefix <> archLinuxName')
   return $ processField <$> fields
 
-submit :: Members [HackageEnv, CommunityEnv, WithMyErr, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
+submit :: Members [HackageEnv, CommunityEnv, WithMyErr, Reader Manager, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
 submit token output upload = do
   csv <- genCSV
   let v = renderDistroCSV csv
@@ -147,20 +148,26 @@ submit token output upload = do
       printInfo $ "Write file" <> colon <+> pretty output
       writeFile output v
   check csv
+  manager <- ask
   interceptHttpException $
     when ((not . null) token && upload) $ do
       printInfo "Uploading..."
-      let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages"
-          r =
-            req PUT api (ReqBodyBs . BS.pack $ v) bsResponse $
-              header "Authorization" (BS.pack $ "X-ApiKey " <> fromJust token) <> header "Content-Type" "text/csv"
-      result <- runReq defaultHttpConfig r
-      printInfo $ "StatusCode" <> colon <+> pretty (responseStatusCode result)
-      printInfo $ "ResponseMessage" <> colon <+> pretty (decodeUtf8 (responseStatusMessage result))
+      initialRequest <- parseRequest "https://hackage.haskell.org/distro/Arch/packages"
+      let req =
+            initialRequest
+              { method = "PUT",
+                requestBody = RequestBodyBS . BS.pack $ v,
+                requestHeaders =
+                  [ ("Authorization", "X-ApiKey " <> BS.pack (fromJust token)),
+                    ("Content-Type", "text/csv")
+                  ]
+              }
+      result <- httpLbs req manager
+      printInfo $ "Status" <> colon <+> viaShow (responseStatus result)
       printInfo "ResponseBody:"
-      putStrLn . BS.unpack $ responseBody result
+      printInfo . pretty . decodeUtf8 . LBS.toStrict $ responseBody result
 
-check :: Members [HackageEnv, WithMyErr, Embed IO] r => DistroCSV -> Sem r ()
+check :: Members [HackageEnv, WithMyErr, Reader Manager, Embed IO] r => DistroCSV -> Sem r ()
 check community = do
   printInfo "Checking generated csv file..."
 
@@ -170,16 +177,16 @@ check community = do
   failed <- catMaybes . f <$> mapM (\x -> try @MyException (getLatestCabal $ mkPackageName x)) hackageNames
 
   unless (null failed) $
-    printWarn "Following packages in community are not linked to hackage:"
+    printWarn $ "Following packages in" <+> ppCommunity <+> "are not linked to hackage:"
 
   embed . putStr . unlines $ failed
 
-  let api = https "hackage.haskell.org" /: "distro" /: "Arch" /: "packages.csv"
-      r = req GET api NoReqBody bsResponse mempty
+  req <- interceptHttpException $ parseRequest "https://hackage.haskell.org/distro/Arch/packages.csv"
   printInfo "Downloading csv from hackage..."
-  result <- interceptHttpException $ runReq defaultHttpConfig r
+  manager <- ask
+  result <- interceptHttpException $ httpLbs req manager
   let bs = responseBody result
-      hackage = parseDistroCSV . T.unpack $ decodeUtf8 bs
+      hackage = parseDistroCSV . T.unpack . decodeUtf8 . LBS.toStrict $ bs
 
   let diff = getGroupedDiff hackage community
       diffOld = filterFirstDiff diff >>= (ppDiffColored . mapDiff (fmap ppRecord))

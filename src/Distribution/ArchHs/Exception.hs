@@ -15,6 +15,7 @@ module Distribution.ArchHs.Exception
     printHandledIOException,
     printAppResult,
     tryMaybe,
+    interceptHttpException,
   )
 where
 
@@ -23,7 +24,8 @@ import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Name
 import Distribution.ArchHs.PP (colon, printError, printSuccess, viaShow, (<+>))
 import Distribution.ArchHs.Types
-import Servant.Client (ClientError)
+import Network.HTTP.Client (HttpException)
+import Servant.Client (ClientError (ConnectionError))
 
 -- | Error effect of 'MyException'
 type WithMyErr = Error MyException
@@ -62,3 +64,11 @@ tryMaybe m =
   try @MyException m >>= \case
     Left _ -> return Nothing
     Right x -> return $ Just x
+
+-- | Catch the 'HttpException' thrown in 'IO' monad, then re-throw it with 'NetworkException'.
+interceptHttpException :: Members [WithMyErr, Embed IO] r => IO a -> Sem r a
+interceptHttpException io = do
+  x <- embed $ CE.try io
+  case x of
+    Left (err :: HttpException) -> throw . NetworkException . ConnectionError . CE.SomeException $ err
+    Right x' -> return x'
