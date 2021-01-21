@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               arch-hs
-version:            0.6.2.0
+version:            0.7.0.0
 synopsis:           Distribute hackage packages to archlinux
 description:
   @arch-hs@ is a command-line program, which simplifies the process of producing
@@ -15,7 +15,7 @@ license:            MIT
 license-file:       LICENSE
 author:             berberman
 maintainer:         berberman <berberman@yandex.com>
-copyright:          2020 berberman
+copyright:          (c) 2020-2021 berberman
 category:           Distribution
 build-type:         Simple
 extra-source-files: data/NAME_PRESET.json
@@ -40,7 +40,7 @@ common common-options
     , algebraic-graphs             ^>=0.5
     , arch-web                     ^>=0.1.0
     , base                         ^>=4.14.0
-    , bytestring                   ^>=0.10.10
+    , bytestring                   ^>=0.11.0
     , Cabal                        ^>=3.2.0
     , conduit                      ^>=1.3.2
     , conduit-extra                ^>=1.3.5
@@ -113,7 +113,6 @@ library
     Distribution.ArchHs.Utils
 
   other-modules:
-    Data.Aeson.Ext
     Distribution.ArchHs.Internal.NamePresetLoader
 
 executable arch-hs

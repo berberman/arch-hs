@@ -3,6 +3,18 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.7.0.0
+
+* Support dumping output of `arch-hs` to JSON
+
+* Support resolving setup dependencies in `arch-hs-diff`
+
+* Fix wrong concatenation direction of differentiating dependencies in `arch-hs-diff`
+
+* Replace `req` with [`arch-web`](https://github.com/berberman/arch-web) and `http-client`
+
+* Make `getLatestSHA256` become total function
+
 ## 0.6.2.0
 
 * Use `Doc` to print prompt messages

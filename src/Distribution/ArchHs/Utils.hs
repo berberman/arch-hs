@@ -1,6 +1,6 @@
 {-# LANGUAGE ViewPatterns #-}
 
--- | Copyright: (c) 2020 berberman
+-- | Copyright: (c) 2020-2021 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <berberman@yandex.com>
 -- Stability: experimental

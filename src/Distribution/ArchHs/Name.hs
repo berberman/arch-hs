@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- | Copyright: (c) 2020 berberman
+-- | Copyright: (c) 2020-2021 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <berberman@yandex.com>
 -- Stability: experimental
@@ -40,8 +40,8 @@
 -- For details, see the type 'MyName' and type class 'HasMyName' with its instances.
 module Distribution.ArchHs.Name
   ( MyName,
-    HasMyName,
     NameRep (..),
+    HasMyName (..),
     toArchLinuxName,
     toHackageName,
     isHaskellPackage,
