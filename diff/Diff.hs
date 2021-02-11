@@ -12,7 +12,7 @@ where
 import Data.Algorithm.Diff
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromJust)
+import Data.Maybe (catMaybes, fromJust)
 import Distribution.ArchHs.CommunityDB (versionInCommunity)
 import Distribution.ArchHs.Core (evalConditionTree)
 import Distribution.ArchHs.Exception
@@ -237,29 +237,31 @@ lookupDiffCommunity va vb = do
       diffNew = mconcat $ unDiff <$> filterSecondDiff diff
       annF b = if b then annGreen else annRed
       pp b (Right (name, range, v, False)) =
-        dquotes (annF b $ viaPretty name)
-          <+> "is required to be in range"
-          <+> parens (annF b $ viaPretty range)
-          <> comma
-          <+> "but"
-          <+> ppCommunity
-          <+> "provides"
-          <+> parens (annF b $ viaPretty v)
-          <> dot
-      pp _ (Right _) = ""
+        Just $
+          dquotes (annF b $ viaPretty name)
+            <+> "is required to be in range"
+            <+> parens (annF b $ viaPretty range)
+            <> comma
+            <+> "but"
+            <+> ppCommunity
+            <+> "provides"
+            <+> parens (annF b $ viaPretty v)
+            <> dot
+      pp _ (Right _) = Nothing
       pp b (Left (name, range)) =
-        dquotes (annF b $ viaPretty name)
-          <+> "is required to be in range"
-          <+> parens (annF b $ viaPretty range)
-          <> comma
-          <+> "but"
-          <+> ppCommunity
-          <+> "does not provide this package"
-          <> dot
+        Just $
+          dquotes (annF b $ viaPretty name)
+            <+> "is required to be in range"
+            <+> parens (annF b $ viaPretty range)
+            <> comma
+            <+> "but"
+            <+> ppCommunity
+            <+> "does not provide this package"
+            <> dot
 
   new <- fmap (pp True) <$> mapM inRange diffNew
   old <- fmap (pp False) <$> mapM inRange diffOld
-  return $ vsep [cat old, cat new]
+  return $ vsep [cat $ catMaybes old, cat $ catMaybes new]
 
 dep :: Doc AnsiStyle -> VersionedList -> VersionedList -> Doc AnsiStyle
 dep s va vb =
