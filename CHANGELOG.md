@@ -5,6 +5,8 @@ The changelog is available [on GitHub][2].
 
 ## 0.7.1.0
 
+* Bump ghc version to 8.10.4
+
 * Fix some output formats
 
 ## 0.7.0.0

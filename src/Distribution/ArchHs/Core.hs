@@ -49,7 +49,7 @@ archEnv _ (OS Linux) = Right True
 archEnv _ (OS _) = Right False
 archEnv _ (Arch X86_64) = Right True
 archEnv _ (Arch _) = Right False
-archEnv _ (Impl GHC range) = Right $ withinRange (mkVersion [8, 10, 3]) range
+archEnv _ (Impl GHC range) = Right $ withinRange (mkVersion [8, 10, 4]) range
 archEnv _ (Impl _ _) = Right False
 archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
   where
