@@ -1,7 +1,7 @@
 # arch-hs
 
 [![Hackage](https://img.shields.io/hackage/v/arch-hs.svg?logo=haskell)](https://hackage.haskell.org/package/arch-hs)
-![Dependency](https://img.shields.io/hackage-deps/v/arch-hs)
+[![Dependency](https://img.shields.io/hackage-deps/v/arch-hs)](https://packdeps.haskellers.com/feed?needle=arch-hs)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 | Env              | CI                                                                                                                        |
@@ -11,7 +11,7 @@
 
 A program generating PKGBUILD for hackage packages. Special thanks to [felixonmars](https://github.com/felixonmars/).
 
-**Notice that `arch-hs` will always support only the latest GHC version.**
+**Notice that `arch-hs` will always support only the latest GHC version used by Arch Linux.**
 
 
 ## Introduction

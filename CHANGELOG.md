@@ -3,6 +3,10 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.7.1.0
+
+* Fix some output formats
+
 ## 0.7.0.0
 
 * Support dumping output of `arch-hs` to JSON
