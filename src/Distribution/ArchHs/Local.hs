@@ -27,7 +27,7 @@ ignoreList =
           "old-time",
           "integer",
           "unsupported-ghc-version",
-          "base",
+          "rts",
           "ghc-prim",
           "ghc-bignum",
           "hans",
