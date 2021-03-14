@@ -105,13 +105,13 @@ collectLibDeps cabal = do
       return (libDeps, toolDeps)
     Nothing -> return ([], [])
 
-collectRunnableDeps ::
+collectComponentialDeps ::
   (Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, Trace, DependencyRecord] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
   Sem r (VersionedComponentList, VersionedComponentList)
-collectRunnableDeps f cabal skip = do
+collectComponentialDeps f cabal skip = do
   let exes = cabal & f
   bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree cabal . snd) exes
   let deps = bInfo <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
@@ -121,10 +121,13 @@ collectRunnableDeps f cabal skip = do
   return (deps, toolDeps)
 
 collectExeDeps :: Members [FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
-collectExeDeps = collectRunnableDeps condExecutables
+collectExeDeps = collectComponentialDeps condExecutables
 
 collectTestDeps :: Members [FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
-collectTestDeps = collectRunnableDeps condTestSuites
+collectTestDeps = collectComponentialDeps condTestSuites
+
+collectSubLibDeps :: Members [FlagAssignmentsEnv,Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectSubLibDeps = collectComponentialDeps condSubLibraries
 
 collectSetupDeps :: Member Trace r => GenericPackageDescription -> Sem r VersionedList
 collectSetupDeps cabal = do
@@ -160,20 +163,23 @@ directDependencies ::
   Sem r (VersionedList, VersionedList)
 directDependencies cabal = do
   (libDeps, libToolsDeps) <- collectLibDeps cabal
+  (subLibDeps, subLibToolsDeps) <- collectSubLibDeps cabal []
   (exeDeps, exeToolsDeps) <- collectExeDeps cabal []
   (testDeps, testToolsDeps) <- collectTestDeps cabal []
   setupDeps <- collectSetupDeps cabal
   let flatten = mconcat . fmap snd
       l = libDeps
       lt = libToolsDeps
+      sl = flatten subLibDeps
+      slt = flatten subLibToolsDeps
       e = flatten exeDeps
       et = flatten exeToolsDeps
       t = flatten testDeps
       tt = flatten testToolsDeps
       notMyself = (/= getPkgName' cabal)
       distinct = filter (notMyself . fst) . nub
-      depends = distinct $ l <> e
-      makedepends = distinct (lt <> et <> t <> tt <> setupDeps) \\ depends
+      depends = distinct $ l <> sl <> e
+      makedepends = distinct (lt <> slt <> et <> t <> tt <> setupDeps) \\ depends
       sort' = sortBy (\x y -> uncurry compare $ getTwo _1 x y)
   return (sort' depends, sort' makedepends)
 
