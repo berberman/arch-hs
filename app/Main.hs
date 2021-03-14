@@ -84,6 +84,8 @@ app target path aurSupport skip uusi force metaPath jsonPath loadFilesDB' = do
               pkgs -> Just (x ^. pkgName, pkgs)
           )
           providedPackages
+      -- all missing transitive dependencies, excluding direct dependencies of the target
+      missingChildren = mconcat $ snd <$> filter (\x -> fst x /= target) abnormalDependencies
 
   embed $
     forM_ abnormalDependencies $ \(T.pack . unPackageName -> parent, children) -> do
@@ -111,7 +113,8 @@ app target path aurSupport skip uusi force metaPath jsonPath loadFilesDB' = do
   embed $ T.putStrLn . prettySolvedPkgs $ filledByBoth
 
   printInfo "Recommended package order:"
-  let vertexesToBeRemoved = filledByBoth ^.. each . filtered isProvided ^.. each . pkgName
+  -- remove missingChildren from the graph, so that we don't need package them if they are not our target
+  let vertexesToBeRemoved = missingChildren <> filledByBoth ^.. each . filtered isProvided ^.. each . pkgName
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle newGraph of
