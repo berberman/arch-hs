@@ -6,6 +6,7 @@
       pkgs = import nixpkgs {
         system = "x86_64-linux";
         overlays = [ self.overlay ];
+        config = { allowBroken = true; };
       };
     in with pkgs; {
       overlay = self: super:
