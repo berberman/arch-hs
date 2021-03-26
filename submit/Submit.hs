@@ -14,7 +14,7 @@ import Data.Algorithm.Diff (getGroupedDiff)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map.Strict as Map
-import Data.Maybe (catMaybes, fromJust)
+import Data.Maybe (fromJust)
 import qualified Data.Text as T
 import Data.Void (Void)
 import Distribution.ArchHs.Exception
@@ -119,15 +119,17 @@ parseDistroCSV s = case M.parse distroCSVParser "DistroCSV" s of
   Left err -> fail $ M.errorBundlePretty err
   Right x -> x
 
-genCSV :: Member CommunityEnv r => Sem r DistroCSV
+genCSV :: Members [CommunityEnv, HackageEnv, Embed IO] r => Sem r DistroCSV
 genCSV = do
-  db <- ask @CommunityDB
+  communityDb <- ask @CommunityDB
+  notLinked <- getAndPrintNotLinked
 
-  let communityPackages = Map.toList db
+  let communityPackages = Map.toList communityDb
+      inHackage = (`notElem` notLinked)
       fields =
         communityPackages
           ^.. each
-            . filtered (isHaskellPackage . (^. _1))
+            . filtered (((&&) <$> inHackage <*> isHaskellPackage) . (^. _1))
           <&> (_1 <<%~ toHackageName)
           & sortBy (\x y -> (x ^. _2 . _1) `compare` (y ^. _2 . _1))
       prefix = "https://www.archlinux.org/packages/community/x86_64/"
@@ -171,16 +173,6 @@ check :: Members [HackageEnv, WithMyErr, Reader Manager, Embed IO] r => DistroCS
 check community = do
   printInfo "Checking generated csv file..."
 
-  let hackageNames = fmap (\(a, _, _) -> a) community
-      f = fmap (\case Left (PkgNotFound x) -> Just (unArchLinuxName $ toArchLinuxName x); _ -> Nothing)
-
-  failed <- catMaybes . f <$> mapM (\x -> try @MyException (getLatestCabal $ mkPackageName x)) hackageNames
-
-  unless (null failed) $
-    printWarn $ "Following packages in" <+> ppCommunity <+> "are not linked to hackage:"
-
-  embed . putStr . unlines $ failed
-
   req <- interceptHttpException $ parseRequest "https://hackage.haskell.org/distro/Arch/packages.csv"
   printInfo "Downloading csv from hackage..."
   manager <- ask
@@ -212,3 +204,15 @@ check community = do
       <+> ppCommunity
       <> dot
       <> line
+
+getAndPrintNotLinked :: Members [CommunityEnv, HackageEnv, Embed IO] r => Sem r [ArchLinuxName]
+getAndPrintNotLinked = do
+  communityHaskellPackages <- filter isHaskellPackage . Map.keys <$> ask @CommunityDB
+  hackagePackages <- Map.keys <$> ask @HackageDB
+  let result = filter (\x -> toHackageName x `notElem` hackagePackages) communityHaskellPackages
+
+  unless (null result) $
+    printWarn $ "Following packages in" <+> ppCommunity <+> "are not linked to hackage:"
+
+  embed . putStr . unlines $ unArchLinuxName <$> result
+  return result

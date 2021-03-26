@@ -74,11 +74,6 @@ communityToHackageP :: MyName 'ArchLinuxRep -> Maybe (MyName 'HackageRep)
 -- This function is generated from @NAME_PRESET.json@
 hackageToCommunityP :: MyName 'HackageRep -> Maybe (MyName 'ArchLinuxRep)
 
--- | Special haskell packages in community repo, which should be ignored in the process.
---
--- This function is generated from @NAME_PRESET.json@
-falseListP :: [MyName 'ArchLinuxRep]
-
 -- | Community haskell packages of in the name preset.
 --
 -- This function is generated from @NAME_PRESET.json@
@@ -158,8 +153,9 @@ toHackageName = mToHackageName . toHackageRep
 
 -- | Judge if a package in archlinux community repo is haskell package.
 --
--- i.e. it is in @preset@ or have @haskell-@ prefix, and is not present in @falseList@ of @NAME_PRESET.json@.
+-- i.e. it is in @preset@ or has @haskell-@ prefix.
+-- Attention: There is no guarantee that the package exists in hackage.
 isHaskellPackage :: ArchLinuxName -> Bool
 isHaskellPackage name =
   let rep = toArchLinuxRep name
-   in (rep `elem` communityListP || "haskell-" `isPrefixOf` unsafeUnMyName rep) && rep `notElem` falseListP
+   in (rep `elem` communityListP || "haskell-" `isPrefixOf` unsafeUnMyName rep)
