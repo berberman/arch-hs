@@ -11,6 +11,7 @@ import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
 import Network.HTTP.Client (Manager)
 import Network.HTTP.Client.TLS (newTlsManager)
 import Submit
@@ -20,6 +21,7 @@ import System.Environment (lookupEnv)
 main :: IO ()
 main = printHandledIOException $
   do
+    setLocaleEncoding utf8
     Options {..} <- runArgsParser
 
     token <- lookupEnv "HACKAGE_API_TOKEN"

@@ -34,6 +34,7 @@ import Distribution.ArchHs.PP
 import qualified Distribution.ArchHs.PkgBuild as N
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
 import Json
 import Network.HTTP.Client (Manager)
 import Network.HTTP.Client.TLS (newTlsManager)
@@ -282,6 +283,7 @@ runTrace stdout path = interpret $ \case
 main :: IO ()
 main = printHandledIOException $
   do
+    setLocaleEncoding utf8
     Options {..} <- runArgsParser
 
     unless (null optFileTrace) $ do

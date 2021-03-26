@@ -13,12 +13,14 @@ import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
 import Network.HTTP.Client (Manager)
 import Network.HTTP.Client.TLS (newTlsManager)
 
 main :: IO ()
 main = printHandledIOException $
   do
+    setLocaleEncoding utf8
     Options {..} <- runArgsParser
     let isFlagEmpty = Map.null optFlags
 
