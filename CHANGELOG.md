@@ -3,6 +3,16 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.8.0.0
+
+* Fix the bug that unable to run with dependency-free packages
+
+* Do not generate PKGBUILDs for missing dependencies of the target
+
+* Support resolving sub-libraries in `arch-hs-diff`
+
+* Remove `falseList`, which `arch-hs-submit` no longer uses
+
 ## 0.7.1.0
 
 * Bump ghc version to 8.10.4
