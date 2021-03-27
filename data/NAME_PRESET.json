@@ -41,6 +41,7 @@
   "haskell-hunit": "HUnit",
   "haskell-ifelse": "IfElse",
   "haskell-juicypixels": "JuicyPixels",
+  "haskell-language-server": "haskell-language-server",
   "haskell-lexer": "haskell-lexer",
   "haskell-listlike": "ListLike",
   "haskell-lsp0": "haskell-lsp",
