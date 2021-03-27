@@ -72,7 +72,7 @@
   "haskell-x11-xft": "X11-xft",
   "hasktags": "hasktags",
   "hledger": "hledger",
-  "hledger-api": "hledger-api",
+  "hledger-iadd": "hledger-iadd",
   "hledger-ui": "hledger-ui",
   "hledger-web": "hledger-web",
   "hlint": "hlint",
