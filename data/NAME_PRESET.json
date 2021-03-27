@@ -43,6 +43,7 @@
   "haskell-juicypixels": "JuicyPixels",
   "haskell-lexer": "haskell-lexer",
   "haskell-listlike": "ListLike",
+  "haskell-lsp0": "haskell-lsp",
   "haskell-missingh": "MissingH",
   "haskell-monadlib": "monadLib",
   "haskell-monadrandom": "MonadRandom",
