@@ -6,6 +6,7 @@
   "c2hs": "c2hs",
   "haskell-cabal": "Cabal",
   "cabal-install": "cabal-install",
+  "cabal-plan": "cabal-plan",
   "cgrep": "cgrep",
   "clash-ghc": "clash-ghc",
   "cryptol": "cryptol",
