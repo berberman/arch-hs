@@ -724,8 +724,8 @@ cabal build -f alpm
 ```
 
 This flag is enabled by default in `arch-hs` Arch Linux package.
-Compiled with `alpm`, `arch-hs` can accept runtime flag `--alpm`.
-**That said, if you want to use alpm to boost `arch-hs`, you need compile `arch-hs` with cabal flag `alpm`, and pass `--aplm` to `arch-hs` when running.**
+Compiled with `alpm`, `arch-hs` uses alpm to load pacman databases by default.
+In this case, the CLI flag `--no-alpm` can be used to disable this feature.
 > When `alpm` is enabled, `arch-hs` will lose the capability of specifying the path of `community.db` and directory of files db.
 
 

@@ -67,9 +67,9 @@ cmdOptions =
           <> value defaultCommunityDBPath
       )
 #else
-      <*> switch
-        ( long "alpm"
-            <> help "Use libalpm to parse community db"
+      <*> flag True False
+        ( long "no-alpm"
+            <> help "Not to use libalpm to parse community db"
         )
 #endif
     <*> Options.Applicative.option
