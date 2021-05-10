@@ -13,6 +13,7 @@
   "darcs": "darcs",
   "dhall": "dhall",
   "dhall-bash": "dhall-bash",
+  "dhall-docs": "dhall-docs",
   "dhall-json": "dhall-json",
   "dhall-lsp-server": "dhall-lsp-server",
   "dhall-yaml": "dhall-yaml",
