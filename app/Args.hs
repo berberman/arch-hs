@@ -12,7 +12,8 @@ import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.OptionReader
 import Distribution.ArchHs.Options
 import Distribution.ArchHs.Types
-import qualified Paths_arch_hs as Path
+import Distribution.ArchHs.Utils (archHsVersion)
+import Options.Applicative.Simple
 
 data Options = Options
   { optHackage :: HackageDBOptions,
