@@ -22,7 +22,7 @@ jobs:
           haskell-aeson haskell-algebraic-graphs haskell-conduit \
           haskell-conduit-extra haskell-hackage-db haskell-megaparsec \
           haskell-microlens haskell-microlens-th haskell-neat-interpolation \
-          haskell-optparse-applicative haskell-polysemy haskell-req haskell-split \
+          haskell-optparse-simple haskell-polysemy haskell-req haskell-split \
           haskell-tar-conduit haskell-diff haskell-prettyprinter haskell-prettyprinter-ansi-terminal \
           haskell-arch-web
 

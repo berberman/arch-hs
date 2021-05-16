@@ -6,21 +6,20 @@
 -- Stability: experimental
 -- Portability: portable
 -- This module defines input patterns used in executables' cli.
--- "Options.Applicative" is re-exported.
+-- "Options.Applicative.Simple" is re-exported.
 module Distribution.ArchHs.OptionReader
   ( optFlagReader,
     optSkippedReader,
     optExtraCabalReader,
     optVersionReader,
     optPackageNameReader,
-    module Options.Applicative,
   )
 where
 
 import qualified Data.Map.Strict as Map
 import Data.Void (Void)
 import Distribution.ArchHs.Internal.Prelude
-import Options.Applicative
+import Options.Applicative.Simple
 import System.FilePath (takeExtension)
 import qualified Text.Megaparsec as M
 import qualified Text.Megaparsec.Char as M

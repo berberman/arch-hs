@@ -4,13 +4,14 @@
 
 module Main (main) where
 
+import Args
 import Control.Monad (unless)
 import qualified Data.Map as Map
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Diff
-import Distribution.ArchHs.CommunityDB
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Options
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
@@ -28,14 +29,7 @@ main = printHandledIOException $
       printInfo "You assigned flags:"
       putDoc $ prettyFlagAssignments optFlags <> line
 
-#ifdef ALPM
-    let src = if optAlpm then "libalpm" else defaultCommunityDBPath
-    printInfo $ "Loading community.db from" <+> pretty src
-    community <- if optAlpm then loadCommunityDBFFI else loadCommunityDB defaultCommunityDBPath
-#else
-    printInfo $ "Loading community.db from" <+> pretty optCommunityDBPath
-    community <- loadCommunityDB optCommunityDBPath
-#endif
+    community <- loadCommunityDBFromOptions optCommunityDB
 
     manager <- newTlsManager
 

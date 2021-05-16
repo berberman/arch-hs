@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- | Copyright: (c) 2020-2021 berberman
@@ -36,6 +37,7 @@ module Distribution.ArchHs.Utils
     noDiff,
     mapDiff,
     unDiff,
+    archHsVersion,
   )
 where
 
@@ -54,6 +56,8 @@ import Distribution.Types.PkgconfigDependency
 import Distribution.Types.PkgconfigName
 import Distribution.Utils.ShortText (fromShortText)
 import GHC.Stack (callStack, prettyCallStack)
+import Options.Applicative.Simple (simpleVersion)
+import qualified Paths_arch_hs as Path
 
 -- | Extract the package name from a 'ExeDependency'.
 unExe :: ExeDependency -> PackageName
@@ -212,3 +216,7 @@ unDiff :: Diff a -> a
 unDiff (First x) = x
 unDiff (Second x) = x
 unDiff (Both x _) = x
+
+-- | The version of arch-hs
+archHsVersion :: String
+archHsVersion = $(simpleVersion Path.version)

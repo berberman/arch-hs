@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -11,19 +10,14 @@ where
 import qualified Data.Map.Strict as Map
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.OptionReader
+import Distribution.ArchHs.Options
 import Distribution.ArchHs.Types
-
-#ifndef ALPM
-import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
-import Distribution.ArchHs.FilesDB (defaultFilesDBDir)
-#endif
+import qualified Paths_arch_hs as Path
 
 data Options = Options
-  { optHackagePath :: FilePath,
-#ifndef ALPM
-    optCommunityDBPath :: FilePath,
-    optFilesDBPath :: FilePath,
-#endif
+  { optHackage :: HackageDBOptions,
+    optCommunityDB :: CommunityDBOptions,
+    optFilesDB :: FilesDBOptions,
     optOutputDir :: FilePath,
     optFlags :: FlagAssignments,
     optSkip :: [String],
@@ -35,42 +29,15 @@ data Options = Options
     optForce :: Bool,
     optMetaDir :: FilePath,
     optJson :: FilePath,
-#ifdef ALPM
-    optAlpm :: Bool,
-#endif
     optTarget :: PackageName
   }
-  deriving stock (Show)
 
 cmdOptions :: Parser Options
 cmdOptions =
   Options
-    <$> strOption
-      ( long "hackage"
-          <> metavar "PATH"
-          <> short 'h'
-          <> help "Path to hackage index tarball"
-          <> showDefault
-          <> value ""
-      )
-#ifndef ALPM
-      <*> strOption
-        ( long "community"
-            <> metavar "PATH"
-            <> short 'c'
-            <> help "Path to community.db"
-            <> showDefault
-            <> value defaultCommunityDBPath
-        )
-      <*> strOption
-        ( long "files"
-            <> metavar "PATH"
-            <> short 'f'
-            <> help "Path of dir that includes core.files, extra.files and community.files"
-            <> showDefault
-            <> value defaultFilesDBDir
-        )
-#endif
+    <$> hackageDBOptionsParser
+      <*> communityDBOptionsParser
+      <*> filesDBOptionsParser
       <*> strOption
         ( long "output"
             <> metavar "PATH"
@@ -137,20 +104,14 @@ cmdOptions =
             <> help "Path to json output (empty means do not write output as json to file)"
             <> value ""
         )
-#ifdef ALPM
-      <*> flag True False
-        ( long "no-alpm"
-            <> help "Not to use libalpm to parse community db"
-        )
-#endif
       <*> argument optPackageNameReader (metavar "TARGET")
 
 runArgsParser :: IO Options
 runArgsParser =
-  execParser $
-    info
-      (cmdOptions <**> helper)
-      ( fullDesc
-          <> progDesc "Try to reach the TARGET QAQ."
-          <> header "arch-hs - a program generating PKGBUILD for hackage packages."
-      )
+  fst
+    <$> simpleOptions
+      archHsVersion
+      "arch-hs - generate PKGBUILD for Haskell packages in Hackage"
+      "arch-hs is a CLI tool automating the PKGBUILD generation for Haskell packages, with dependency resolving and template filling"
+      cmdOptions
+      (pure ())

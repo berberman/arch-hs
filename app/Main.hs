@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -30,6 +29,7 @@ import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local
 import Distribution.ArchHs.Name
+import Distribution.ArchHs.Options
 import Distribution.ArchHs.PP
 import qualified Distribution.ArchHs.PkgBuild as N
 import Distribution.ArchHs.Types
@@ -309,11 +309,7 @@ main = printHandledIOException $
 
     when optUusi $ printInfo "You passed --uusi, uusi will become makedepends of each package"
 
-    hackagePath <- if null optHackagePath then lookupHackagePath else return optHackagePath
-
-    printInfo $ "Loading hackage from" <+> pretty hackagePath
-
-    hackage <- loadHackageDB hackagePath
+    hackage <- loadHackageDBFromOptions optHackage
 
     let isExtraEmpty = null optExtraCabalPath
 
@@ -324,28 +320,11 @@ main = printHandledIOException $
 
     let newHackage = foldr insertDB hackage parsedExtra
 
-#ifdef ALPM
-    let src = T.pack $ if optAlpm then "libalpm" else defaultCommunityDBPath
-    printInfo $ "Loading community.db from " <> pretty src
-    community <- if optAlpm then loadCommunityDBFFI else loadCommunityDB defaultCommunityDBPath
-#else
-    printInfo $ "Loading community.db from" <+> pretty optCommunityDBPath
-    community <- loadCommunityDB optCommunityDBPath
-#endif
+    community <- loadCommunityDBFromOptions optCommunityDB
 
     printInfo "Start running..."
 
     empty <- newIORef Set.empty
-
-    let loadF db = do
-#ifdef ALPM
-          printInfo $ "Loading" <+> ppDBKind db <+> "files from libalpm"
-          if optAlpm then loadFilesDBFFI db else loadFilesDB db defaultFilesDBDir
-#else
-          printInfo $ "Loading" <+> ppDBKind db <+> "files from" <+> pretty optFilesDBPath
-          loadFilesDB db optFilesDBPath
-
-#endif
 
     manager <- newTlsManager
 
@@ -357,7 +336,7 @@ main = printHandledIOException $
       optFileTrace
       empty
       manager
-      (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir optJson loadF)
+      (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir optJson (loadFilesDBFromOptions optFilesDB))
       & printAppResult
 
 -----------------------------------------------------------------------------

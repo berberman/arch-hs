@@ -1,11 +1,8 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Diff
   ( diffCabal,
-    Options (..),
-    runArgsParser,
   )
 where
 
@@ -17,7 +14,6 @@ import Distribution.ArchHs.CommunityDB (versionInCommunity)
 import Distribution.ArchHs.Core (evalConditionTree)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.OptionReader
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
@@ -28,62 +24,6 @@ import Distribution.Types.Dependency (Dependency)
 import Distribution.Types.SetupBuildInfo
 import Distribution.Utils.ShortText (fromShortText)
 import Network.HTTP.Client
-
-#ifndef ALPM
-import Distribution.ArchHs.CommunityDB (defaultCommunityDBPath)
-#endif
-
-data Options = Options
-  { optFlags :: FlagAssignments,
-#ifdef ALPM
-    optAlpm          :: Bool,
-#else
-    optCommunityDBPath :: FilePath,
-#endif
-    optPackageName :: PackageName,
-    optVersionA :: Version,
-    optVersionB :: Version
-  }
-
-cmdOptions :: Parser Options
-cmdOptions =
-  Options
-    <$> option
-      optFlagReader
-      ( long "flags"
-          <> metavar "package_name:flag_name:true|false,..."
-          <> short 'f'
-          <> help "Flag assignments for packages - e.g. inline-c:gsl-example:true (separated by ',')"
-          <> value Map.empty
-      )
-#ifndef ALPM
-    <*> strOption
-      ( long "community"
-          <> metavar "PATH"
-          <> short 'c'
-          <> help "Path to community.db"
-          <> showDefault
-          <> value defaultCommunityDBPath
-      )
-#else
-      <*> flag True False
-        ( long "no-alpm"
-            <> help "Not to use libalpm to parse community db"
-        )
-#endif
-    <*> argument optPackageNameReader (metavar "TARGET")
-    <*> argument optVersionReader (metavar "VERSION_A")
-    <*> argument optVersionReader (metavar "VERSION_B")
-
-runArgsParser :: IO Options
-runArgsParser =
-  execParser $
-    info
-      (cmdOptions <**> helper)
-      ( fullDesc
-          <> progDesc "Try to reach the TARGET QAQ."
-          <> header "arch-hs-diff - a program creating diff between different versions of a cabal file."
-      )
 
 -----------------------------------------------------------------------------
 
@@ -126,7 +66,7 @@ collectExeDeps = collectComponentialDeps condExecutables
 collectTestDeps :: Members [FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectTestDeps = collectComponentialDeps condTestSuites
 
-collectSubLibDeps :: Members [FlagAssignmentsEnv,Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectSubLibDeps :: Members [FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectSubLibDeps = collectComponentialDeps condSubLibraries
 
 collectSetupDeps :: Member Trace r => GenericPackageDescription -> Sem r VersionedList
