@@ -108,11 +108,12 @@ cmdOptions =
       <*> argument optPackageNameReader (metavar "TARGET")
 
 runArgsParser :: IO Options
-runArgsParser =
-  fst
-    <$> simpleOptions
+runArgsParser = do
+  (x, ()) <-
+    simpleOptions
       archHsVersion
       "arch-hs - generate PKGBUILD for Haskell packages in Hackage"
       "arch-hs is a CLI tool automating the PKGBUILD generation for Haskell packages, with dependency resolving and template filling"
       cmdOptions
-      (pure ())
+      empty
+  pure x

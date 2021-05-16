@@ -38,11 +38,12 @@ cmdOptions =
     <*> argument optVersionReader (metavar "VERSION_B")
 
 runArgsParser :: IO Options
-runArgsParser =
-  fst
-    <$> simpleOptions
+runArgsParser = do
+  (x, ()) <-
+    simpleOptions
       archHsVersion
       "arch-hs-diff - create diff between different versions of package description"
       "arch-hs-diff is a CLI tool that shows the differences of package description between two versions of a package, and remind us if some required packages in community repo can't satisfy the version constraints, or they are non-existent"
       cmdOptions
-      (pure ())
+      empty
+  pure x
