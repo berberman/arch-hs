@@ -5,14 +5,14 @@ module Check (check) where
 import Data.Maybe (maybeToList)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.Local
+import Distribution.ArchHs.Name (isGHCLibs)
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Distribution.Package (packageName, packageVersion)
 import Utils
 
-check :: Members [HackageEnv, CommunityEnv, WithMyErr, Embed IO] r => Sem r ()
-check = do
+check :: Members [HackageEnv, CommunityEnv, WithMyErr, Embed IO] r => Bool -> Sem r ()
+check includeGHC = do
   linked <- linkedHaskellPackages
   let result =
         [ annMagneta (pretty (unArchLinuxName archName))
@@ -33,7 +33,7 @@ check = do
             let hackageName = packageName cabal
                 hackageVersion = packageVersion cabal,
             archVersion <- maybeToList $ simpleParsec rawArchVersion,
-            hackageName `notElem` ghcLibList,
+            includeGHC || not (isGHCLibs hackageName),
             archVersion /= hackageVersion,
             let isHackageNewer = hackageVersion > archVersion
         ]

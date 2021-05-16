@@ -12,7 +12,7 @@ import Data.Maybe (fromJust)
 import qualified Data.Text as T
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.Local
+import Distribution.ArchHs.Name (isGHCLibs)
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
@@ -31,7 +31,7 @@ genCSV = do
       [ (unPackageName hackageName, version, prefix <> tweakedName)
         | (archLinuxName, version, packageName -> hackageName) <- linked,
           let tweakedName =
-                if hackageName `elem` ghcLibList || hackageName == "ghc"
+                if isGHCLibs hackageName
                   then "ghc"
                   else unArchLinuxName archLinuxName
               prefix = "https://www.archlinux.org/packages/community/x86_64/"

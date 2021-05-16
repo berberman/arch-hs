@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Copyright: (c) 2020-2021 berberman
 -- SPDX-License-Identifier: MIT
@@ -45,6 +46,7 @@ module Distribution.ArchHs.Name
     toArchLinuxName,
     toHackageName,
     isHaskellPackage,
+    isGHCLibs,
   )
 where
 
@@ -52,6 +54,7 @@ import Data.Char (toLower)
 import Data.String (IsString, fromString)
 import Distribution.ArchHs.Internal.NamePresetLoader
 import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Local
 import Distribution.ArchHs.Types
 
 -- | The representation of a package name.
@@ -151,11 +154,21 @@ toArchLinuxName = mToArchLinuxName . toArchLinuxRep
 toHackageName :: HasMyName n => n -> PackageName
 toHackageName = mToHackageName . toHackageRep
 
--- | Judge if a package in archlinux community repo is haskell package.
+-- | Check if a package in archlinux community repo is haskell package.
 --
 -- i.e. it is in @preset@ or has @haskell-@ prefix.
 -- Attention: There is no guarantee that the package exists in hackage.
 isHaskellPackage :: ArchLinuxName -> Bool
-isHaskellPackage name =
-  let rep = toArchLinuxRep name
-   in (rep `elem` communityListP || "haskell-" `isPrefixOf` unsafeUnMyName rep)
+isHaskellPackage (toArchLinuxRep -> rep) =
+  (rep `elem` communityListP || "haskell-" `isPrefixOf` unsafeUnMyName rep)
+
+-- | Check if a package is GHC or GHC Libs
+
+--- >>> isGHCLibs "ghc"
+-- True
+--- >>> isGHCLibs "text"
+-- True
+--- >>> isGHCLibs "arch-hs"
+-- False
+isGHCLibs :: PackageName -> Bool
+isGHCLibs name = name == "ghc" || name `elem` ghcLibList

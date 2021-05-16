@@ -25,15 +25,16 @@ main = runArgsParser >>= runMode
 runCheck ::
   CommunityDB ->
   HackageDB ->
+  Bool ->
   IO (Either MyException ())
-runCheck community hackage =
+runCheck community hackage includeGHC=
   ( runFinal
       . embedToFinal @IO
       . errorToIOFinal
       . runReader hackage
       . runReader community
   )
-    check
+    (check includeGHC)
 
 runSubmit ::
   CommunityDB ->
@@ -55,7 +56,7 @@ runSubmit community hackage manager token output upload =
 
 runMode :: Mode -> IO ()
 runMode = \case
-  Submit SubmitOptions {optCommon = CommonOptions {..}, ..} -> do
+  Submit CommonOptions {..} SubmitOptions {..} -> do
     community <- loadCommunityDBFromOptions optCommunityDB
     hackage <- loadHackageDBFromOptions optHackage
 
@@ -77,7 +78,7 @@ runMode = \case
 
     manager <- newTlsManager
     runSubmit community hackage manager token optOutput optUpload & printAppResult
-  Check CommonOptions {..} -> do
+  Check CommonOptions {..} CheckOptions {..} -> do
     community <- loadCommunityDBFromOptions optCommunityDB
     hackage <- loadHackageDBFromOptions optHackage
-    runCheck community hackage & printAppResult
+    runCheck community hackage optShowGHCLibs & printAppResult

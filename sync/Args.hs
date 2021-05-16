@@ -1,8 +1,7 @@
 module Args
   ( CommonOptions (..),
-    commonOptionsParser,
     SubmitOptions (..),
-    submitOptionsParser,
+    CheckOptions (..),
     Mode (..),
     runArgsParser,
   )
@@ -26,16 +25,14 @@ commonOptionsParser =
 -----------------------------------------------------------------------------
 
 data SubmitOptions = SubmitOptions
-  { optCommon :: CommonOptions,
-    optOutput :: FilePath,
+  { optOutput :: FilePath,
     optUpload :: Bool
   }
 
 submitOptionsParser :: Parser SubmitOptions
 submitOptionsParser =
   SubmitOptions
-    <$> commonOptionsParser
-    <*> option
+    <$> option
       str
       ( long "output"
           <> metavar "PATH"
@@ -51,7 +48,18 @@ submitOptionsParser =
 
 -----------------------------------------------------------------------------
 
-data Mode = Submit SubmitOptions | Check CommonOptions
+newtype CheckOptions = CheckOptions
+  { optShowGHCLibs :: Bool
+  }
+
+checkOptionsParser :: Parser CheckOptions
+checkOptionsParser =
+  CheckOptions
+    <$> switch (long "show-ghc-libs" <> help "Include GHC and GHC libs")
+
+-----------------------------------------------------------------------------
+
+data Mode = Submit CommonOptions SubmitOptions | Check CommonOptions CheckOptions
 
 runArgsParser :: IO Mode
 runArgsParser =
@@ -65,10 +73,10 @@ runArgsParser =
         addCommand
           "submit"
           "submit distribution information to Hackage"
-          Submit
-          submitOptionsParser
+          id
+          (Submit <$> commonOptionsParser <*> submitOptionsParser)
         addCommand
           "check"
           "check inconsistencies of Haskell packages version"
-          Check
-          commonOptionsParser
+          id
+          (Check <$> commonOptionsParser <*> checkOptionsParser)
