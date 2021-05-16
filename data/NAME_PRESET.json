@@ -70,6 +70,7 @@
   "haskell-src-meta": "haskell-src-meta",
   "haskell-statevar": "StateVar",
   "haskell-stmonadtrans": "STMonadTrans",
+  "haskell-stream": "Stream",
   "haskell-unixutils": "Unixutils",
   "haskell-x11": "X11",
   "haskell-x11-xft": "X11-xft",
