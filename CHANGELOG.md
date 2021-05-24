@@ -3,6 +3,20 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.9.0.0
+
+* Remove `arch-hs-submit` executable
+
+* Add `arch-hs-sync` executable, which has two commands:
+  * `arch-hs-sync submit` - the same as `arch-hs-submit` previously
+  * `arch-hs-sync check` - check version inconsistencies between [community] and Hackage
+
+* Improve CLI options: 
+  * values of `--skip` and `--flag` are no longer separated by comma
+  * the options can be set many times, for example: `arch-hs -f packageA:flagA:true -f packageB:flagB:false`
+
+* Update name preset
+
 ## 0.8.0.0
 
 * Fix the bug that unable to run with dependency-free packages

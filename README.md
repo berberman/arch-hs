@@ -87,66 +87,7 @@ $ arch-hs -o ~/test --alpm gi-gdk
 ⓘ Loading community.db from libalpm
 ⓘ Start running...
 ⓘ Solved:
-Cabal                                       ✔ [community]
-ChasingBottoms                              ✔ [community]
-Diff                                        ✔ [community]
-HUnit                                       ✔ [community]
-QuickCheck                                  ✔ [community]
-StateVar                                    ✔ [community]
-adjunctions                                 ✔ [community]
-aeson                                       ✔ [community]
-ansi-terminal                               ✔ [community]
-ansi-wl-pprint                              ✔ [community]
-assoc                                       ✔ [community]
-async                                       ✔ [community]
-attoparsec                                  ✔ [community]
-base-compat                                 ✔ [community]
-base-compat-batteries                       ✔ [community]
-base-orphans                                ✔ [community]
-base16-bytestring                           ✔ [community]
-base64-bytestring                           ✔ [community]
-bifunctors                                  ✔ [community]
-binary                                      ✔ [community]
-blaze-builder                               ✔ [community]
-blaze-html                                  ✔ [community]
-blaze-markup                                ✔ [community]
-bytestring                                  ✔ [community]
-bytestring-handle                           ✔ [community]
-cabal-doctest                               ✔ [community]
-call-stack                                  ✔ [community]
-case-insensitive                            ✔ [community]
-charset                                     ✔ [community]
-clock                                       ✔ [community]
-code-page                                   ✔ [community]
-colour                                      ✔ [community]
-comonad                                     ✔ [community]
-concurrent-output                           ✔ [community]
-conduit                                     ✔ [community]
-conduit-extra                               ✔ [community]
-constraints                                 ✔ [community]
-containers                                  ✔ [community]
-contravariant                               ✔ [community]
-data-default                                ✔ [community]
-data-default-instances-containers           ✔ [community]
-data-default-instances-dlist                ✔ [community]
-data-default-instances-old-locale           ✔ [community]
-data-fix                                    ✔ [community]
-deepseq                                     ✔ [community]
-directory                                   ✔ [community]
-distributive                                ✔ [community]
-dlist                                       ✔ [community]
-doctest                                     ✔ [community]
-exceptions                                  ✔ [community]
-filepath                                    ✔ [community]
-fingertree                                  ✔ [community]
-foldl                                       ✔ [community]
-free                                        ✔ [community]
-generic-deriving                            ✔ [community]
-ghc                                         ✔ [community]
-ghc-boot                                    ✔ [community]
-ghc-paths                                   ✔ [community]
-ghci                                        ✔ [community]
-gi-cairo                                    ✔ [community]
+...
 gi-gdk                                      ✘
  ├─Cabal (Setup)                            ✔ [community]
  ├─bytestring (Lib)                         ✔ [community]
@@ -227,138 +168,7 @@ gi-pango                                    ✘
  ├─haskell-gi-overloading (Lib)             ✔ [community]
  ├─text (Lib)                               ✔ [community]
  └─transformers (Lib)                       ✔ [community]
-hashable                                    ✔ [community]
-hashable-time                               ✔ [community]
-haskell-gi                                  ✔ [community]
-haskell-gi-base                             ✔ [community]
-haskell-src-exts                            ✔ [community]
-hedgehog                                    ✔ [community]
-hpc                                         ✔ [community]
-hspec                                       ✔ [community]
-hspec-core                                  ✔ [community]
-hspec-discover                              ✔ [community]
-hspec-expectations                          ✔ [community]
-hspec-meta                                  ✔ [community]
-indexed-traversable                         ✔ [community]
-integer-logarithms                          ✔ [community]
-invariant                                   ✔ [community]
-kan-extensions                              ✔ [community]
-lens                                        ✔ [community]
-libxml                                      ✔ [community]
-lifted-async                                ✔ [community]
-lifted-base                                 ✔ [community]
-logging-facade                              ✔ [community]
-logict                                      ✔ [community]
-math-functions                              ✔ [community]
-mmorph                                      ✔ [community]
-mockery                                     ✔ [community]
-monad-control                               ✔ [community]
-mono-traversable                            ✔ [community]
-mtl                                         ✔ [community]
-mwc-random                                  ✔ [community]
-nanospec                                    ✔ [community]
-network                                     ✔ [community]
-optparse-applicative                        ✔ [community]
-parallel                                    ✔ [community]
-parsec                                      ✔ [community]
-parsers                                     ✔ [community]
-pcre-light                                  ✔ [community]
-pgp-wordlist                                ✔ [community]
-pretty                                      ✔ [community]
-pretty-show                                 ✔ [community]
-prettyprinter                               ✔ [community]
-prettyprinter-ansi-terminal                 ✔ [community]
-primitive                                   ✔ [community]
-process                                     ✔ [community]
-profunctors                                 ✔ [community]
-quickcheck-classes-base                     ✔ [community]
-quickcheck-instances                        ✔ [community]
-quickcheck-io                               ✔ [community]
-quickcheck-unicode                          ✔ [community]
-random                                      ✔ [community]
-reducers                                    ✔ [community]
-reflection                                  ✔ [community]
-regex-base                                  ✔ [community]
-regex-posix                                 ✔ [community]
-regex-tdfa                                  ✔ [community]
-resourcet                                   ✔ [community]
-safe                                        ✔ [community]
-scientific                                  ✔ [community]
-semigroupoids                               ✔ [community]
-setenv                                      ✔ [community]
-silently                                    ✔ [community]
-smallcheck                                  ✔ [community]
-split                                       ✔ [community]
-splitmix                                    ✔ [community]
-stm                                         ✔ [community]
-streaming-commons                           ✔ [community]
-strict                                      ✔ [community]
-stringbuilder                               ✔ [community]
-syb                                         ✔ [community]
-tagged                                      ✔ [community]
-tar                                         ✔ [community]
-tasty                                       ✔ [community]
-tasty-ant-xml                               ✔ [community]
-tasty-expected-failure                      ✔ [community]
-tasty-golden                                ✔ [community]
-tasty-hedgehog                              ✔ [community]
-tasty-hunit                                 ✔ [community]
-tasty-quickcheck                            ✔ [community]
-tasty-smallcheck                            ✔ [community]
-tasty-th                                    ✔ [community]
-template-haskell                            ✔ [community]
-temporary                                   ✔ [community]
-terminal-size                               ✔ [community]
-test-framework                              ✔ [community]
-test-framework-hunit                        ✔ [community]
-test-framework-quickcheck2                  ✔ [community]
-text                                        ✔ [community]
-tf-random                                   ✔ [community]
-th-abstraction                              ✔ [community]
-these                                       ✔ [community]
-time                                        ✔ [community]
-time-compat                                 ✔ [community]
-transformers-base                           ✔ [community]
-transformers-compat                         ✔ [community]
-tree-diff                                   ✔ [community]
-trifecta                                    ✔ [community]
-typed-process                               ✔ [community]
-unix                                        ✔ [community]
-unix-compat                                 ✔ [community]
-unliftio                                    ✔ [community]
-unliftio-core                               ✔ [community]
-unordered-containers                        ✔ [community]
-utf8-string                                 ✔ [community]
-uuid-types                                  ✔ [community]
-vector                                      ✔ [community]
-vector-algorithms                           ✔ [community]
-vector-th-unbox                             ✔ [community]
-wcwidth                                     ✔ [community]
-wl-pprint-annotated                         ✔ [community]
-xdg-basedir                                 ✔ [community]
-xml                                         ✔ [community]
-xml-conduit                                 ✔ [community]
-xml-types                                   ✔ [community]
-zlib                                        ✔ [community]
-array                                       ✔ [community]
-transformers                                ✔ [community]
-semigroups                                  ✔ [community]
-void                                        ✔ [community]
-integer-gmp                                 ✔ [community]
-hsc2hs                                      ✔ [community]
-type-equality                               ✔ [community]
-data-default-class                          ✔ [community]
-old-locale                                  ✔ [community]
-ghc-boot-th                                 ✔ [community]
-terminfo                                    ✔ [community]
-haskell-gi-overloading                      ✔ [community]
-happy                                       ✔ [community]
-erf                                         ✔ [community]
-simple-reflect                              ✔ [community]
-haskell-lexer                               ✔ [community]
-unbounded-delays                            ✔ [community]
-hostname                                    ✔ [community]
-extensible-exceptions                       ✔ [community]
+...
 
 ⓘ Recommended package order:
 1. gi-glib
@@ -516,12 +326,13 @@ Notice that this only makes sense in the lifetime of `arch-hs`, whereas generate
 ### Extra Cabal Files
 
 ```
-$ arch-hs -e ~/TARGET/TARGET.cabal TARGET
+$ arch-hs -e ~/TARGET TARGET
 ```
 
 **For Testing Purposes Only**
 
-Using `-e` can include extra `.cabal` files as supplementary. Useful when the `TARGET` hasn't been released to hackage.
+Using `-e` can include extra `.cabal` files as supplementary.
+Useful when the `TARGET` hasn't been released to hackage.
 
 ### Trace
 
@@ -554,10 +365,6 @@ prepare() {
 See [uusi](https://hackage.haskell.org/package/uusi) for details.
 
 ### Alpm
-
-```
-$ arch-hs --alpm TARGET
-```
 
 See [Alpm Support](#Alpm-Support).
 
@@ -698,9 +505,9 @@ Flags:
 
 `arch-hs-diff` does not require hackage db, it downloads cabal files from hackage server instead. 
 
-## Submit
+## Sync
 
-For hackage distribution maintainers only.
+For hackage distribution maintainers only, see `arch-hs-sync --help` for details.
 
 ## Limitations
 
@@ -725,7 +532,7 @@ cabal build -f alpm
 
 This flag is enabled by default in `arch-hs` Arch Linux package.
 Compiled with `alpm`, `arch-hs` uses alpm to load pacman databases by default.
-In this case, the CLI flag `--no-alpm` can be used to disable this feature.
+In this case, the CLI flag `--no-alpm-community` and `--no-alpm-files` can be used to disable this feature.
 > When `alpm` is enabled, `arch-hs` will lose the capability of specifying the path of `community.db` and directory of files db.
 
 

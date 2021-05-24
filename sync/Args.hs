@@ -9,7 +9,6 @@ where
 
 import Distribution.ArchHs.Options
 import Distribution.ArchHs.Utils (archHsVersion)
-import Options.Applicative.Simple
 
 -----------------------------------------------------------------------------
 
