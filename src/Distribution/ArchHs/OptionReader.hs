@@ -10,7 +10,6 @@
 module Distribution.ArchHs.OptionReader
   ( optFlagReader,
     optSkippedReader,
-    optExtraCabalReader,
     optVersionReader,
     optPackageNameReader,
   )
@@ -20,7 +19,6 @@ import qualified Data.Map.Strict as Map
 import Data.Void (Void)
 import Distribution.ArchHs.Internal.Prelude
 import Options.Applicative.Simple
-import System.FilePath (takeExtension)
 import qualified Text.Megaparsec as M
 import qualified Text.Megaparsec.Char as M
 
@@ -76,24 +74,6 @@ optFlagParser =
 -- Right ["component_1","component_2"]
 optSkippedReader :: ReadM [String]
 optSkippedReader = eitherReader $ Right . splitOn ","
-
--- | Read extra cabal files.
---
--- >>> f ""
--- Left "Unexpected file name: "
--- >>> f "a.cabal"
--- Right ["a.cabal"]
--- >>> f "a.cabal,b.cabal"
--- Right ["a.cabal","b.cabal"]
--- >>> f "a.what,b.cabal"
--- Left "Unexpected file name: a.what"
-optExtraCabalReader :: ReadM [FilePath]
-optExtraCabalReader = eitherReader $ \x ->
-  let split = splitOn "," x
-      check = map (\e -> if takeExtension e == ".cabal" then (e, True) else (e, False)) split
-      failed = map fst . filter (not . snd) $ check
-      successful = map fst . filter snd $ check
-   in if failed /= [] then Left ("Unexpected file name: " <> intercalate ", " failed) else Right successful
 
 -- | Read a 'Version'
 -- This function calls 'simpleParsec'.

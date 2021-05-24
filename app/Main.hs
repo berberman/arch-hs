@@ -311,12 +311,13 @@ main = printHandledIOException $
 
     hackage <- loadHackageDBFromOptions optHackage
 
-    let isExtraEmpty = null optExtraCabalPath
+    let isExtraEmpty = null optExtraCabalDirs
+    optExtraCabal <- mapM findCabalFile optExtraCabalDirs
 
     unless isExtraEmpty $
-      printInfo $ "You added" <+> hsep (punctuate comma $ pretty . takeFileName <$> optExtraCabalPath) <+> "as extra cabal file(s), starting parsing right now"
+      printInfo $ "You added" <+> hsep (punctuate comma $ pretty . takeFileName <$> optExtraCabal) <+> "as extra cabal file(s), starting parsing right now"
 
-    parsedExtra <- mapM parseCabalFile optExtraCabalPath
+    parsedExtra <- mapM parseCabalFile optExtraCabal
 
     let newHackage = foldr insertDB hackage parsedExtra
 

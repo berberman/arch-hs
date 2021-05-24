@@ -22,7 +22,7 @@ data Options = Options
     optOutputDir :: FilePath,
     optFlags :: FlagAssignments,
     optSkip :: [String],
-    optExtraCabalPath :: [FilePath],
+    optExtraCabalDirs :: [FilePath],
     optAur :: Bool,
     optStdoutTrace :: Bool,
     optFileTrace :: FilePath,
@@ -62,13 +62,13 @@ cmdOptions =
             <> help "Skip a runnable component (executable, test suit, or benchmark) in dependency calculation"
             <> value []
         )
-      <*> option
-        optExtraCabalReader
-        ( long "extra"
-            <> metavar "PATH_1,..."
-            <> short 'e'
-            <> help "Extra cabal files' path - e.g. /home/berberman/arch-hs/arch-hs.cabal"
-            <> value []
+      <*> many
+        ( strOption
+            ( long "extra"
+                <> metavar "PATH_1,..."
+                <> short 'e'
+                <> help "Paths to directories that contain extra cabal files to include - e.g. /home/berberman/arch-hs"
+            )
         )
       <*> switch
         ( long "aur"

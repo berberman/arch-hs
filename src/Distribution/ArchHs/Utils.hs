@@ -8,7 +8,8 @@
 -- Portability: portable
 -- Miscellaneous functions used crossing modules.
 module Distribution.ArchHs.Utils
-  ( getPkgName,
+  ( findCabalFile,
+    getPkgName,
     getPkgName',
     getPkgVersion,
     dependencyTypeToKind,
@@ -58,6 +59,20 @@ import Distribution.Utils.ShortText (fromShortText)
 import GHC.Stack (callStack, prettyCallStack)
 import Options.Applicative.Simple (simpleVersion)
 import qualified Paths_arch_hs as Path
+import System.Directory (listDirectory)
+import System.FilePath (takeExtension)
+
+-- | Find a cabal file in @dir@,
+-- throws error if nothing or more than one files are found
+findCabalFile :: FilePath -> IO FilePath
+findCabalFile dir =
+  listDirectory dir
+    >>= ( \case
+            [x] -> pure $ dir </> x
+            [] -> fail $ "Unable to find any cabal file in directory " <> dir
+            xs -> fail $ "Found more than one cabal files" <> show xs <> "in directory " <> dir
+        )
+      . filter (\x -> takeExtension x == ".cabal")
 
 -- | Extract the package name from a 'ExeDependency'.
 unExe :: ExeDependency -> PackageName
