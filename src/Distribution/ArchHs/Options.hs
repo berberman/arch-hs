@@ -1,6 +1,13 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Copyright: (c) 2020-2021 berberman
+-- SPDX-License-Identifier: MIT
+-- Maintainer: berberman <berberman@yandex.com>
+-- Stability: experimental
+-- Portability: portable
+-- This module contains CLI parsers to load three types of databases.
+-- See "Distribution.ArchHs.Hackage", "Distribution.ArchHs.FilesDB", and "Distribution.ArchHs.CommunityDB".
 module Distribution.ArchHs.Options
   ( CommunityDBOptions (..),
     communityDBOptionsParser,
@@ -20,111 +27,131 @@ import Options.Applicative.Simple
 
 -----------------------------------------------------------------------------
 
+-- | Parsed options for loading [community]
 newtype CommunityDBOptions = CommunityDBOptions
   { loadCommunityDBFromOptions :: IO CommunityDB
   }
 
+-- | CLI options parser of 'CommunityDBOptions'
+--
+-- When alpm is enabled, it reads a flag @no-alpm-community@;
+-- otherwise it reads a string option @community@.
+communityDBOptionsParser :: Parser CommunityDBOptions
+
 #ifndef ALPM
-communityDBOptionsParser :: Parser CommunityDBOptions
 communityDBOptionsParser =
   CommunityDBOptions
-    <$> ( ( flip fmap $
-              strOption $
-                long
-                  "community"
-                  <> metavar "PATH"
-                  <> short 'c'
-                  <> help "Path to community.db"
-                  <> showDefault
-                  <> value defaultCommunityDBPath
-          )
-            $ \s -> do
-              printInfo $ "Loading community.db from" <+> pretty s
-              loadCommunityDB s
-        )
+    <$> fmap
+      ( \s ->
+          do
+            printInfo $ "Loading community.db from" <+> pretty s
+            loadCommunityDB s
+      )
+      ( strOption $
+          long "community"
+            <> metavar "PATH"
+            <> short 'c'
+            <> help "Path to community.db"
+            <> showDefault
+            <> value defaultCommunityDBPath
+      )
 #else
-communityDBOptionsParser :: Parser CommunityDBOptions
 communityDBOptionsParser =
   CommunityDBOptions
-    <$> ( ( flip fmap $
-              flag
-                True
-                False
-                ( long "no-alpm-community"
-                    <> help "Do not use libalpm to parse community db"
-                )
+    <$> fmap
+      ( \b ->
+          do
+            let src = if b then "libalpm" else defaultCommunityDBPath
+            printInfo $ "Loading community.db from" <+> pretty src
+            if b
+              then loadCommunityDBFFI
+              else loadCommunityDB defaultCommunityDBPath
+      )
+      ( flag
+          True
+          False
+          ( long "no-alpm-community"
+              <> help "Do not use libalpm to parse community db"
           )
-            $ \b -> do
-              let src = if b then "libalpm" else defaultCommunityDBPath
-              printInfo $ "Loading community.db from" <+> pretty src
-              if b
-                then loadCommunityDBFFI
-                else loadCommunityDB defaultCommunityDBPath
-        )
+      )
 #endif
 -----------------------------------------------------------------------------
 
+-- | Parsed options for loading 'FilesDB'
 newtype FilesDBOptions = FilesDBOptions
   { loadFilesDBFromOptions :: DBKind -> IO FilesDB
   }
 
+-- | CLI options parser of 'CommunityDBOptions'
+--
+-- When alpm is enabled, it reads a flag @no-alpm-files@;
+-- otherwise it reads a string option @files@.
+filesDBOptionsParser :: Parser FilesDBOptions
+
 #ifndef ALPM
-filesDBOptionsParser :: Parser FilesDBOptions
 filesDBOptionsParser =
   FilesDBOptions
-    <$> ( ( flip fmap $
-              strOption $
-                long "files"
-                  <> metavar "PATH"
-                  <> short 'f'
-                  <> help "Path of dir that includes core.files, extra.files and community.files"
-                  <> showDefault
-                  <> value defaultFilesDBDir
-          )
-            $ \s db -> do
-              printInfo $ "Loading" <+> ppDBKind db <+> "files from" <+> pretty s
-              loadFilesDB db s
-        )
+    <$> fmap
+      ( \s db ->
+          do
+            printInfo $
+              "Loading" <+> ppDBKind db <+> "files from" <+> pretty s
+            loadFilesDB db s
+      )
+      ( strOption $
+          long "files"
+            <> metavar "PATH"
+            <> short 'f'
+            <> help
+              "Path of dir that includes core.files, extra.files and community.files"
+            <> showDefault
+            <> value defaultFilesDBDir
+      )
 #else
-filesDBOptionsParser :: Parser FilesDBOptions
 filesDBOptionsParser =
   FilesDBOptions
-    <$> ( ( flip fmap $
-              flag
-                True
-                False
-                ( long "no-alpm-files"
-                    <> help "Do not use libalpm to parse files db"
-                )
+    <$> fmap
+      ( \b db ->
+          do
+            let src = if b then "libalpm" else defaultFilesDBDir
+            printInfo $
+              "Loading" <+> ppDBKind db <+> "files from" <+> pretty src
+            if b then loadFilesDBFFI db else loadFilesDB db defaultFilesDBDir
+      )
+      ( flag
+          True
+          False
+          ( long "no-alpm-files"
+              <> help "Do not use libalpm to parse files db"
           )
-            $ \b db -> do
-              let src = if b then "libalpm" else defaultFilesDBDir
-              printInfo $ "Loading" <+> ppDBKind db <+> "files from" <+> pretty src
-              if b then loadFilesDBFFI db else loadFilesDB db defaultFilesDBDir
+      )
         )
 #endif
 -----------------------------------------------------------------------------
 
+-- | Parsed options for loading 'HackageDB'
 newtype HackageDBOptions = HackageDBOptions
   { loadHackageDBFromOptions :: IO HackageDB
   }
 
+-- | CLI options parser that reads a string option @hackage@.
 hackageDBOptionsParser :: Parser HackageDBOptions
 hackageDBOptionsParser =
   HackageDBOptions
-    <$> ( ( flip fmap $
-              strOption $
-                long "hackage"
-                  <> metavar "PATH"
-                  <> short 'h'
-                  <> help "Path to hackage index tarball"
-                  <> showDefault
-                  <> value ""
-          )
-            $ \s -> do
-              hackagePath <- if null s then lookupHackagePath else pure s
-              printInfo $ "Loading hackage from" <+> pretty hackagePath
-              loadHackageDB hackagePath
-        )
+    <$> fmap
+      ( \s ->
+          do
+            hackagePath <- if null s then lookupHackagePath else pure s
+            printInfo $ "Loading hackage from" <+> pretty hackagePath
+            loadHackageDB hackagePath
+      )
+      ( strOption $
+          long "hackage"
+            <> metavar "PATH"
+            <> short 'h'
+            <> help "Path to hackage index tarball"
+            <> showDefault
+            <> value ""
+      )
 
 -----------------------------------------------------------------------------
