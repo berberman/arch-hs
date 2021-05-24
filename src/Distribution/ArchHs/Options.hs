@@ -125,7 +125,6 @@ filesDBOptionsParser =
               <> help "Do not use libalpm to parse files db"
           )
       )
-        )
 #endif
 -----------------------------------------------------------------------------
 
