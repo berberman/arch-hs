@@ -5,13 +5,10 @@ module Args
   )
 where
 
-import qualified Data.Map as Map
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.OptionReader
 import Distribution.ArchHs.Options
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (archHsVersion)
-import Options.Applicative.Simple
 
 data Options = Options
   { optFlags :: FlagAssignments,
@@ -24,14 +21,7 @@ data Options = Options
 cmdOptions :: Parser Options
 cmdOptions =
   Options
-    <$> option
-      optFlagReader
-      ( long "flags"
-          <> metavar "package_name:flag_name:true|false,..."
-          <> short 'f'
-          <> help "Flag assignments for packages - e.g. inline-c:gsl-example:true (separated by ',')"
-          <> value Map.empty
-      )
+    <$> optFlagAssignmentParser
     <*> communityDBOptionsParser
     <*> argument optPackageNameReader (metavar "TARGET")
     <*> argument optVersionReader (metavar "VERSION_A")

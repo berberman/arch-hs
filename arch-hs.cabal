@@ -106,7 +106,6 @@ library
     Distribution.ArchHs.Internal.Prelude
     Distribution.ArchHs.Local
     Distribution.ArchHs.Name
-    Distribution.ArchHs.OptionReader
     Distribution.ArchHs.Options
     Distribution.ArchHs.PkgBuild
     Distribution.ArchHs.PkgDesc

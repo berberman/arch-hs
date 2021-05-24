@@ -6,21 +6,37 @@
 -- Maintainer: berberman <berberman@yandex.com>
 -- Stability: experimental
 -- Portability: portable
--- This module contains CLI parsers to load three types of databases.
--- See "Distribution.ArchHs.Hackage", "Distribution.ArchHs.FilesDB", and "Distribution.ArchHs.CommunityDB".
+-- This module contains CLI parsers used in executables.
+-- "Options.Applicative.Simple" is re-exported.
 module Distribution.ArchHs.Options
-  ( CommunityDBOptions (..),
+  ( -- * Load Community DB
+    CommunityDBOptions (..),
     communityDBOptionsParser,
+
+    -- * Load files DB
     FilesDBOptions (..),
     filesDBOptionsParser,
+
+    -- * Load Hackage DB
     HackageDBOptions (..),
     hackageDBOptionsParser,
+
+    -- * Parse flags
+    optFlagAssignmentParser,
+    optFlagReader,
+
+    -- * Readers
+    optPackageNameReader,
+    optVersionReader,
+    module Options.Applicative.Simple,
   )
 where
 
+import qualified Data.Map.Strict as Map
 import Distribution.ArchHs.CommunityDB
 import Distribution.ArchHs.FilesDB
 import Distribution.ArchHs.Hackage
+import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Options.Applicative.Simple
@@ -154,3 +170,46 @@ hackageDBOptionsParser =
       )
 
 -----------------------------------------------------------------------------
+
+-- | Read a flag assignment like @package_name:flag_name:true|false@
+optFlagReader :: ReadM (String, String, Bool)
+optFlagReader = eitherReader $ \s -> case splitOn ":" s of
+  [name, fname, fvalue] -> case fvalue of
+    "true" -> Right (name, fname, True)
+    "false" -> Right (name, fname, False)
+    _ -> Left "Unknown boolean value, it should be 'true' or 'false'"
+  _ -> Left "Failed to parse flag assignment"
+
+-- | CLI options parser of flag assignments
+optFlagAssignmentParser :: Parser (Map.Map PackageName FlagAssignment)
+optFlagAssignmentParser =
+  fmap toFlagAssignment <$> many $
+    option optFlagReader $
+      long "flag"
+        <> metavar "package_name:flag_name:true|false"
+        <> short 'f'
+        <> help "A sinlge flag assignment for a package - e.g. inline-c:gsl-example:true"
+
+toFlagAssignment :: [(String, String, Bool)] -> Map.Map PackageName FlagAssignment
+toFlagAssignment xs =
+  Map.map toAssignment $
+    foldr (\(name, fname, fvalue) acc -> Map.insertWith (<>) (mkPackageName name) [(mkFlagName fname, fvalue)] acc) Map.empty xs
+  where
+    toAssignment = foldr (\(fname, fvalue) acc -> insertFlagAssignment fname fvalue acc) (mkFlagAssignment [])
+
+-----------------------------------------------------------------------------
+
+-- | Read a 'Version'
+-- This function calls 'simpleParsec'.
+optVersionReader :: ReadM Version
+optVersionReader =
+  eitherReader
+    ( \s -> case simpleParsec s of
+        Just v -> Right v
+        _ -> Left $ "Failed to parse version: " <> s
+    )
+
+-- | Read a 'PackageName'
+-- This function never fails, because it just wraps the input string with 'mkPackageName'.
+optPackageNameReader :: ReadM PackageName
+optPackageNameReader = eitherReader $ Right . mkPackageName

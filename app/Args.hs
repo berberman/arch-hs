@@ -7,13 +7,10 @@ module Args
   )
 where
 
-import qualified Data.Map.Strict as Map
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.OptionReader
 import Distribution.ArchHs.Options
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (archHsVersion)
-import Options.Applicative.Simple
 
 data Options = Options
   { optHackage :: HackageDBOptions,
@@ -46,21 +43,14 @@ cmdOptions =
             <> help "Output path to generated PKGBUILD files (empty means dry run)"
             <> value ""
         )
-      <*> option
-        optFlagReader
-        ( long "flags"
-            <> metavar "package_name:flag_name:true|false,..."
-            <> short 'f'
-            <> help "Flag assignments for packages - e.g. inline-c:gsl-example:true (separated by ',')"
-            <> value Map.empty
-        )
-      <*> option
-        optSkippedReader
-        ( long "skip"
-            <> metavar "component_name,..."
-            <> short 's'
-            <> help "Skip a runnable component (executable, test suit, or benchmark) in dependency calculation"
-            <> value []
+      <*> optFlagAssignmentParser
+      <*> many
+        ( strOption
+            ( long "skip"
+                <> metavar "component_name"
+                <> short 's'
+                <> help "Skip a runnable component (executable, test suit, or benchmark) in dependency calculation"
+            )
         )
       <*> many
         ( strOption

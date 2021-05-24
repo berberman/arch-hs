@@ -325,7 +325,7 @@ main = printHandledIOException $
 
     printInfo "Start running..."
 
-    empty <- newIORef Set.empty
+    ref <- newIORef Set.empty
 
     manager <- newTlsManager
 
@@ -335,7 +335,7 @@ main = printHandledIOException $
       optFlags
       optStdoutTrace
       optFileTrace
-      empty
+      ref
       manager
       (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir optJson (loadFilesDBFromOptions optFilesDB))
       & printAppResult
