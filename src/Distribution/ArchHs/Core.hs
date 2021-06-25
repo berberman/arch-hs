@@ -36,7 +36,7 @@ import Distribution.ArchHs.PkgBuild
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import Distribution.Compiler (CompilerFlavor (..))
-import Distribution.PackageDescription
+import Distribution.PackageDescription hiding (pkgName)
 import Distribution.SPDX
 import Distribution.System (Arch (X86_64), OS (Linux))
 import qualified Distribution.Types.BuildInfo.Lens as L
@@ -51,7 +51,7 @@ archEnv _ (Arch X86_64) = Right True
 archEnv _ (Arch _) = Right False
 archEnv _ (Impl GHC range) = Right $ withinRange (mkVersion [8, 10, 4]) range
 archEnv _ (Impl _ _) = Right False
-archEnv assignment f@(Flag f') = go f $ lookupFlagAssignment f' assignment
+archEnv assignment f@(PackageFlag f') = go f $ lookupFlagAssignment f' assignment
   where
     go _ (Just r) = Right r
     go x Nothing = Left x

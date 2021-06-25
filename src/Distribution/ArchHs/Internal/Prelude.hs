@@ -31,6 +31,7 @@ module Distribution.ArchHs.Internal.Prelude
     module Polysemy.Reader,
     module Polysemy.State,
     module Polysemy.Trace,
+    module Distribution.ArchHs.Compat,
     module Distribution.Types.PackageDescription,
     module Distribution.Types.GenericPackageDescription,
     module Distribution.Types.Version,
@@ -60,6 +61,7 @@ import Data.Text.Encoding
   ( decodeUtf8,
     encodeUtf8,
   )
+import Distribution.ArchHs.Compat
 import Distribution.Parsec (simpleParsec)
 import Distribution.Pretty (prettyShow)
 import Distribution.Types.Flag

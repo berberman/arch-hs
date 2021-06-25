@@ -97,10 +97,10 @@ prettyDeps =
     . fmap (\(i :: Int, n) -> pretty i <> dot <+> viaPretty n)
     . zip [1 ..]
 
-prettyFlags :: [(PackageName, [Flag])] -> Doc AnsiStyle
+prettyFlags :: [(PackageName, [PackageFlag])] -> Doc AnsiStyle
 prettyFlags = vsep . fmap (\(name, flags) -> annMagneta (viaPretty name) <> line <> indent 2 (vsep (prettyFlag <$> flags)))
 
-prettyFlag :: Flag -> Doc AnsiStyle
+prettyFlag :: PackageFlag -> Doc AnsiStyle
 prettyFlag f =
   "⚐" <+> annYellow name <> colon <> line
     <> indent
