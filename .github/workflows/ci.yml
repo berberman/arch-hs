@@ -8,30 +8,33 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    container: archlinux
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        cabal: ["3.2.0.0", "3.4.0.0"]
+        ghc: ["8.6.5", "8.8.3", "8.10.5", "9.0.1"]
+        os: [ubuntu-latest, macOS-latest]
 
     steps:
     - uses: actions/checkout@v2
       if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
 
-    - name: Install build dependencies
-      run: |
-        pacman -Syu --noconfirm
-        pacman -S --needed --noconfirm ghc base-devel ghc-libs \
-          haskell-aeson haskell-algebraic-graphs haskell-conduit \
-          haskell-conduit-extra haskell-hackage-db haskell-megaparsec \
-          haskell-microlens haskell-microlens-th haskell-neat-interpolation \
-          haskell-optparse-simple haskell-polysemy haskell-req haskell-split \
-          haskell-tar-conduit haskell-diff haskell-prettyprinter haskell-prettyprinter-ansi-terminal \
-          haskell-arch-web
+    - uses: haskell/actions/setup@v1
+      name: Setup Haskell
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ matrix.cabal }}
+
+    - uses: actions/cache@v1
+      name: Cache ~/.cabal/store
+      with:
+        path: ~/.cabal/store
+        key: ${{ runner.os }}-${{ matrix.ghc }}-cabal
 
     - name: Build
       run: |
-        runhaskell Setup configure -O --enable-shared --enable-executable-dynamic --disable-library-vanilla \
-          --prefix=/usr --enable-tests \
-          --dynlibdir=/usr/lib --libsubdir=\$compiler/site-local/\$pkgid \
-          --ghc-option=-optl-Wl\,-z\,relro\,-z\,now \
-          --ghc-option='-pie' \
-          -f alpm
-        runhaskell Setup build
+        cabal v2-update
+        cabal v2-build --enable-tests --enable-benchmarks
+    - name: Test
+      run: |
+        cabal v2-test 

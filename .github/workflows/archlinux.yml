@@ -1,0 +1,37 @@
+name: ArchLinux
+
+# Trigger the workflow on push or pull request, but only for the master branch
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux
+
+    steps:
+    - uses: actions/checkout@v2
+      if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
+
+    - name: Install build dependencies
+      run: |
+        pacman -Syu --noconfirm
+        pacman -S --needed --noconfirm ghc base-devel ghc-libs \
+          haskell-aeson haskell-algebraic-graphs haskell-conduit \
+          haskell-conduit-extra haskell-hackage-db haskell-megaparsec \
+          haskell-microlens haskell-microlens-th haskell-neat-interpolation \
+          haskell-optparse-simple haskell-polysemy haskell-req haskell-split \
+          haskell-tar-conduit haskell-diff haskell-prettyprinter haskell-prettyprinter-ansi-terminal \
+          haskell-arch-web
+
+    - name: Build
+      run: |
+        runhaskell Setup configure -O --enable-shared --enable-executable-dynamic --disable-library-vanilla \
+          --prefix=/usr --enable-tests \
+          --dynlibdir=/usr/lib --libsubdir=\$compiler/site-local/\$pkgid \
+          --ghc-option=-optl-Wl\,-z\,relro\,-z\,now \
+          --ghc-option='-pie' \
+          -f alpm
+        runhaskell Setup build
