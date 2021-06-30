@@ -63,7 +63,7 @@ common common-options
     , servant-client               ^>=0.18.2
     , split                        ^>=0.2.3
     , tar-conduit                  ^>=0.3.2
-    , template-haskell             ^>=2.16.0
+    , template-haskell             ^>=2.16.0 || ^>=2.17.0
     , text
 
   ghc-options:
