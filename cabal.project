@@ -1,6 +1,0 @@
-packages: .
-
-package arch-hs
-
-allow-newer:
-  type-errors-pretty:base
