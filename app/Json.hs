@@ -31,7 +31,7 @@ packageName (unPackageName -> name) = String $ T.pack name
 archLinuxName :: ArchLinuxName -> Value
 archLinuxName (ArchLinuxName name) = String $ T.pack name
 
-flag :: PackageFlag -> Value
+flag :: PkgFlag -> Value
 flag f =
   object
     [ "name" .= unFlagName (flagName f),
@@ -99,7 +99,7 @@ instance ToJSON SysDepsS where
 
 data FlagsS = FlagsS
   { fPkg :: PackageName,
-    fFlag :: [PackageFlag]
+    fFlag :: [PkgFlag]
   }
 
 instance ToJSON FlagsS where
@@ -137,5 +137,5 @@ fromSolvedPackage :: SolvedPackage -> SolvedPackageS
 fromSolvedPackage ProvidedPackage {..} = SolvedPackageS _pkgName [] (Just _pkgProvider)
 fromSolvedPackage SolvedPackage {..} = SolvedPackageS _pkgName (fromSolvedDependency <$> _pkgDeps) Nothing
 
-fromFlag :: (PackageName, [PackageFlag]) -> FlagsS
+fromFlag :: (PackageName, [PkgFlag]) -> FlagsS
 fromFlag (fPkg, fFlag) = FlagsS {..}

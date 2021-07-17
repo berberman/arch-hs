@@ -51,7 +51,7 @@ archEnv _ (Arch X86_64) = Right True
 archEnv _ (Arch _) = Right False
 archEnv _ (Impl GHC range) = Right $ withinRange (mkVersion [8, 10, 4]) range
 archEnv _ (Impl _ _) = Right False
-archEnv assignment f@(PackageFlag f') = go f $ lookupFlagAssignment f' assignment
+archEnv assignment f@(PkgFlag f') = go f $ lookupFlagAssignment f' assignment
   where
     go _ (Just r) = Right r
     go x Nothing = Left x
