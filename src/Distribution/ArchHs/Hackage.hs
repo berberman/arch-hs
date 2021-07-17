@@ -93,7 +93,7 @@ getCabal name version = do
     Nothing -> throw $ PkgNotFound name
 
 -- | Get flags of a package.
-getPackageFlag :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r [Flag]
+getPackageFlag :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r [PkgFlag]
 getPackageFlag name = do
   cabal <- getLatestCabal name
   return $ cabal & genPackageFlags

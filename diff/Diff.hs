@@ -228,7 +228,7 @@ dep s va vb =
     joinToString xs = indent 2 $ vsep xs
     joinVersionWithName (n, range) = unPackageName n <> "  " <> prettyShow range
 
-flags :: PackageName -> [Flag] -> [Flag] -> Doc AnsiStyle
+flags :: PackageName -> [PkgFlag] -> [PkgFlag] -> Doc AnsiStyle
 flags name a b =
   annMagneta "Flags" <> colon <> line
     <> if noDiff diff
