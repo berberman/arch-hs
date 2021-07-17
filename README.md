@@ -6,8 +6,8 @@
 
 | Env              | CI                                                                                                                        |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| pacman (-f alpm) | [![GitHub CI](https://github.com/berberman/arch-hs/workflows/CI/badge.svg)](https://github.com/berberman/arch-hs/actions) |
-| cabal-install    | [![Build Status](https://travis-ci.com/berberman/arch-hs.svg?branch=master)](https://travis-ci.com/berberman/arch-hs)     |
+| pacman (-f alpm) | [![ArchLinux](https://github.com/berberman/arch-hs/actions/workflows/archlinux.yml/badge.svg)](https://github.com/berberman/arch-hs/actions/workflows/archlinux.yml) |
+| cabal-install    | [![CI](https://github.com/berberman/arch-hs/actions/workflows/ci.yml/badge.svg)](https://github.com/berberman/arch-hs/actions/workflows/ci.yml)     |
 
 A program generating PKGBUILD for hackage packages. Special thanks to [felixonmars](https://github.com/felixonmars/).
 
