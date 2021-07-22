@@ -8,80 +8,19 @@ where
 
 import Data.Algorithm.Diff
 import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromJust)
 import Distribution.ArchHs.CommunityDB (versionInCommunity)
-import Distribution.ArchHs.Core (evalConditionTree)
+import Distribution.ArchHs.Core
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
-import Distribution.PackageDescription (CondTree, ConfVar)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import qualified Distribution.Types.BuildInfo.Lens as L
-import Distribution.Types.Dependency (Dependency)
-import Distribution.Types.SetupBuildInfo
 import Distribution.Utils.ShortText (fromShortText)
 import Network.HTTP.Client
 
------------------------------------------------------------------------------
-
---  Duplicated from Core.hs with modifications.
-
 type VersionedList = [(PackageName, VersionRange)]
-
-type VersionedComponentList = [(UnqualComponentName, VersionedList)]
-
-collectLibDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
-collectLibDeps cabal = do
-  case cabal & condLibrary of
-    Just lib -> do
-      bInfo <- evalConditionTree cabal lib
-      let libDeps = unDepV <$> buildDependsIfBuild bInfo
-          toolDeps = unBuildTools $ buildToolsAndbuildToolDependsIfBuild bInfo
-      mapM_ (uncurry updateDependencyRecord) libDeps
-      mapM_ (uncurry updateDependencyRecord) toolDeps
-      return (libDeps, toolDeps)
-    Nothing -> return ([], [])
-
-collectComponentialDeps ::
-  (Semigroup k, L.HasBuildInfo k, Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r) =>
-  (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
-  GenericPackageDescription ->
-  [UnqualComponentName] ->
-  Sem r (VersionedComponentList, VersionedComponentList)
-collectComponentialDeps f cabal skip = do
-  let exes = cabal & f
-  bInfo <- filter (not . (`elem` skip) . fst) . zip (exes <&> fst) <$> mapM (evalConditionTree cabal . snd) exes
-  let deps = bInfo <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
-      toolDeps = bInfo <&> _2 %~ (unBuildTools . buildToolsAndbuildToolDependsIfBuild)
-  mapM_ (uncurry updateDependencyRecord) $ deps ^.. each . _2 ^. each
-  mapM_ (uncurry updateDependencyRecord) $ toolDeps ^.. each . _2 ^. each
-  return (deps, toolDeps)
-
-collectExeDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
-collectExeDeps = collectComponentialDeps condExecutables
-
-collectTestDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
-collectTestDeps = collectComponentialDeps condTestSuites
-
-collectSubLibDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
-collectSubLibDeps = collectComponentialDeps condSubLibraries
-
-collectSetupDeps :: Member Trace r => GenericPackageDescription -> Sem r VersionedList
-collectSetupDeps cabal = do
-  let name = getPkgName' cabal
-  trace' $ "Getting setup dependencies of " <> show name
-  case setupBuildInfo $ packageDescription cabal of
-    Just (SetupBuildInfo deps _) -> do
-      let result = unDepV <$> deps
-      trace' $ "Found: " <> show result
-      return result
-    _ -> return []
-
-updateDependencyRecord :: Member DependencyRecord r => PackageName -> VersionRange -> Sem r ()
-updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 
 -----------------------------------------------------------------------------
 
@@ -102,11 +41,11 @@ directDependencies ::
   GenericPackageDescription ->
   Sem r (VersionedList, VersionedList)
 directDependencies cabal = do
-  (libDeps, libToolsDeps) <- collectLibDeps cabal
-  (subLibDeps, subLibToolsDeps) <- collectSubLibDeps cabal []
-  (exeDeps, exeToolsDeps) <- collectExeDeps cabal []
-  (testDeps, testToolsDeps) <- collectTestDeps cabal []
-  setupDeps <- collectSetupDeps cabal
+  (libDeps, libToolsDeps, _) <- collectLibDeps id cabal
+  (subLibDeps, subLibToolsDeps, _) <- collectSubLibDeps id cabal []
+  (exeDeps, exeToolsDeps, _) <- collectExeDeps id cabal []
+  (testDeps, testToolsDeps, _) <- collectTestDeps id cabal []
+  setupDeps <- collectSetupDeps id cabal
   let flatten = mconcat . fmap snd
       l = libDeps
       lt = libToolsDeps
@@ -116,8 +55,9 @@ directDependencies cabal = do
       et = flatten exeToolsDeps
       t = flatten testDeps
       tt = flatten testToolsDeps
-      notMyself = (/= getPkgName' cabal)
-      distinct = filter (notMyself . fst) . nub
+      mySubLibs = fmap (unqualComponentNameToPackageName . fst) subLibDeps
+      notMyselfOrSubLib = (&&) <$> (/= getPkgName' cabal) <*> (`notElem` mySubLibs)
+      distinct = filter (notMyselfOrSubLib . fst) . nub
       depends = distinct $ l <> sl <> e
       makedepends = distinct (lt <> slt <> et <> t <> tt <> setupDeps) \\ depends
       sort' = sortBy (\x y -> uncurry compare $ getTwo _1 x y)

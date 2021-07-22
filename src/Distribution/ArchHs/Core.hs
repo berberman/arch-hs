@@ -12,6 +12,13 @@ module Distribution.ArchHs.Core
     cabalToPkgBuild,
     evalConditionTree,
     subsumeGHCVersion,
+
+    -- * Helper functions
+    collectLibDeps,
+    collectExeDeps,
+    collectTestDeps,
+    collectSubLibDeps,
+    collectSetupDeps,
   )
 where
 
@@ -107,11 +114,14 @@ getDependencies skip parent name = do
   trace' $ "Already resolved: " <> show resolved
   traceCallStack
   cabal <- getLatestCabal name
-  (libDeps, libToolsDeps, libSysDeps) <- collectLibDeps cabal
-  (subLibDeps, subLibToolsDeps, subLibSysDeps) <- collectSubLibDeps cabal skip
-  (exeDeps, exeToolsDeps, exeSysDeps) <- collectExeDeps cabal skip
-  (testDeps, testToolsDeps, testSysDeps) <- collectTestDeps cabal skip
-  setupDeps <- collectSetupDeps cabal
+  let kIgnoreVersionLib = fmap fst
+      kIgnoreVersionComp = fmap (second $ fmap fst)
+      kIgnoreVersionSetup = kIgnoreVersionLib
+  (libDeps, libToolsDeps, libSysDeps) <- collectLibDeps kIgnoreVersionLib cabal
+  (subLibDeps, subLibToolsDeps, subLibSysDeps) <- collectSubLibDeps kIgnoreVersionComp cabal skip
+  (exeDeps, exeToolsDeps, exeSysDeps) <- collectExeDeps kIgnoreVersionComp cabal skip
+  (testDeps, testToolsDeps, testSysDeps) <- collectTestDeps kIgnoreVersionComp cabal skip
+  setupDeps <- collectSetupDeps kIgnoreVersionSetup cabal
   -- Ignore benchmarks
   -- (benchDeps, benchToolsDeps) <- collectBenchMarkDeps cabal skip
   let uname :: (UnqualComponentName -> DependencyType) -> ComponentPkgList -> [(DependencyType, PkgList)]
@@ -190,8 +200,12 @@ getDependencies skip parent name = do
       (if null currentSysDeps then Map.empty else Map.singleton name currentSysDeps) <> nextSys
     )
 
-collectLibDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r => GenericPackageDescription -> Sem r (PkgList, PkgList, [SystemDependency])
-collectLibDeps cabal = do
+collectLibDeps ::
+  (Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r, Show a, Monoid a) =>
+  ([(PackageName, VersionRange)] -> a) ->
+  GenericPackageDescription ->
+  Sem r (a, a, [SystemDependency])
+collectLibDeps k cabal = do
   case cabal & condLibrary of
     Just lib -> do
       let name = getPkgName' cabal
@@ -202,20 +216,21 @@ collectLibDeps cabal = do
           systemDeps = unSystemDependency $ pkgconfigDependsAndExtraLibsIfBuild info
       mapM_ (uncurry updateDependencyRecord) libDeps
       mapM_ (uncurry updateDependencyRecord) toolDeps
-      let result = (fmap fst libDeps, fmap fst toolDeps, systemDeps)
+      let result = (k libDeps, k toolDeps, systemDeps)
       trace' $ "Found: " <> show result
       traceCallStack
       return result
-    Nothing -> return ([], [], [])
+    Nothing -> return mempty -- 'Monoid a' comes from here
 
 collectComponentialDeps ::
-  (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r) =>
+  (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r, Show a) =>
   String ->
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
+  ([(UnqualComponentName, [(PackageName, VersionRange)])] -> a) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
-  Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
-collectComponentialDeps tag f cabal skip = do
+  Sem r (a, a, [SystemDependency])
+collectComponentialDeps tag f k cabal skip = do
   let conds = cabal & f
       name = getPkgName' cabal
   trace' $ "Getting " <> tag <> " dependencies of " <> show name
@@ -223,7 +238,6 @@ collectComponentialDeps tag f cabal skip = do
   let deps = info <&> _2 %~ (fmap unDepV . buildDependsIfBuild)
       toolDeps = info <&> _2 %~ (unBuildTools . buildToolsAndbuildToolDependsIfBuild)
       sysDeps = info <&> _2 %~ (unSystemDependency . pkgconfigDependsAndExtraLibsIfBuild)
-      k = fmap (second $ fmap fst)
   mapM_ (uncurry updateDependencyRecord) $ deps ^.. each . _2 ^. each
   mapM_ (uncurry updateDependencyRecord) $ toolDeps ^.. each . _2 ^. each
   let result = (k deps, k toolDeps, mconcat $ fmap snd sysDeps)
@@ -231,25 +245,44 @@ collectComponentialDeps tag f cabal skip = do
   traceCallStack
   return result
 
-collectExeDeps :: (HasCallStack, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
+collectExeDeps ::
+  (HasCallStack, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r, Show a) =>
+  ([(UnqualComponentName, [(PackageName, VersionRange)])] -> a) ->
+  GenericPackageDescription ->
+  [UnqualComponentName] ->
+  Sem r (a, a, [SystemDependency])
 collectExeDeps = collectComponentialDeps "exe" condExecutables
 
-collectTestDeps :: (HasCallStack, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
+collectTestDeps ::
+  (HasCallStack, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r, Show a) =>
+  ([(UnqualComponentName, [(PackageName, VersionRange)])] -> a) ->
+  GenericPackageDescription ->
+  [UnqualComponentName] ->
+  Sem r (a, a, [SystemDependency])
 collectTestDeps = collectComponentialDeps "test" condTestSuites
 
-collectSubLibDeps :: (HasCallStack, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
+collectSubLibDeps ::
+  (HasCallStack, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r, Show a) =>
+  ([(UnqualComponentName, [(PackageName, VersionRange)])] -> a) ->
+  GenericPackageDescription ->
+  [UnqualComponentName] ->
+  Sem r (a, a, [SystemDependency])
 collectSubLibDeps = collectComponentialDeps "sublib" condSubLibraries
 
-collectSetupDeps :: Member Trace r => GenericPackageDescription -> Sem r PkgList
-collectSetupDeps cabal = do
+collectSetupDeps ::
+  (Member Trace r, Show a, Monoid a) =>
+  ([(PackageName, VersionRange)] -> a) ->
+  GenericPackageDescription ->
+  Sem r a
+collectSetupDeps k cabal = do
   let name = getPkgName' cabal
   trace' $ "Getting setup dependencies of " <> show name
   case setupBuildInfo $ packageDescription cabal of
     Just (SetupBuildInfo deps _) -> do
-      let result = fst . unDepV <$> deps
+      let result = k $ unDepV <$> deps
       trace' $ "Found: " <> show result
       return result
-    _ -> return []
+    _ -> return mempty
 
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> VersionRange -> Sem r ()
 updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
