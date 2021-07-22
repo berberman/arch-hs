@@ -9,6 +9,7 @@ import Control.Monad (unless)
 import qualified Data.Map as Map
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Diff
+import Distribution.ArchHs.Core (subsumeGHCVersion)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Options
@@ -34,7 +35,7 @@ main = printHandledIOException $
     manager <- newTlsManager
 
     printInfo "Start running..."
-    runDiff community optFlags manager (diffCabal optPackageName optVersionA optVersionB) & printAppResult
+    runDiff community optFlags manager (subsumeGHCVersion $ diffCabal optPackageName optVersionA optVersionB) & printAppResult
 
 runDiff ::
   CommunityDB ->

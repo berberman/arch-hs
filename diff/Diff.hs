@@ -33,7 +33,7 @@ type VersionedList = [(PackageName, VersionRange)]
 
 type VersionedComponentList = [(UnqualComponentName, VersionedList)]
 
-collectLibDeps :: Members [FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
+collectLibDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> Sem r (VersionedList, VersionedList)
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
@@ -46,7 +46,7 @@ collectLibDeps cabal = do
     Nothing -> return ([], [])
 
 collectComponentialDeps ::
-  (Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, Trace, DependencyRecord] r) =>
+  (Semigroup k, L.HasBuildInfo k, Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r) =>
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
   [UnqualComponentName] ->
@@ -60,13 +60,13 @@ collectComponentialDeps f cabal skip = do
   mapM_ (uncurry updateDependencyRecord) $ toolDeps ^.. each . _2 ^. each
   return (deps, toolDeps)
 
-collectExeDeps :: Members [FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectExeDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectExeDeps = collectComponentialDeps condExecutables
 
-collectTestDeps :: Members [FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectTestDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectTestDeps = collectComponentialDeps condTestSuites
 
-collectSubLibDeps :: Members [FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
+collectSubLibDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r => GenericPackageDescription -> [UnqualComponentName] -> Sem r (VersionedComponentList, VersionedComponentList)
 collectSubLibDeps = collectComponentialDeps condSubLibraries
 
 collectSetupDeps :: Member Trace r => GenericPackageDescription -> Sem r VersionedList
@@ -98,7 +98,7 @@ getCabalFromHackage name version = do
     _ -> error "Failed to parse .cabal file"
 
 directDependencies ::
-  Members [FlagAssignmentsEnv, Trace, DependencyRecord] r =>
+  Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r =>
   GenericPackageDescription ->
   Sem r (VersionedList, VersionedList)
 directDependencies cabal = do
@@ -125,7 +125,7 @@ directDependencies cabal = do
 
 -----------------------------------------------------------------------------
 
-diffCabal :: Members [CommunityEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Reader Manager, Embed IO] r => PackageName -> Version -> Version -> Sem r ()
+diffCabal :: Members [KnownGHCVersion, CommunityEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Reader Manager, Embed IO] r => PackageName -> Version -> Version -> Sem r ()
 diffCabal name a b = do
   ga <- getCabalFromHackage name a
   gb <- getCabalFromHackage name b

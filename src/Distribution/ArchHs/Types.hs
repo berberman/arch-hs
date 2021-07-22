@@ -22,6 +22,7 @@ module Distribution.ArchHs.Types
     HackageEnv,
     CommunityEnv,
     FlagAssignmentsEnv,
+    KnownGHCVersion,
     DependencyType (..),
     DependencyKind (..),
     DependencyProvider (..),
@@ -83,6 +84,9 @@ type FlagAssignmentsEnv = Reader FlagAssignments
 
 -- | Unused state effect
 type DependencyRecord = State (Map PackageName [VersionRange])
+
+-- | Reader effect of GHC version in dependency resolution
+type KnownGHCVersion = Reader Version
 
 -- | The type of a dependency. Who requires this?
 data DependencyType

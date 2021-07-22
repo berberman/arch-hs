@@ -11,6 +11,7 @@ module Distribution.ArchHs.Core
   ( getDependencies,
     cabalToPkgBuild,
     evalConditionTree,
+    subsumeGHCVersion,
   )
 where
 
@@ -18,8 +19,10 @@ import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Data.Bifunctor (second)
 import Data.Containers.ListUtils (nubOrd)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Distribution.ArchHs.CommunityDB (versionInCommunity)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
   ( getLatestCabal,
@@ -44,21 +47,21 @@ import Distribution.Types.CondTree (simplifyCondTree)
 import Distribution.Types.Dependency (Dependency)
 import Distribution.Utils.ShortText (fromShortText)
 
-archEnv :: FlagAssignment -> ConfVar -> Either ConfVar Bool
-archEnv _ (OS Linux) = Right True
-archEnv _ (OS _) = Right False
-archEnv _ (Arch X86_64) = Right True
-archEnv _ (Arch _) = Right False
-archEnv _ (Impl GHC range) = Right $ withinRange (mkVersion [8, 10, 4]) range
-archEnv _ (Impl _ _) = Right False
-archEnv assignment f@(PkgFlag f') = go f $ lookupFlagAssignment f' assignment
+archEnv :: Version -> FlagAssignment -> ConfVar -> Either ConfVar Bool
+archEnv _ _ (OS Linux) = Right True
+archEnv _ _ (OS _) = Right False
+archEnv _ _ (Arch X86_64) = Right True
+archEnv _ _ (Arch _) = Right False
+archEnv ghcVersion _ (Impl GHC range) = Right $ withinRange ghcVersion range
+archEnv _ _ (Impl _ _) = Right False
+archEnv _ assignment f@(PkgFlag f') = go f $ lookupFlagAssignment f' assignment
   where
     go _ (Just r) = Right r
     go x Nothing = Left x
 
 -- | Simplify the condition tree from 'GenericPackageDescription' with given flag assignments and archlinux system assumption.
 evalConditionTree ::
-  (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, Trace] r) =>
+  (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [KnownGHCVersion, FlagAssignmentsEnv, Trace] r) =>
   GenericPackageDescription ->
   CondTree ConfVar [Dependency] k ->
   Sem r BuildInfo
@@ -80,7 +83,8 @@ evalConditionTree cabal cond = do
   trace' $ "Evaluating condition tree of " <> show name
   trace' $ "Flags: " <> show thisFlag
   traceCallStack
-  return $ (^. L.buildInfo) . snd $ simplifyCondTree (archEnv thisFlag) cond
+  ghcVersion <- ask
+  return $ (^. L.buildInfo) . snd $ simplifyCondTree (archEnv ghcVersion thisFlag) cond
 
 -----------------------------------------------------------------------------
 
@@ -88,7 +92,7 @@ evalConditionTree cabal cond = do
 -- All version constraints will be discarded,
 -- and only packages depended by executables, libraries, and test suits will be collected.
 getDependencies ::
-  (HasCallStack, Members [HackageEnv, FlagAssignmentsEnv, WithMyErr, DependencyRecord, State (Set PackageName), Trace] r) =>
+  (HasCallStack, Members [KnownGHCVersion, HackageEnv, FlagAssignmentsEnv, WithMyErr, DependencyRecord, State (Set PackageName), Trace] r) =>
   -- | Skipped
   [UnqualComponentName] ->
   -- | Parent
@@ -186,7 +190,7 @@ getDependencies skip parent name = do
       (if null currentSysDeps then Map.empty else Map.singleton name currentSysDeps) <> nextSys
     )
 
-collectLibDeps :: Members [FlagAssignmentsEnv, DependencyRecord, Trace] r => GenericPackageDescription -> Sem r (PkgList, PkgList, [SystemDependency])
+collectLibDeps :: Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r => GenericPackageDescription -> Sem r (PkgList, PkgList, [SystemDependency])
 collectLibDeps cabal = do
   case cabal & condLibrary of
     Just lib -> do
@@ -205,7 +209,7 @@ collectLibDeps cabal = do
     Nothing -> return ([], [], [])
 
 collectComponentialDeps ::
-  (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) =>
+  (HasCallStack, Semigroup k, L.HasBuildInfo k, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r) =>
   String ->
   (GenericPackageDescription -> [(UnqualComponentName, CondTree ConfVar [Dependency] k)]) ->
   GenericPackageDescription ->
@@ -227,13 +231,13 @@ collectComponentialDeps tag f cabal skip = do
   traceCallStack
   return result
 
-collectExeDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
+collectExeDeps :: (HasCallStack, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
 collectExeDeps = collectComponentialDeps "exe" condExecutables
 
-collectTestDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
+collectTestDeps :: (HasCallStack, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
 collectTestDeps = collectComponentialDeps "test" condTestSuites
 
-collectSubLibDeps :: (HasCallStack, Members [FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
+collectSubLibDeps :: (HasCallStack, Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r) => GenericPackageDescription -> [UnqualComponentName] -> Sem r (ComponentPkgList, ComponentPkgList, [SystemDependency])
 collectSubLibDeps = collectComponentialDeps "sublib" condSubLibraries
 
 collectSetupDeps :: Member Trace r => GenericPackageDescription -> Sem r PkgList
@@ -311,3 +315,12 @@ cabalToPkgBuild pkg uusi sysDeps = do
       _licenseFile = licenseFiles cabal ^? ix 0
       _enableUusi = uusi
   return PkgBuild {..}
+
+-----------------------------------------------------------------------------
+
+-- | Get the ghc version in 'CommunityDB'
+subsumeGHCVersion :: Members [CommunityEnv, WithMyErr] r => InterpreterFor KnownGHCVersion r
+subsumeGHCVersion m = do
+  rawVersion <- versionInCommunity $ ArchLinuxName "haskell-ghc"
+  let ghcVersion = fromMaybe (error $ "Impossible: unable to parse ghc version from [community]: " <> rawVersion) $ simpleParsec rawVersion
+  flip runReader m ghcVersion

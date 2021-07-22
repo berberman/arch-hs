@@ -42,7 +42,7 @@ import System.Directory (createDirectoryIfMissing)
 import System.FilePath (takeFileName)
 
 app ::
-  Members '[Embed IO, State (Set.Set PackageName), CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
+  Members '[Embed IO, State (Set.Set PackageName), KnownGHCVersion, CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
   PackageName ->
   FilePath ->
   Bool ->
@@ -337,7 +337,7 @@ main = printHandledIOException $
       optFileTrace
       ref
       manager
-      (app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir optJson (loadFilesDBFromOptions optFilesDB))
+      (subsumeGHCVersion $ app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir optJson (loadFilesDBFromOptions optFilesDB))
       & printAppResult
 
 -----------------------------------------------------------------------------
