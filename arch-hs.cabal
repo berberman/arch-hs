@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               arch-hs
-version:            0.9.0.0
+version:            0.9.1.0
 synopsis:           Distribute hackage packages to archlinux
 description:
   @arch-hs@ is a command-line program, which simplifies the process of producing
@@ -23,7 +23,7 @@ extra-doc-files:
   CHANGELOG.md
   README.md
 
-tested-with:        GHC ==8.10.4
+tested-with:        GHC ==8.10.5 || ==9.0.1
 
 source-repository head
   type:     git
@@ -52,12 +52,12 @@ common common-options
     , hackage-db                   ^>=2.1.0
     , http-client
     , http-client-tls
-    , megaparsec                   ^>=9.0.0  || ^>=9.1.0
+    , megaparsec                   ^>=9.0.0 || ^>=9.1.0
     , microlens                    ^>=0.4.11
     , microlens-th                 ^>=0.4.3
     , neat-interpolation           ^>=0.5.1
     , optparse-simple              ^>=0.1.1.3
-    , polysemy                     ^>= 1.5.0 || ^>=1.6.0
+    , polysemy                     ^>=1.5.0 || ^>=1.6.0
     , prettyprinter                ^>=1.7.0
     , prettyprinter-ansi-terminal  ^>=1.1.2
     , servant-client               ^>=0.18.2
@@ -98,8 +98,8 @@ library
   autogen-modules: Paths_arch_hs
   exposed-modules:
     Distribution.ArchHs.Aur
-    Distribution.ArchHs.Compat
     Distribution.ArchHs.CommunityDB
+    Distribution.ArchHs.Compat
     Distribution.ArchHs.Core
     Distribution.ArchHs.Exception
     Distribution.ArchHs.FilesDB

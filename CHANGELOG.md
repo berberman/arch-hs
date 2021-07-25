@@ -3,6 +3,14 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.9.1.0
+
+* Support Cabal 3.4
+
+* Use the version of [`haskell-ghc`](https://archlinux.org/packages/community/x86_64/ghc/) to evaluate condition trees
+
+* Fix the bug that sub-lib components appear wrongly in results
+
 ## 0.9.0.0
 
 * Remove `arch-hs-submit` executable

@@ -356,4 +356,4 @@ subsumeGHCVersion :: Members [CommunityEnv, WithMyErr] r => InterpreterFor Known
 subsumeGHCVersion m = do
   rawVersion <- versionInCommunity $ ArchLinuxName "haskell-ghc"
   let ghcVersion = fromMaybe (error $ "Impossible: unable to parse ghc version from [community]: " <> rawVersion) $ simpleParsec rawVersion
-  flip runReader m ghcVersion
+  runReader ghcVersion m
