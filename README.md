@@ -285,7 +285,7 @@ package() {
 including renaming, matching license, and filling out dependencies etc.
 However, packaging haven't been done so far.
 `arch-hs` can't guarantee that this package can be built by ghc with the latest dependencies;
-hence some patchs may be required in `prepare()`, such as [uusi](#Uusi).
+hence some patches may be required in `prepare()`, such as [uusi](#Uusi).
 
 
 ## Options
