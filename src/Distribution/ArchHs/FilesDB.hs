@@ -2,6 +2,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
+
 -- | Copyright: (c) 2020-2021 berberman
 -- SPDX-License-Identifier: MIT
 -- Maintainer: berberman <berberman@yandex.com>
@@ -111,7 +112,7 @@ loadFilesDB :: DBKind -> FilePath -> IO FilesDB
 loadFilesDB db dir = Map.fromList <$> runConduitRes (loadFilesDBC db dir .| mergeResult .| sinkList)
 
 -- | Lookup which Arch Linux package contains this @file@ from given files db.
--- This query is bad in performance, since it traverses the entire db. 
+-- This query is bad in performance, since it traverses the entire db.
 lookupPkg :: File -> FilesDB -> [ArchLinuxName]
 lookupPkg file = Map.foldrWithKey (\k v acc -> if file `elem` v then k : acc else acc) []
 

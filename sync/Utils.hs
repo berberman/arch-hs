@@ -17,7 +17,7 @@ import Distribution.ArchHs.Types
 
 linkedHaskellPackages ::
   Members [CommunityEnv, HackageEnv, WithMyErr, Embed IO] r =>
-  Sem r ([(ArchLinuxName, ArchLinuxVersion, GenericPackageDescription)])
+  Sem r [(ArchLinuxName, ArchLinuxVersion, GenericPackageDescription)]
 linkedHaskellPackages = do
   communityHaskellPackages <- filter (isHaskellPackage . fst) . Map.toList <$> ask @CommunityDB
   hackagePackages <- Map.keys <$> ask @HackageDB

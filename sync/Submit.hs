@@ -27,7 +27,7 @@ genCSV = do
   linked <- linkedHaskellPackages
   pure $
     sortOn
-      (\x -> x ^. _1)
+      (^. _1)
       [ (unPackageName hackageName, version, prefix <> tweakedName)
         | (archLinuxName, version, packageName -> hackageName) <- linked,
           let tweakedName =

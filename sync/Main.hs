@@ -27,7 +27,7 @@ runCheck ::
   HackageDB ->
   Bool ->
   IO (Either MyException ())
-runCheck community hackage includeGHC=
+runCheck community hackage includeGHC =
   ( runFinal
       . embedToFinal @IO
       . errorToIOFinal

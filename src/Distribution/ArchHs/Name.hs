@@ -159,8 +159,7 @@ toHackageName = mToHackageName . toHackageRep
 -- i.e. it is in @preset@ or has @haskell-@ prefix.
 -- Attention: There is no guarantee that the package exists in hackage.
 isHaskellPackage :: ArchLinuxName -> Bool
-isHaskellPackage (toArchLinuxRep -> rep) =
-  (rep `elem` communityListP || "haskell-" `isPrefixOf` unsafeUnMyName rep)
+isHaskellPackage (toArchLinuxRep -> rep) = rep `elem` communityListP || "haskell-" `isPrefixOf` unsafeUnMyName rep
 
 -- | Check if a package is GHC or GHC Libs
 

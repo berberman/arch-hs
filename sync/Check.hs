@@ -19,26 +19,28 @@ check includeGHC = do
             <+> "in"
             <+> ppCommunity
             <+> "has version"
-            <+> (if isHackageNewer then annRed else annGreen) (viaPretty archVersion)
+            <+> (if isHackageNewer then annRed else annGreen)
+              (viaPretty archVersion)
             <> comma
-            <+> "but linked"
-            <+> annMagneta (pretty (unPackageName hackageName))
-            <+> "in"
-            <+> annCyan "Hackage"
-            <+> "has"
-            <+> (if isHackageNewer then "a newer" else "an older")
-            <+> "version"
-            <+> (if isHackageNewer then annGreen else annRed) (viaPretty hackageVersion)
+              <+> "but linked"
+              <+> annMagneta (pretty (unPackageName hackageName))
+              <+> "in"
+              <+> annCyan "Hackage"
+              <+> "has"
+              <+> (if isHackageNewer then "a newer" else "an older")
+              <+> "version"
+              <+> (if isHackageNewer then annGreen else annRed)
+                (viaPretty hackageVersion)
           | (archName, rawArchVersion, cabal) <- linked,
             let hackageName = packageName cabal
                 hackageVersion = packageVersion cabal,
-            archVersion <- maybeToList $ simpleParsec rawArchVersion,
             includeGHC || not (isGHCLibs hackageName),
+            archVersion <- maybeToList $ simpleParsec rawArchVersion,
             archVersion /= hackageVersion,
             let isHackageNewer = hackageVersion > archVersion
         ]
-  if (null result)
+  if null result
     then printSuccess "Finished checking"
     else do
-      printWarn $ "Finished checking with inconsistenc(ies):"
+      printWarn "Finished checking with inconsistenc(ies):"
       embed $ putDoc $ vcat result <> line
