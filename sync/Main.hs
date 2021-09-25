@@ -7,9 +7,11 @@ module Main (main) where
 import Args
 import Check
 import Control.Monad (unless)
+import qualified Data.Map.Strict as Map
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Name (isHaskellPackage)
 import Distribution.ArchHs.Options
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
@@ -82,3 +84,11 @@ runMode = \case
     community <- loadCommunityDBFromOptions optCommunityDB
     hackage <- loadHackageDBFromOptions optHackage
     runCheck community hackage optShowGHCLibs & printAppResult
+  List CommunityDBOptions {..} ListOptions {..} -> do
+    community <- loadCommunityDBFromOptions
+    putStrLn $
+      unlines
+        [ unArchLinuxName name <> (if optWithVersion then ": " <> version else "")
+          | (name, version) <- Map.toList community,
+            isHaskellPackage name
+        ]

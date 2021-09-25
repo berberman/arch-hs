@@ -2,6 +2,7 @@ module Args
   ( CommonOptions (..),
     SubmitOptions (..),
     CheckOptions (..),
+    ListOptions (..),
     Mode (..),
     runArgsParser,
   )
@@ -58,7 +59,21 @@ checkOptionsParser =
 
 -----------------------------------------------------------------------------
 
-data Mode = Submit CommonOptions SubmitOptions | Check CommonOptions CheckOptions
+newtype ListOptions = ListOptions
+  { optWithVersion :: Bool
+  }
+
+listOptionsParser :: Parser ListOptions
+listOptionsParser =
+  ListOptions
+    <$> switch (short 'v' <> long "with-version" <> help "Show package version")
+
+-----------------------------------------------------------------------------
+
+data Mode
+  = Submit CommonOptions SubmitOptions
+  | Check CommonOptions CheckOptions
+  | List CommunityDBOptions ListOptions
 
 runArgsParser :: IO Mode
 runArgsParser =
@@ -79,3 +94,8 @@ runArgsParser =
           "check inconsistencies of Haskell packages version"
           id
           (Check <$> commonOptionsParser <*> checkOptionsParser)
+        addCommand
+          "list"
+          "list all Haskell packages in [community]"
+          id
+          (List <$> communityDBOptionsParser <*> listOptionsParser)
