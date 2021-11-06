@@ -12,6 +12,7 @@ import Args
 import Control.Monad (filterM, forM_, unless)
 import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as LBS
+import Data.Conduit.Process (system)
 import Data.Containers.ListUtils (nubOrd)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty (toList)
@@ -39,6 +40,7 @@ import Json
 import Network.HTTP.Client (Manager)
 import Network.HTTP.Client.TLS (newTlsManager)
 import System.Directory (createDirectoryIfMissing)
+import System.Exit (ExitCode (ExitFailure, ExitSuccess))
 import System.FilePath (takeFileName)
 
 app ::
@@ -49,11 +51,11 @@ app ::
   [String] ->
   Bool ->
   Bool ->
-  FilePath ->
+  Bool ->
   FilePath ->
   (DBKind -> IO FilesDB) ->
   Sem r ()
-app target path aurSupport skip uusi force metaPath jsonPath loadFilesDB' = do
+app target path aurSupport skip uusi force installDeps jsonPath loadFilesDB' = do
   (deps, sublibs, sysDeps) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
 
   inCommunity <- isInCommunity target
@@ -191,31 +193,25 @@ app target path aurSupport skip uusi force metaPath jsonPath loadFilesDB' = do
       )
       toBePacked2
 
-  unless (null metaPath) $ do
-    cabal <- getLatestCabal target
-    let url = getUrl $ packageDescription cabal
-        name = unPackageName target
-        template = N.metaTemplate (T.pack url) (T.pack name)
-        providedDepends pkg =
+  when installDeps $ do
+    let providedDepends pkg =
           pkg ^. pkgDeps
             ^.. each
               . filtered (\x -> depNotMyself (pkg ^. pkgName) x && depNotInGHCLib x && x ^. depProvider == Just ByCommunity)
-        toStr x = "'" <> (unArchLinuxName . toArchLinuxName . _depName) x <> "'"
-        depends = case unwords . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked2 of
-          [] -> ""
-          xs -> " " <> xs
+        toStr = unArchLinuxName . toArchLinuxName . _depName
+        depends = unwords . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked2
         flattened' = filter (/= target) flattened
-        comment = case flattened' of
-          [] -> "\n"
-          [x] -> "# The following dependency is missing in community: " <> unPackageName x
-          _ -> "# Following dependencies are missing in community:" <> intercalate ", " (unPackageName <$> flattened')
-        txt = template (T.pack comment) (T.pack depends)
-        dir = metaPath </> "haskell-" <> name <> "-meta"
-        fileName = dir </> "PKGBUILD"
-    embed $ do
-      createDirectoryIfMissing True dir
-      writeFile fileName (T.unpack txt)
-      printInfo $ "Write file" <> colon <+> pretty fileName
+    case flattened' of
+      [] -> pure ()
+      [x] -> printWarn $ "The following dependency is missing in" <+> ppCommunity <> colon <+> pretty (unPackageName x)
+      xs -> printWarn $ "Following dependencies are missing in" <+> ppCommunity <> colon <+> hsep (punctuate comma (pretty . unPackageName <$> xs))
+    embed $ putDoc line
+    case depends of
+      [] -> printInfo "No extra dependency to install"
+      xs ->
+        embed (system $ "sudo pacman --needed -S " <> xs) >>= \case
+          ExitSuccess -> printSuccess "Installed successfully"
+          ExitFailure c -> printError $ "pacman exited with" <+> pretty c
 
 -----------------------------------------------------------------------------
 data EmergedSysDep = Solved File ArchLinuxName | Unsolved File
@@ -337,7 +333,7 @@ main = printHandledIOException $
       optFileTrace
       ref
       manager
-      (subsumeGHCVersion $ app optTarget optOutputDir optAur optSkip optUusi optForce optMetaDir optJson (loadFilesDBFromOptions optFilesDB))
+      (subsumeGHCVersion $ app optTarget optOutputDir optAur optSkip optUusi optForce optInstallDeps optJson (loadFilesDBFromOptions optFilesDB))
       & printAppResult
 
 -----------------------------------------------------------------------------

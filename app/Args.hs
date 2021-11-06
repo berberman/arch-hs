@@ -25,7 +25,7 @@ data Options = Options
     optFileTrace :: FilePath,
     optUusi :: Bool,
     optForce :: Bool,
-    optMetaDir :: FilePath,
+    optInstallDeps :: Bool,
     optJson :: FilePath,
     optTarget :: PackageName
   }
@@ -83,11 +83,9 @@ cmdOptions =
         ( long "force"
             <> help "Try to package even if target is provided"
         )
-      <*> strOption
-        ( long "meta"
-            <> metavar "PATH"
-            <> help "Path to target meta package"
-            <> value ""
+      <*> switch
+        ( long "install-deps"
+            <> help "Call pacman to install existing dependencies of the target"
         )
       <*> strOption
         ( long "json"
