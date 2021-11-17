@@ -162,11 +162,11 @@ whenBuildable def info f
   | otherwise = def
 
 -- | Trace with prefix @[TRACE]@.
-trace' :: MemberWithError Trace r => String -> Sem r ()
+trace' :: Member Trace r => String -> Sem r ()
 trace' s = trace $ "[TRACE]  " <> s
 
 -- | Trace 'GHC.Stack.CallStack'.
-traceCallStack :: (HasCallStack, MemberWithError Trace r) => Sem r ()
+traceCallStack :: (HasCallStack, Member Trace r) => Sem r ()
 traceCallStack = do
   trace . prefix $ prettyCallStack callStack
   where
