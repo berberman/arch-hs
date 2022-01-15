@@ -53,23 +53,24 @@ app ::
   Bool ->
   Bool ->
   FilePath ->
+  Bool ->
   (DBKind -> IO FilesDB) ->
   Sem r ()
-app target path aurSupport skip uusi force installDeps jsonPath loadFilesDB' = do
+app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing loadFilesDB' = do
   (deps, sublibs, sysDeps) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
 
   inCommunity <- isInCommunity target
 
   when inCommunity $
     if force
-      then printWarn $ "Target has been provided by" <+> ppCommunity <> comma <+> "but you passed --force"
+      then printWarn $ "Target has been provided by" <+> ppCommunity <> comma <+> "but you specified --force"
       else throw $ TargetExist target ByCommunity
 
   when aurSupport $ do
     inAur <- isInAur target
     when inAur $
       if force
-        then printWarn $ "Target has been provided by" <+> ppAur <> comma <+> "but you passed --force"
+        then printWarn $ "Target has been provided by" <+> ppAur <> comma <+> "but you specified --force"
         else throw $ TargetExist target ByAur
 
   let removeSublibs pkgs =
@@ -95,6 +96,9 @@ app target path aurSupport skip uusi force installDeps jsonPath loadFilesDB' = d
       printWarn $ "Package" <+> dquotes (pretty parent) <+> "is provided without" <> colon
       forM_ children $ putStrLn . unPackageName
 
+  unless (null abnormalDependencies || noSkipMissing) $
+    printWarn "Those package(s) are ignored unless you specify --no-skip-missing"
+
   let fillProvidedPkgs provideList provider = map (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = map (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))
       filledByCommunity = fillProvidedPkgs communityProvideList ByCommunity . fillProvidedDeps communityProvideList ByCommunity $ grouped
@@ -119,8 +123,8 @@ app target path aurSupport skip uusi force installDeps jsonPath loadFilesDB' = d
   embed $ T.putStrLn . prettySolvedPkgs $ filledByBoth
 
   printInfo "Recommended package order:"
-  -- remove missingChildren from the graph, so that we don't need package them if they are not our target
-  let vertexesToBeRemoved = missingChildren <> filledByBoth ^.. each . filtered isProvided ^.. each . pkgName
+  -- remove missingChildren from the graph iff noSkipMissing is not enabled
+  let vertexesToBeRemoved = (if noSkipMissing then [] else missingChildren) <> filledByBoth ^.. each . filtered isProvided ^.. each . pkgName
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle newGraph of
@@ -131,7 +135,11 @@ app target path aurSupport skip uusi force installDeps jsonPath loadFilesDB' = d
   -- toBePacked1 and toBePacked2 should appear after the next line
   let toBePacked3 = filter (\x -> x ^. pkgName `elem` flattened) toBePacked2
 
-  embed . putDoc $ (prettyDeps . reverse $ flattened) <> line <> line
+  -- add sign for missing children if we have
+  embed . putDoc $ (prettyDeps . reverse $ map (\x -> (x, x `elem` missingChildren)) flattened) <> line <> line
+
+  unless (null missingChildren) $
+    embed . putDoc $ annotate italicized $ yellowStarInParens <+> "indicates a missing package" <> line <> line
 
   let sysDepsToBePacked = Map.filterWithKey (\k _ -> k `elem` flattened) sysDeps
 
@@ -308,9 +316,9 @@ main = printHandledIOException $
       printInfo "You chose to skip:"
       putDoc $ prettySkip optSkip <> line <> line
 
-    when optAur $ printInfo "You passed -a, searching AUR may takes a long time"
+    when optAur $ printInfo "You specified -a, searching AUR may takes a long time"
 
-    when optUusi $ printInfo "You passed --uusi, uusi will become makedepends of each package"
+    when optUusi $ printInfo "You specified --uusi, uusi will become makedepends of each package"
 
     hackage <- loadHackageDBFromOptions optHackage
 
@@ -340,7 +348,7 @@ main = printHandledIOException $
       optFileTrace
       ref
       manager
-      (subsumeGHCVersion $ app optTarget optOutputDir optAur optSkip optUusi optForce optInstallDeps optJson (loadFilesDBFromOptions optFilesDB))
+      (subsumeGHCVersion $ app optTarget optOutputDir optAur optSkip optUusi optForce optInstallDeps optJson optNoSkipMissing (loadFilesDBFromOptions optFilesDB))
       & printAppResult
 
 -----------------------------------------------------------------------------

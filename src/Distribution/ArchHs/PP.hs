@@ -19,6 +19,7 @@ module Distribution.ArchHs.PP
     align2col,
     dui,
     cuo,
+    yellowStarInParens,
     ppCommunity,
     ppAur,
     ppDBKind,
@@ -80,6 +81,9 @@ cuo = annRed "✘"
 dui :: Doc AnsiStyle
 dui = annGreen "✔"
 
+yellowStarInParens :: Doc AnsiStyle
+yellowStarInParens = annYellow $ parens (pretty '*')
+
 prettySkip :: [String] -> Doc AnsiStyle
 prettySkip = hsep . punctuate comma . fmap (annotate (color Magenta) . pretty)
 
@@ -91,10 +95,18 @@ prettyFlagAssignments m =
 prettyFlagAssignment :: FlagAssignment -> Doc AnsiStyle
 prettyFlagAssignment = vsep . fmap (\(n, v) -> "⚐" <+> annotate (color Yellow) (viaPretty n) <> colon <+> annotate (color Cyan) (pretty v)) . unFlagAssignment
 
-prettyDeps :: [PackageName] -> Doc AnsiStyle
+prettyDeps :: [(PackageName, Bool)] -> Doc AnsiStyle
 prettyDeps =
   vsep
-    . fmap (\(i :: Int, n) -> pretty i <> dot <+> viaPretty n)
+    . fmap
+      ( \(i :: Int, (pkg, star)) ->
+          pretty i
+            <> dot <+> viaPretty pkg
+            <> ( if star
+                   then space <> yellowStarInParens
+                   else mempty
+               )
+      )
     . zip [1 ..]
 
 prettyFlags :: [(PackageName, [PkgFlag])] -> Doc AnsiStyle

@@ -389,6 +389,14 @@ With `--json`, `arch-hs` will dump information presented in stdout to file as JS
   * system dependencies
   * flags
 
+### No skip missing
+
+```
+$ arch-hs --no-skip-missing TARGET
+```
+
+With `--no-skip-missing`, `arch-hs` will try to package if the dependent of this package exist whereas this package does not.
+
 ## [Name preset](https://github.com/berberman/arch-hs/blob/master/data/NAME_PRESET.json)
 
 To distribute a haskell package to archlinux, the name of package should be changed according to the naming convention:

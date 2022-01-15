@@ -27,6 +27,7 @@ data Options = Options
     optForce :: Bool,
     optInstallDeps :: Bool,
     optJson :: FilePath,
+    optNoSkipMissing :: Bool,
     optTarget :: PackageName
   }
 
@@ -92,6 +93,10 @@ cmdOptions =
             <> metavar "PATH"
             <> help "Path to json output (empty means do not write output as json to file)"
             <> value ""
+        )
+      <*> switch
+        ( long "no-skip-missing"
+            <> help "Try to package if the dependent of this package exist whereas this package does not"
         )
       <*> argument optPackageNameReader (metavar "TARGET")
 
