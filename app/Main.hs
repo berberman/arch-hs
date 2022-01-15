@@ -98,12 +98,15 @@ app target path aurSupport skip uusi force installDeps jsonPath loadFilesDB' = d
   let fillProvidedPkgs provideList provider = map (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = map (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))
       filledByCommunity = fillProvidedPkgs communityProvideList ByCommunity . fillProvidedDeps communityProvideList ByCommunity $ grouped
+      -- after filling community
       toBePacked1 = filledByCommunity ^.. each . filtered (not . isProvided)
+
   (filledByBoth, toBePacked2) <- do
     when aurSupport $ printInfo "Start searching AUR..."
     aurProvideList <-
       if aurSupport
-        then filterM (\n -> do printInfo ("Searching" <+> viaPretty n); isInAur n) $ filter (\x -> not $ x == target && force) $ toBePacked1 ^.. each . pkgName
+        then -- after filling aur. toBePacked1 should not appear after the next line
+          filterM (\n -> do printInfo ("Searching" <+> viaPretty n); isInAur n) $ filter (\x -> not $ x == target && force) $ toBePacked1 ^.. each . pkgName
         else return []
     let a = fillProvidedPkgs aurProvideList ByAur . fillProvidedDeps aurProvideList ByAur $ filledByCommunity
         b = a ^.. each . filtered (not . isProvided)
@@ -123,6 +126,10 @@ app target path aurSupport skip uusi force installDeps jsonPath loadFilesDB' = d
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle newGraph of
     Left c -> throw . CyclicExist $ toList c
     Right x -> return $ filter (`notElem` sublibs) x
+
+  -- after removing missing children
+  -- toBePacked1 and toBePacked2 should appear after the next line
+  let toBePacked3 = filter (\x -> x ^. pkgName `elem` flattened) toBePacked2
 
   embed . putDoc $ (prettyDeps . reverse $ flattened) <> line <> line
 
@@ -191,7 +198,7 @@ app target path aurSupport skip uusi force installDeps jsonPath loadFilesDB' = d
             writeFile fileName txt
             printInfo $ "Write file" <> colon <+> pretty fileName
       )
-      toBePacked2
+      toBePacked3
 
   when installDeps $ do
     let providedDepends pkg =
@@ -199,7 +206,7 @@ app target path aurSupport skip uusi force installDeps jsonPath loadFilesDB' = d
             ^.. each
               . filtered (\x -> depNotMyself (pkg ^. pkgName) x && depNotInGHCLib x && x ^. depProvider == Just ByCommunity)
         toStr = unArchLinuxName . toArchLinuxName . _depName
-        depends = unwords . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked2
+        depends = unwords . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked3
         flattened' = filter (/= target) flattened
     case flattened' of
       [] -> pure ()
