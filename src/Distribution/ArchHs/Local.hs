@@ -24,7 +24,6 @@ ignoreList =
           "integer-simple",
           "bytestring-builder",
           "nats",
-          "old-time",
           "integer",
           "unsupported-ghc-version",
           "rts",
