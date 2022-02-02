@@ -39,6 +39,7 @@
   "haskell-gtk": "gtk3",
   "haskell-graphscc": "GraphSCC",
   "haskell-hopenpgp": "hOpenPGP",
+  "haskell-htf": "HTF",
   "haskell-http": "HTTP",
   "haskell-hunit": "HUnit",
   "haskell-ifelse": "IfElse",
