@@ -3,6 +3,22 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.10.0.0
+
+* Add `arch-hs-sync list` to list Haskell packages in [community]
+
+* Remove generating meta package
+
+* Add `--install-deps` to call pacman to install all dependencies of a target
+
+* Fix the list of packages to be packed is not consistent
+
+* Add `--no-skip-missing` to consider abnormal dependencies in packaging
+
+* Update dependency versions
+
+* Update name preset
+
 ## 0.9.1.0
 
 * Support Cabal 3.4

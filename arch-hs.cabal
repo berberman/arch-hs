@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               arch-hs
-version:            0.9.1.0
+version:            0.10.0.0
 synopsis:           Distribute hackage packages to archlinux
 description:
   @arch-hs@ is a command-line program, which simplifies the process of producing
@@ -23,7 +23,7 @@ extra-doc-files:
   CHANGELOG.md
   README.md
 
-tested-with:        GHC ==8.10.5 || ==9.0.1
+tested-with:        GHC ==8.10.7 || ==9.0.2
 
 source-repository head
   type:     git
@@ -37,7 +37,7 @@ flag alpm
 common common-options
   build-depends:
     , aeson                        ^>=1.5.4
-    , algebraic-graphs             ^>=0.5 || ^>=0.6
+    , algebraic-graphs             >=0.5     && <0.7
     , arch-web                     ^>=0.1.0
     , base                         >=4.12    && <5
     , bytestring
