@@ -52,6 +52,7 @@
   "haskell-missingh": "MissingH",
   "haskell-monadlib": "monadLib",
   "haskell-monadrandom": "MonadRandom",
+  "haskell-onetuple": "OneTuple",
   "haskell-only": "Only",
   "haskell-hsopenssl": "HsOpenSSL",
   "haskell-hsyaml": "HsYAML",
