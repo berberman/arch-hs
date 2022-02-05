@@ -67,6 +67,7 @@
   "haskell-safesemaphore": "SafeSemaphore",
   "haskell-sha": "SHA",
   "haskell-smtlib": "smtLib",
+  "haskell-src": "haskell-src",
   "haskell-src-exts": "haskell-src-exts",
   "haskell-src-exts-util": "haskell-src-exts-util",
   "haskell-src-meta": "haskell-src-meta",
