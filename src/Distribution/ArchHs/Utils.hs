@@ -39,11 +39,15 @@ module Distribution.ArchHs.Utils
     mapDiff,
     unDiff,
     archHsVersion,
+    defaultFlags,
+    getFlagAssignment,
   )
 where
 
 import Control.Monad ((<=<))
 import Data.Algorithm.Diff
+import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local (ghcLibList)
 import Distribution.ArchHs.Types
@@ -235,3 +239,23 @@ unDiff (Both x _) = x
 -- | The version of arch-hs
 archHsVersion :: String
 archHsVersion = $(simpleVersion Path.version)
+
+-- | Take default flag values of @pkgFlag@ overriden by @assignment@
+defaultFlags :: [PkgFlag] -> FlagAssignment -> FlagAssignment
+defaultFlags pkgFlags assignment = result
+  where
+    defaultFlagAssignments =
+      foldr (\f acc -> insertFlagAssignment (flagName f) (flagDefault f) acc) (mkFlagAssignment []) pkgFlags
+    flagAssignment = unFlagAssignment assignment
+    flagNames = fmap fst flagAssignment
+    result =
+      mkFlagAssignment
+        . (<> flagAssignment)
+        . filter (\(fName, _) -> fName `notElem` flagNames)
+        $ unFlagAssignment defaultFlagAssignments
+
+-- | Get 'FlagAssignment' from 'FlagAssignments'
+--
+-- Returns an empty FlagAssignment if no corresponding package in 'FlagAssignments'
+getFlagAssignment :: PackageName -> FlagAssignments -> FlagAssignment
+getFlagAssignment k v = fromMaybe (mkFlagAssignment []) $ k `Map.lookup` v

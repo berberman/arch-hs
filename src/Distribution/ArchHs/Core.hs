@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Copyright: (c) 2020-2021 berberman
 -- SPDX-License-Identifier: MIT
@@ -34,6 +35,7 @@ import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
   ( getLatestCabal,
     getLatestSHA256,
+    getPackageFlag,
   )
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local (ignoreList)
@@ -76,17 +78,8 @@ evalConditionTree cabal cond = do
   flagAssignments <- ask
   let name = getPkgName' cabal
       packageFlags = genPackageFlags cabal
-      defaultFlagAssignments =
-        foldr (\f acc -> insertFlagAssignment (flagName f) (flagDefault f) acc) (mkFlagAssignment []) packageFlags
-      flagAssignment = case Map.lookup name flagAssignments of
-        Just f -> unFlagAssignment f
-        _ -> []
-      flagNames = fmap fst flagAssignment
-      thisFlag =
-        mkFlagAssignment
-          . (<> flagAssignment)
-          . filter (\(fName, _) -> fName `notElem` flagNames)
-          $ unFlagAssignment defaultFlagAssignments
+      flagAssignment = getFlagAssignment name flagAssignments
+      thisFlag = defaultFlags packageFlags flagAssignment
   trace' $ "Evaluating condition tree of " <> show name
   trace' $ "Flags: " <> show thisFlag
   traceCallStack
@@ -297,6 +290,10 @@ cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => Solv
 cabalToPkgBuild pkg uusi sysDeps = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> getLatestCabal name
+  pkgFlags <- getPackageFlag name
+  assignment <- getFlagAssignment name <$> ask
+  let showFlagForCmd (unFlagName -> fName, enabled) = "-f" <> (if enabled then "" else "-") <> fName
+      _flags = unwords . fmap showFlagForCmd . unFlagAssignment $ defaultFlags pkgFlags assignment
   _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> getLatestSHA256 name
   let _hkgName = pkg ^. pkgName & unPackageName
       _pkgName = unArchLinuxName . toArchLinuxName $ pkg ^. pkgName
