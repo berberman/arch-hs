@@ -97,7 +97,7 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
       forM_ children $ putStrLn . unPackageName
 
   unless (null abnormalDependencies || noSkipMissing) $
-    printWarn "Those package(s) are ignored unless you specify --no-skip-missing"
+    printWarn "Above package(s) are ignored unless you specify --no-skip-missing"
 
   let fillProvidedPkgs provideList provider = map (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = map (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))
@@ -138,7 +138,7 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
   -- add sign for missing children if we have
   embed . putDoc $ (prettyDeps . reverse $ map (\x -> (x, x `elem` missingChildren)) flattened) <> line <> line
 
-  unless (null missingChildren) $
+  unless (null missingChildren || not noSkipMissing) $
     embed . putDoc $ annotate italicized $ yellowStarInParens <+> "indicates a missing package" <> line <> line
 
   let sysDepsToBePacked = Map.filterWithKey (\k _ -> k `elem` flattened) sysDeps
