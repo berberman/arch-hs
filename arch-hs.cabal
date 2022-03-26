@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               arch-hs
-version:            0.10.0.0
+version:            0.10.1.0
 synopsis:           Distribute hackage packages to archlinux
 description:
   @arch-hs@ is a command-line program, which simplifies the process of producing
@@ -15,7 +15,7 @@ license:            MIT
 license-file:       LICENSE
 author:             berberman
 maintainer:         berberman <berberman@yandex.com>
-copyright:          (c) 2020-2021 berberman
+copyright:          (c) 2020-2022 berberman
 category:           Distribution
 build-type:         Simple
 extra-source-files: data/NAME_PRESET.json

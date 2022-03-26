@@ -3,6 +3,14 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.10.1.0
+
+* Better prompt for missing packages
+
+* Fix the bug that resolved targets were not filtered out correctly when processing sub-libraries
+
+* Update name preset
+
 ## 0.10.0.0
 
 * Add `arch-hs-sync list` to list Haskell packages in [community]
