@@ -178,7 +178,7 @@ getDependencies skip parent name = do
   nextExe <- processNext $ fmap snd filteredExeDeps
   -- TODO: maybe unstable
   nextTest <- processNext $ fmap snd filteredTestDeps
-  nextSubLibs <- mapM (getDependencies skip (Just name)) $ fmap snd filteredSubLibDeps
+  nextSubLibs <- processNext $ fmap snd filteredSubLibDeps
   let temp = [nextLib, nextSetup, nextExe, nextTest, nextSubLibs]
       nexts = G.overlays $ temp ^. each ^.. each . _1
       subsubs = temp ^. each ^.. each . _2 ^. each
