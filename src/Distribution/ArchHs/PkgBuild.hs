@@ -107,7 +107,10 @@ applyTemplate PkgBuild {..} =
       )
       (if _enableUusi then "\n" <> uusi <> "\n\n" else "\n")
       (if _enableCheck then "\n" <> check <> "\n\n" else "\n")
-      (pack _flags)
+      ( pack $ case _flags of
+          [] -> ""
+          xs -> "\\\n" <> xs
+      )
 
 -- | Text of @check()@ function.
 check :: Text
@@ -162,8 +165,7 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends sha
       --prefix=/usr --docdir=/usr/share/doc/$$pkgname --enable-tests \
       --dynlibdir=/usr/lib --libsubdir=\$$compiler/site-local/\$$pkgid \
       --ghc-option=-optl-Wl\,-z\,relro\,-z\,now \
-      --ghc-option='-pie'
-      $flags
+      --ghc-option='-pie' $flags
 
     runhaskell Setup build
     runhaskell Setup register --gen-script
