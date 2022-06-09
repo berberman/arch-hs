@@ -162,7 +162,7 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends sha
     cd $$_hkgname-$$pkgver
 
     runhaskell Setup configure -O --enable-shared --enable-executable-dynamic --disable-library-vanilla \
-      --prefix=/usr --docdir=/usr/share/doc/$$pkgname --enable-tests \
+      --prefix=/usr --docdir=/usr/share/doc/$$pkgname --datasubdir=$pkgname --enable-tests \
       --dynlibdir=/usr/lib --libsubdir=\$$compiler/site-local/\$$pkgid \
       --ghc-option=-optl-Wl\,-z\,relro\,-z\,now \
       --ghc-option='-pie' $flags
