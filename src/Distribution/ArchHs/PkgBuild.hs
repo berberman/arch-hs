@@ -78,7 +78,15 @@ mapLicense Ruby = Arch.RUBY
 mapLicense ZPL_2_1 = Arch.ZPL
 mapLicense Unlicense = Arch.Unlicense
 mapLicense W3C = Arch.W3C
-mapLicense BSD_3_Clause = Arch.Custom "BSD3"
+mapLicense NullBSD = Arch.BSD
+mapLicense BSD_1_Clause = Arch.BSD
+mapLicense BSD_2_Clause = Arch.BSD
+mapLicense BSD_3_Clause = Arch.BSD
+mapLicense ISC = Arch.ISC
+mapLicense MIT = Arch.MIT
+mapLicense Zlib = Arch.ZLIB
+mapLicense OFL_1_0 = Arch.OFL
+mapLicense OFL_1_1 = Arch.OFL
 mapLicense x = Arch.Custom . T.pack $ show x
 
 -- | Show an archlinux license
