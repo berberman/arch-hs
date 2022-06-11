@@ -3,6 +3,11 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.10.2.0
+
+- Don't treat special licenses as custom licenses
+- Add `--datasubdir` to template
+
 ## 0.10.1.0
 
 - Always generate `-f` or `-f-` for each flag in PKGBUILD
