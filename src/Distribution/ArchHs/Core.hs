@@ -342,7 +342,7 @@ cabalToPkgBuild pkg uusi sysDeps = do
       _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString _depName makeDepends
       _url = getUrl cabal
       wrap s = " '" <> s <> "'"
-      _licenseFile = licenseFiles cabal ^? ix 0
+      _licenseFile = licenseFile cabal
       _enableUusi = uusi
   return PkgBuild {..}
 
