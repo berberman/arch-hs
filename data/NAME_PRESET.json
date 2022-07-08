@@ -47,8 +47,6 @@
   "haskell-language-server": "haskell-language-server",
   "haskell-lexer": "haskell-lexer",
   "haskell-listlike": "ListLike",
-  "haskell-lsp0": "haskell-lsp",
-  "haskell-lsp0-types": "haskell-lsp-types",
   "haskell-missingh": "MissingH",
   "haskell-monadlib": "monadLib",
   "haskell-monadrandom": "MonadRandom",
