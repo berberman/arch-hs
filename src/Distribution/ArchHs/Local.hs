@@ -51,6 +51,7 @@ ghcLibList =
           "directory",
           "exceptions",
           "filepath",
+          "ghc-bignum",
           "ghc-boot",
           "ghc-boot-th",
           "ghc-compact",
