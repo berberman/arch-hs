@@ -1,6 +1,7 @@
 {
   "agda": "Agda",
   "alex": "alex",
+  "allure": "Allure",
   "arch-hs": "arch-hs",
   "bnfc": "BNFC",
   "c2hs": "c2hs",
@@ -55,6 +56,7 @@
   "haskell-hsopenssl": "HsOpenSSL",
   "haskell-hsyaml": "HsYAML",
   "haskell-hsyaml-aeson": "HsYAML-aeson",
+  "haskell-lambdahack": "LambdaHack",
   "haskell-libbf": "libBF",
   "haskell-memotrie": "MemoTrie",
   "haskell-monadprompt": "MonadPrompt",
