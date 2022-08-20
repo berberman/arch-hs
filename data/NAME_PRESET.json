@@ -37,7 +37,6 @@
   "haskell-gi-base": "haskell-gi-base",
   "haskell-gi-overloading": "haskell-gi-overloading",
   "haskell-glob": "Glob",
-  "haskell-gtk": "gtk3",
   "haskell-graphscc": "GraphSCC",
   "haskell-hopenpgp": "hOpenPGP",
   "haskell-htf": "HTF",
