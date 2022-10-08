@@ -24,6 +24,7 @@ import qualified Data.Map.Strict as Map
 import Data.Void (Void)
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils (extractFromEVR)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 
@@ -98,7 +99,7 @@ descParser =
   descFieldsParser
     >>= ( \fields -> do
             _name <- ArchLinuxName <$> lookupSingle fields "NAME"
-            _version <- lookupSingle fields "VERSION"
+            _version <- extractFromEVR <$> lookupSingle fields "VERSION"
             _desc <- lookupSingle fields "DESC"
             _url <- lookupSingleMaybe fields "URL"
             _depends <- toDepList =<< lookupList fields "DEPENDS"

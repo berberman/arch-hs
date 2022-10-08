@@ -66,18 +66,23 @@ check target = do
       . Map.toList
       <$> ask @CommunityDB
   forM_ reverseDeps $ \(PkgDesc {..}, src) -> do
-    cabal <-
-      getCabal (toHackageName _name) =<< case simpleParsec _version of
-        Just v -> pure v
-        _ -> throw $ VersionNoParse _version
-    result <- getDepVersion cabal target src
-    embed . putDoc $
-      vsep
-        ( annMagneta "Reverse dependency" <> colon
-            <+> pretty (unArchLinuxName _name)
-            : [indent 2 $ pretty s <> colon <+> viaPretty r | (s, r) <- result]
-        )
-        <> line
+    eCabal <-
+      try @MyException $
+        getCabal (toHackageName _name) =<< case simpleParsec _version of
+          Just v -> pure v
+          _ -> throw $ VersionNoParse _version
+    case eCabal of
+      Right cabal -> do
+        result <- getDepVersion cabal target src
+        embed . putDoc $
+          vsep
+            ( annMagneta "Reverse dependency" <> colon
+                <+> pretty (unArchLinuxName _name)
+                : [indent 2 $ pretty s <> colon <+> viaPretty r | (s, r) <- result]
+            )
+            <> line
+      Left e ->
+        printWarn $ "Skip" <+> pretty (unArchLinuxName _name) <> colon <+> viaShow e
 
 getDepVersion ::
   Members
@@ -100,13 +105,12 @@ getDepVersion cabal name src = do
   let flatten = mconcat . fmap snd
       deps = libDeps <> concatMap flatten [exeDeps, subLibDeps]
       makeOrCheckDeps = libToolsDeps <> setupDeps <> concatMap flatten [subLibToolsDeps, exeToolsDeps, testDeps, testToolsDeps]
-      r =
-        catMaybes
-          [ case s of
-              Check -> f makeOrCheckDeps
-              Make -> f makeOrCheckDeps
-              Run -> f deps
-            | s <- src,
-              let f xs = (_1 .~ s) <$> find ((== name) . fst) xs
-          ]
-  pure r
+  pure $
+    catMaybes
+      [ case s of
+          Check -> f makeOrCheckDeps
+          Make -> f makeOrCheckDeps
+          Run -> f deps
+        | s <- src,
+          let f xs = (_1 .~ s) <$> find ((== name) . fst) xs
+      ]
