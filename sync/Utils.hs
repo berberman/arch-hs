@@ -21,10 +21,10 @@ linkedHaskellPackages ::
 linkedHaskellPackages = do
   communityHaskellPackages <- filter (isHaskellPackage . fst) . Map.toList <$> ask @CommunityDB
   hackagePackages <- Map.keys <$> ask @HackageDB
-  let go xs ys ((name, version) : pkgs) =
+  let go xs ys ((name, desc) : pkgs) =
         let hName = toHackageName name
          in if hName `elem` hackagePackages
-              then getLatestCabal hName >>= \cabal -> go ((name, version, cabal) : xs) ys pkgs
+              then getLatestCabal hName >>= \cabal -> go ((name, _version desc, cabal) : xs) ys pkgs
               else go xs (name : ys) pkgs
       go xs ys [] = pure (xs, ys)
   (linked, unlinked) <- go [] [] communityHaskellPackages

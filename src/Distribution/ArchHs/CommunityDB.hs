@@ -13,6 +13,7 @@ module Distribution.ArchHs.CommunityDB
     loadCommunityDB,
     isInCommunity,
     versionInCommunity,
+    getPkgDesc,
 #ifdef ALPM
     loadCommunityDBFFI,
 #endif
@@ -29,7 +30,7 @@ import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Name
 import Distribution.ArchHs.PkgDesc
 import Distribution.ArchHs.Types
-import Distribution.ArchHs.Utils
+import Data.Maybe (mapMaybe)
 
 -----------------------------------------------------------------------------
 
@@ -72,7 +73,7 @@ defaultCommunityDBPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "co
 loadCommunityDBC ::
   (MonadResource m, PrimMonad m, MonadThrow m) =>
   FilePath ->
-  ConduitT i (ArchLinuxName, ArchLinuxVersion) m ()
+  ConduitT i (ArchLinuxName, PkgDesc) m ()
 loadCommunityDBC path = do
   sourceFileBS path .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
   where
@@ -80,17 +81,18 @@ loadCommunityDBC path = do
       when (Tar.headerFileType header == Tar.FTNormal) $ do
         x <- mconcat <$> sinkList
         let txt = T.unpack . decodeUtf8 $ x
-            provided r = r Map.! "PROVIDES"
-            parseProvidedTerm t = let s = splitOn "=" t in (s ^. ix 0, s ^. ix 1)
-            result = case runDescFieldsParser (Tar.headerFilePath header) txt of
-                    Right r -> case head $ r Map.! "NAME" of
-                      "ghc" -> parseProvidedTerm <$> provided r
-                      "ghc-libs" -> parseProvidedTerm <$> provided r
-                      _ -> [(head $ r Map.! "NAME", extractFromEVR . head $ r Map.! "VERSION")]
-                    -- Drop it if failed to parse
-                    Left _ -> []
-
-        yieldMany $ result & each . _1 %~ ArchLinuxName
+            parsed = runDescParser (Tar.headerFilePath header) txt
+            result = case parsed of
+              Right desc ->
+                desc
+                  : ( if _name desc == ArchLinuxName "ghc"
+                        || _name desc == ArchLinuxName "ghc-libs"
+                        then mapMaybe promoteDependent (_provides desc)
+                        else []
+                    )
+              -- Drop it if failed to parse
+              Left _ -> []
+        yieldMany $ (\desc -> (_name desc, desc)) <$> result
 
 -- | Load @community.db@ from @path@.
 -- @desc@ files in the db will be parsed by @descParser@.
@@ -107,7 +109,12 @@ isInCommunity name = ask @CommunityDB >>= \db -> return $ toArchLinuxName name `
 -- | Get the version of a package in archlinux community repo.
 -- If the package does not exist, 'PkgNotFound' will be thrown.
 versionInCommunity :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n -> Sem r ArchLinuxVersion
-versionInCommunity name =
+versionInCommunity name = _version <$> getPkgDesc name
+
+-- | Get the pkgdesc a package in archlinux community repo.
+-- If the package does not exist, 'PkgNotFound' will be thrown.
+getPkgDesc :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n -> Sem r PkgDesc
+getPkgDesc name =
   ask @CommunityDB >>= \db -> case db Map.!? toArchLinuxName name of
-    Just x -> return x
+    Just x -> pure x
     _ -> throw $ PkgNotFound name
