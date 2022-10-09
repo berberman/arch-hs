@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Main (main) where
 
@@ -72,7 +73,8 @@ runMode = \case
       printInfo $ "Output will be dumped to" <+> pretty optOutput
       exist <- doesFileExist optOutput
       when exist $
-        printWarn $ "File" <+> pretty optOutput <+> "already existed" <+> "overwrite it"
+        printWarn $
+          "File" <+> pretty optOutput <+> "already existed" <+> "overwrite it"
 
     printInfo "Start running..."
     unless (optUpload || hasOutput) $
@@ -89,6 +91,6 @@ runMode = \case
     putStrLn $
       unlines
         [ unArchLinuxName name <> (if optWithVersion then ": " <> version else "")
-          | (name, version) <- Map.toList community,
+          | (name, _version -> version) <- Map.toList community,
             isHaskellPackage name
         ]

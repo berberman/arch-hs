@@ -21,7 +21,7 @@
         with haskell.lib; {
           inherit arch-hs;
           arch-hs-dev =
-            addBuildTools arch-hs [ cabal-install ];
+            addBuildTools arch-hs [ cabal-install haskell-language-server ];
         };
       defaultPackage.x86_64-linux = arch-hs;
       devShell.x86_64-linux = arch-hs-dev.envFunc { };

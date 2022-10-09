@@ -1,22 +1,21 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main (main) where
 
 import Args
+import Check
 import Control.Monad (unless)
-import qualified Data.Map as Map
-import Diff
-import Distribution.ArchHs.Core (subsumeGHCVersion)
+import qualified Data.Map.Strict as Map
+import Distribution.ArchHs.Core
 import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Options
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
-import GHC.IO.Encoding (setLocaleEncoding, utf8)
-import Network.HTTP.Client (Manager)
-import Network.HTTP.Client.TLS (newTlsManager)
+import GHC.IO.Encoding (setLocaleEncoding)
+import GHC.IO.Encoding.UTF8 (utf8)
 
 main :: IO ()
 main = printHandledIOException $
@@ -29,20 +28,19 @@ main = printHandledIOException $
       printInfo "You assigned flags:"
       putDoc $ prettyFlagAssignments optFlags <> line
 
+    hackage <- loadHackageDBFromOptions optHackage
     community <- loadCommunityDBFromOptions optCommunityDB
 
-    manager <- newTlsManager
-
     printInfo "Start running..."
-    runDiff community optFlags manager (subsumeGHCVersion $ diffCabal optPackageName optVersionA optVersionB) & printAppResult
+    runCheck hackage community optFlags (subsumeGHCVersion $ check optPackageName) & printAppResult
 
-runDiff ::
+runCheck ::
+  HackageDB ->
   CommunityDB ->
   FlagAssignments ->
-  Manager ->
-  Sem '[CommunityEnv, FlagAssignmentsEnv, Reader Manager, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
+  Sem '[HackageEnv, CommunityEnv, FlagAssignmentsEnv, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runDiff community flags manager =
+runCheck community flags manager =
   runFinal
     . embedToFinal
     . errorToIOFinal

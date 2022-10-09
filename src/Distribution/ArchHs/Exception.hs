@@ -38,14 +38,16 @@ data MyException
   | CyclicExist [PackageName]
   | NetworkException ClientError
   | TargetDisappearException PackageName
+  | VersionNoParse String
 
 instance Show MyException where
   show (PkgNotFound name) = "Unable to find \"" <> unPackageName (toHackageName name) <> "\""
-  show (VersionNotFound name version) = "Unable to find \"" <> unPackageName (toHackageName name) <> "\" " <> prettyShow version
+  show (VersionNotFound name version) = "Unable to find \"" <> unPackageName (toHackageName name) <> "\" " <> prettyShow version <> " in Hackage DB"
   show (TargetExist name provider) = "Target \"" <> unPackageName name <> "\" has been provided by " <> show provider
   show (CyclicExist c) = "Graph contains a cycle \"" <> show (fmap unPackageName c) <> "\""
   show (NetworkException e) = show e
   show (TargetDisappearException name) = "Target \"" <> unPackageName name <> "\" is discarded during the dependency resolving"
+  show (VersionNoParse v) = "String \"" <> v <> "\" can not be parsed to Cabal version"
 
 -- | Catch 'CE.IOException' and print it.
 printHandledIOException :: IO () -> IO ()

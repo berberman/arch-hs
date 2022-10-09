@@ -17,6 +17,9 @@ module Distribution.ArchHs.Types
     ComponentPkgList,
     ArchLinuxName (..),
     SystemDependency (..),
+    PkgDependent (..),
+    PkgDependentList,
+    PkgDesc (..),
     ArchLinuxVersion,
     CommunityDB,
     HackageEnv,
@@ -64,11 +67,39 @@ newtype SystemDependency = SystemDependency String
   deriving stock (Show, Read, Eq, Ord, Generic)
   deriving anyclass (NFData)
 
+-- | Arch Linux dependency type for @depends@, @replaces@, @conflicts@,.etc in 'PkgDesc'
+data PkgDependent = PkgDependent
+  { _pdName :: ArchLinuxName,
+    _pdVersion :: Maybe ArchLinuxVersion
+  }
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (NFData)
+
+-- | A list of 'PkgDependent'
+type PkgDependentList = [PkgDependent]
+
+-- | Package description file of a installed system package, retrieved from @repo.db@ file.
+data PkgDesc = PkgDesc
+  { _name :: ArchLinuxName,
+    _version :: ArchLinuxVersion,
+    _desc :: String,
+    _url :: Maybe String,
+    _provides :: PkgDependentList,
+    _optDepends :: PkgDependentList,
+    _replaces :: PkgDependentList,
+    _conflicts :: PkgDependentList,
+    _depends :: PkgDependentList,
+    _makeDepends :: PkgDependentList,
+    _checkDepends :: PkgDependentList
+  }
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (NFData)
+
 -- | Version of packages in archlinux community repo
 type ArchLinuxVersion = String
 
 -- | Representation of @cummunity.db@
-type CommunityDB = Map ArchLinuxName ArchLinuxVersion
+type CommunityDB = Map ArchLinuxName PkgDesc
 
 -- | Reader effect of 'HackageDB'
 type HackageEnv = Reader HackageDB
