@@ -55,3 +55,4 @@ TAGS
 *.log
 *.csv
 *.json
+.ccls-cache
