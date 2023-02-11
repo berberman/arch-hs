@@ -26,6 +26,7 @@
   "glirc": "glirc",
   "happy": "happy",
   "haskell-boolean": "Boolean",
+  "haskell-boundedchan": "BoundedChan",
   "haskell-chasingbottoms": "ChasingBottoms",
   "haskell-ci": "haskell-ci",
   "haskell-configfile": "ConfigFile",
