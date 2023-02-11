@@ -3,9 +3,22 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.11.0.0
+
+- Add `arch-hs-rdepcheck`
+
+- Support Cabal 3.6
+
+- Fix datasubdir generation
+
+- Update dependency versions
+
+- Update name preset
+
 ## 0.10.2.0
 
 - Don't treat special licenses as custom licenses
+
 - Add `--datasubdir` to template
 
 ## 0.10.1.0
