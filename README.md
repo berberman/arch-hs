@@ -461,7 +461,7 @@ Flags:
         description:
           You can disable the use of the `containers` package using `-f-containers`.
 
-          Disabing this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
+          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
         default: True
         isManual: True
     ⚐ distributive:
@@ -485,7 +485,7 @@ Flags:
         description:
           You can disable the use of the `containers` package using `-f-containers`.
 
-          Disabing this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
+          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
         default: True
         isManual: True
     ⚐ distributive:
