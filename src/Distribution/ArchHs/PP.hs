@@ -20,7 +20,7 @@ module Distribution.ArchHs.PP
     dui,
     cuo,
     yellowStarInParens,
-    ppCommunity,
+    ppExtra,
     ppAur,
     ppDBKind,
     annYellow,
@@ -177,8 +177,8 @@ ppFromTo i a b = a <> hcat (replicate i space) <> "⇒" <> hcat (replicate i spa
 printInfo :: (MonadIO m) => Doc AnsiStyle -> m ()
 printInfo msg = liftIO . putDoc . annBlue $ "ⓘ" <+> msg <> line
 
-ppCommunity :: Doc AnsiStyle
-ppCommunity = annCyan $ viaShow ByCommunity
+ppExtra :: Doc AnsiStyle
+ppExtra = annCyan $ viaShow ByExtra
 
 ppDBKind :: DBKind -> Doc AnsiStyle
 ppDBKind x = annCyan . brackets $ viaShow x

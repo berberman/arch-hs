@@ -30,7 +30,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Distribution.ArchHs.CommunityDB (versionInCommunity)
+import Distribution.ArchHs.ExtraDB (versionInExtra)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
   ( getLatestCabal,
@@ -348,9 +348,9 @@ cabalToPkgBuild pkg uusi sysDeps = do
 
 -----------------------------------------------------------------------------
 
--- | Get the ghc version in 'CommunityDB'
-subsumeGHCVersion :: Members [CommunityEnv, WithMyErr] r => InterpreterFor KnownGHCVersion r
+-- | Get the ghc version in 'ExtraDB'
+subsumeGHCVersion :: Members [ExtraEnv, WithMyErr] r => InterpreterFor KnownGHCVersion r
 subsumeGHCVersion m = do
-  rawVersion <- versionInCommunity $ ArchLinuxName "haskell-ghc"
-  let ghcVersion = fromMaybe (error $ "Impossible: unable to parse ghc version from [community]: " <> rawVersion) $ simpleParsec rawVersion
+  rawVersion <- versionInExtra $ ArchLinuxName "haskell-ghc"
+  let ghcVersion = fromMaybe (error $ "Impossible: unable to parse ghc version from [extra]: " <> rawVersion) $ simpleParsec rawVersion
   runReader ghcVersion m

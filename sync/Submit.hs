@@ -21,8 +21,8 @@ import Network.HTTP.Client
 import Submit.CSV
 import Utils
 
--- | Generate Distro CSV from Community DB
-genCSV :: Members [CommunityEnv, HackageEnv, WithMyErr, Embed IO] r => Sem r DistroCSV
+-- | Generate Distro CSV from Extra DB
+genCSV :: Members [ExtraEnv, HackageEnv, WithMyErr, Embed IO] r => Sem r DistroCSV
 genCSV = do
   linked <- linkedHaskellPackages
   pure $
@@ -34,11 +34,11 @@ genCSV = do
                 if isGHCLibs hackageName
                   then "ghc"
                   else unArchLinuxName archLinuxName
-              prefix = "https://www.archlinux.org/packages/community/x86_64/"
+              prefix = "https://www.archlinux.org/packages/extra/x86_64/"
       ]
 
 -- | Check and submit distro CSV to Hackage
-submit :: Members [HackageEnv, CommunityEnv, WithMyErr, Reader Manager, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
+submit :: Members [HackageEnv, ExtraEnv, WithMyErr, Reader Manager, Embed IO] r => Maybe String -> FilePath -> Bool -> Sem r ()
 submit token output upload = do
   csv <- genCSV
   let v = renderDistroCSV csv
@@ -66,9 +66,9 @@ submit token output upload = do
       printInfo "ResponseBody:"
       printInfo . pretty . decodeUtf8 . LBS.toStrict $ responseBody result
 
--- | Download Distro CSV from Hackage and print differences from @community@
+-- | Download Distro CSV from Hackage and print differences from @extra@
 check :: Members [HackageEnv, WithMyErr, Reader Manager, Embed IO] r => DistroCSV -> Sem r ()
-check community = do
+check extra = do
   printInfo "Checking generated csv file..."
 
   req <- interceptHttpException $ parseRequest "https://hackage.haskell.org/distro/Arch/packages.csv"
@@ -78,7 +78,7 @@ check community = do
   let bs = responseBody result
       hackage = parseDistroCSV . T.unpack . decodeUtf8 . LBS.toStrict $ bs
 
-  let diff = getGroupedDiff hackage community
+  let diff = getGroupedDiff hackage extra
       diffOld = filterFirstDiff diff >>= (ppDiffColored . mapDiff (fmap ppRecord))
       diffNew = filterSecondDiff diff >>= (ppDiffColored . mapDiff (fmap ppRecord))
       ppRecord (name, version, url) = "(" <> name <> ", " <> version <> ", " <> url <> ")"
@@ -97,8 +97,8 @@ check community = do
     "Found"
       <+> pretty (length hackage)
       <+> "packages with submitted distribution information in hackage, and"
-      <+> pretty (length community)
+      <+> pretty (length extra)
       <+> "haskell packages in"
-      <+> ppCommunity
+      <+> ppExtra
       <> dot
       <> line

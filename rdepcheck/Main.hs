@@ -29,18 +29,18 @@ main = printHandledIOException $
       putDoc $ prettyFlagAssignments optFlags <> line
 
     hackage <- loadHackageDBFromOptions optHackage
-    community <- loadCommunityDBFromOptions optCommunityDB
+    extra <- loadExtraDBFromOptions optExtraDB
 
     printInfo "Start running..."
-    runCheck hackage community optFlags (subsumeGHCVersion $ check optPackageName) & printAppResult
+    runCheck hackage extra optFlags (subsumeGHCVersion $ check optPackageName) & printAppResult
 
 runCheck ::
   HackageDB ->
-  CommunityDB ->
+  ExtraDB ->
   FlagAssignments ->
-  Sem '[HackageEnv, CommunityEnv, FlagAssignmentsEnv, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
+  Sem '[HackageEnv, ExtraEnv, FlagAssignmentsEnv, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runCheck community flags manager =
+runCheck extra flags manager =
   runFinal
     . embedToFinal
     . errorToIOFinal
@@ -48,4 +48,4 @@ runCheck community flags manager =
     . ignoreTrace
     . runReader manager
     . runReader flags
-    . runReader community
+    . runReader extra

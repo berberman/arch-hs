@@ -17,7 +17,7 @@ A program generating PKGBUILD for hackage packages. Special thanks to [felixonma
 ## Introduction
 
 Given the name of a package in hackage, `arch-hs` can generate PKGBUILD files, not only for the package
-whose name is given, but also for all dependencies missing in [[community]](https://www.archlinux.org/packages/).
+whose name is given, but also for all dependencies missing in [[extra]](https://www.archlinux.org/packages/).
 `arch-hs` has a naive built-in dependency solver, which can fetch those dependencies and find out which are required to be packaged.
 During the dependency calculation, all version constraints will be discarded due to the arch haskell packaging strategy,
 thus there is no guarantee of dependencies' version consistency.
@@ -26,7 +26,7 @@ thus there is no guarantee of dependencies' version consistency.
 
 `arch-hs` is a PKGBUILD text file generator, which is not integrated with `pacman`(See [Alpm Support](#Alpm-Support)), depending on nothing than:
 
-* Pacman databases (`community.db`, `community.files`, `core.files`, and `extra.files`)
+* Pacman databases (`extra.db`, `extra.files`, `core.db`, and `core.files`)
 
 * Hackage index tarball (`01-index.tar`, or `00-index.tar` previously) -- usually provided by `cabal-install`
 
@@ -42,7 +42,7 @@ and if you want to run on other systems, you have to build it from source.
 # pacman -S arch-hs
 ```
 
-`arch-hs` is available in [[community]](https://www.archlinux.org/packages/community/x86_64/arch-hs/), so you can install it using `pacman`.
+`arch-hs` is available in [[extra]](https://www.archlinux.org/packages/extra/x86_64/arch-hs/), so you can install it using `pacman`.
 
 ### Install the development version
 
@@ -84,90 +84,90 @@ Output:
 ```
 $ arch-hs -o ~/test --alpm gi-gdk 
 ⓘ Loading hackage from /home/berberman/.cabal/packages/hackage.haskell.org/01-index.tar
-ⓘ Loading community.db from libalpm
+ⓘ Loading extra.db from libalpm
 ⓘ Start running...
 ⓘ Solved:
 ...
 gi-gdk                                      ✘
- ├─Cabal (Setup)                            ✔ [community]
- ├─bytestring (Lib)                         ✔ [community]
- ├─containers (Lib)                         ✔ [community]
- ├─gi-cairo (Lib, Setup)                    ✔ [community]
+ ├─Cabal (Setup)                            ✔ [extra]
+ ├─bytestring (Lib)                         ✔ [extra]
+ ├─containers (Lib)                         ✔ [extra]
+ ├─gi-cairo (Lib, Setup)                    ✔ [extra]
  ├─gi-gdkpixbuf (Lib, Setup)                ✘
  ├─gi-gio (Lib, Setup)                      ✘
  ├─gi-glib (Lib, Setup)                     ✘
  ├─gi-gobject (Lib, Setup)                  ✘
  ├─gi-pango (Lib, Setup)                    ✘
- ├─haskell-gi (Lib, Setup)                  ✔ [community]
- ├─haskell-gi-base (Lib)                    ✔ [community]
- ├─haskell-gi-overloading (Lib)             ✔ [community]
- ├─text (Lib)                               ✔ [community]
- └─transformers (Lib)                       ✔ [community]
+ ├─haskell-gi (Lib, Setup)                  ✔ [extra]
+ ├─haskell-gi-base (Lib)                    ✔ [extra]
+ ├─haskell-gi-overloading (Lib)             ✔ [extra]
+ ├─text (Lib)                               ✔ [extra]
+ └─transformers (Lib)                       ✔ [extra]
 gi-gdkpixbuf                                ✘
- ├─Cabal (Setup)                            ✔ [community]
- ├─bytestring (Lib)                         ✔ [community]
- ├─containers (Lib)                         ✔ [community]
+ ├─Cabal (Setup)                            ✔ [extra]
+ ├─bytestring (Lib)                         ✔ [extra]
+ ├─containers (Lib)                         ✔ [extra]
  ├─gi-gio (Lib, Setup)                      ✘
  ├─gi-glib (Lib, Setup)                     ✘
  ├─gi-gobject (Lib, Setup)                  ✘
- ├─haskell-gi (Lib, Setup)                  ✔ [community]
- ├─haskell-gi-base (Lib)                    ✔ [community]
- ├─haskell-gi-overloading (Lib)             ✔ [community]
- ├─text (Lib)                               ✔ [community]
- └─transformers (Lib)                       ✔ [community]
+ ├─haskell-gi (Lib, Setup)                  ✔ [extra]
+ ├─haskell-gi-base (Lib)                    ✔ [extra]
+ ├─haskell-gi-overloading (Lib)             ✔ [extra]
+ ├─text (Lib)                               ✔ [extra]
+ └─transformers (Lib)                       ✔ [extra]
 gi-gio                                      ✘
- ├─Cabal (Setup)                            ✔ [community]
- ├─bytestring (Lib)                         ✔ [community]
- ├─containers (Lib)                         ✔ [community]
+ ├─Cabal (Setup)                            ✔ [extra]
+ ├─bytestring (Lib)                         ✔ [extra]
+ ├─containers (Lib)                         ✔ [extra]
  ├─gi-glib (Lib, Setup)                     ✘
  ├─gi-gobject (Lib, Setup)                  ✘
- ├─haskell-gi (Lib, Setup)                  ✔ [community]
- ├─haskell-gi-base (Lib)                    ✔ [community]
- ├─haskell-gi-overloading (Lib)             ✔ [community]
- ├─text (Lib)                               ✔ [community]
- └─transformers (Lib)                       ✔ [community]
+ ├─haskell-gi (Lib, Setup)                  ✔ [extra]
+ ├─haskell-gi-base (Lib)                    ✔ [extra]
+ ├─haskell-gi-overloading (Lib)             ✔ [extra]
+ ├─text (Lib)                               ✔ [extra]
+ └─transformers (Lib)                       ✔ [extra]
 gi-glib                                     ✘
- ├─Cabal (Setup)                            ✔ [community]
- ├─bytestring (Lib)                         ✔ [community]
- ├─containers (Lib)                         ✔ [community]
- ├─haskell-gi (Lib, Setup)                  ✔ [community]
- ├─haskell-gi-base (Lib)                    ✔ [community]
- ├─haskell-gi-overloading (Lib)             ✔ [community]
- ├─text (Lib)                               ✔ [community]
- └─transformers (Lib)                       ✔ [community]
+ ├─Cabal (Setup)                            ✔ [extra]
+ ├─bytestring (Lib)                         ✔ [extra]
+ ├─containers (Lib)                         ✔ [extra]
+ ├─haskell-gi (Lib, Setup)                  ✔ [extra]
+ ├─haskell-gi-base (Lib)                    ✔ [extra]
+ ├─haskell-gi-overloading (Lib)             ✔ [extra]
+ ├─text (Lib)                               ✔ [extra]
+ └─transformers (Lib)                       ✔ [extra]
 gi-gobject                                  ✘
- ├─Cabal (Setup)                            ✔ [community]
- ├─bytestring (Lib)                         ✔ [community]
- ├─containers (Lib)                         ✔ [community]
+ ├─Cabal (Setup)                            ✔ [extra]
+ ├─bytestring (Lib)                         ✔ [extra]
+ ├─containers (Lib)                         ✔ [extra]
  ├─gi-glib (Lib, Setup)                     ✘
- ├─haskell-gi (Lib, Setup)                  ✔ [community]
- ├─haskell-gi-base (Lib)                    ✔ [community]
- ├─haskell-gi-overloading (Lib)             ✔ [community]
- ├─text (Lib)                               ✔ [community]
- └─transformers (Lib)                       ✔ [community]
+ ├─haskell-gi (Lib, Setup)                  ✔ [extra]
+ ├─haskell-gi-base (Lib)                    ✔ [extra]
+ ├─haskell-gi-overloading (Lib)             ✔ [extra]
+ ├─text (Lib)                               ✔ [extra]
+ └─transformers (Lib)                       ✔ [extra]
 gi-harfbuzz                                 ✘
- ├─Cabal (Setup)                            ✔ [community]
- ├─bytestring (Lib)                         ✔ [community]
- ├─containers (Lib)                         ✔ [community]
+ ├─Cabal (Setup)                            ✔ [extra]
+ ├─bytestring (Lib)                         ✔ [extra]
+ ├─containers (Lib)                         ✔ [extra]
  ├─gi-glib (Lib, Setup)                     ✘
  ├─gi-gobject (Lib, Setup)                  ✘
- ├─haskell-gi (Lib, Setup)                  ✔ [community]
- ├─haskell-gi-base (Lib)                    ✔ [community]
- ├─haskell-gi-overloading (Lib)             ✔ [community]
- ├─text (Lib)                               ✔ [community]
- └─transformers (Lib)                       ✔ [community]
+ ├─haskell-gi (Lib, Setup)                  ✔ [extra]
+ ├─haskell-gi-base (Lib)                    ✔ [extra]
+ ├─haskell-gi-overloading (Lib)             ✔ [extra]
+ ├─text (Lib)                               ✔ [extra]
+ └─transformers (Lib)                       ✔ [extra]
 gi-pango                                    ✘
- ├─Cabal (Setup)                            ✔ [community]
- ├─bytestring (Lib)                         ✔ [community]
- ├─containers (Lib)                         ✔ [community]
+ ├─Cabal (Setup)                            ✔ [extra]
+ ├─bytestring (Lib)                         ✔ [extra]
+ ├─containers (Lib)                         ✔ [extra]
  ├─gi-glib (Lib, Setup)                     ✘
  ├─gi-gobject (Lib, Setup)                  ✘
  ├─gi-harfbuzz (Lib, Setup)                 ✘
- ├─haskell-gi (Lib, Setup)                  ✔ [community]
- ├─haskell-gi-base (Lib)                    ✔ [community]
- ├─haskell-gi-overloading (Lib)             ✔ [community]
- ├─text (Lib)                               ✔ [community]
- └─transformers (Lib)                       ✔ [community]
+ ├─haskell-gi (Lib, Setup)                  ✔ [extra]
+ ├─haskell-gi-base (Lib)                    ✔ [extra]
+ ├─haskell-gi-overloading (Lib)             ✔ [extra]
+ ├─text (Lib)                               ✔ [extra]
+ └─transformers (Lib)                       ✔ [extra]
 ...
 
 ⓘ Recommended package order:
@@ -213,7 +213,7 @@ pango.pc              ⇒   pango
 </details>
 
 This output tells us that in order to package `gi-gdk`, we must package its dependencies
-listed in package order, which are not present in [community] repo. Particularly, `gi-gdk`
+listed in package order, which are not present in [extra] repo. Particularly, `gi-gdk`
 requires external system dependencies, so `arch-hs` can map them to system packages using files db.
 
 ```
@@ -414,12 +414,12 @@ whose name conform to above-mentioned situation, the name preset should be upgra
 ## Diff
 
 `arch-hs` also provides a component called `arch-hs-diff`. `arch-hs-diff` can show the differences of package description between two versions of a package,
-and remind us if some required packages in community repo can't satisfy the version constraints, or they are non-existent.
+and remind us if some required packages in extra repo can't satisfy the version constraints, or they are non-existent.
 This is useful in the subsequent maintenance of a package. For example:
 
 ```
 $ arch-hs-diff --alpm comonad 5.0.6 5.0.7
-ⓘ Loading community.db from libalpm
+ⓘ Loading extra.db from libalpm
 ⓘ Start running...
 ⓘ Downloading cabal file from https://hackage.haskell.org/package/comonad-5.0.6/revision/0.cabal...
 ⓘ Downloading cabal file from https://hackage.haskell.org/package/comonad-5.0.7/revision/0.cabal...
@@ -449,7 +449,7 @@ MakeDepends:
 --------------------------------------
   base  -any
   doctest  >=0.11.1 && <0.18
-"doctest" is required to be in range (>=0.11.1 && <0.17), but [community] provides (0.17). 
+"doctest" is required to be in range (>=0.11.1 && <0.17), but [extra] provides (0.17). 
 Flags:
   comonad
     ⚐ test-doctests:
@@ -520,7 +520,7 @@ For hackage distribution maintainers only, see `arch-hs-sync --help` for details
 ## Limitations
 
 * `arch-hs` will run into error, if solved targets contain cycle. Indeed, circular dependency lies ubiquitously in hackage because of tests,
-but basic cycles are resolved manually in [community] by maintainers. So after the provider simplification, `arch-hs` can eliminate these cycles.
+but basic cycles are resolved manually in [extra] by maintainers. So after the provider simplification, `arch-hs` can eliminate these cycles.
 Nevertheless, if the target introduces new cycle or it dependens on a package in an unknown cycle, `arch-hs` will throw `CyclicExist` exception.
 
 * `arch-hs` is not able to handle with complicated situations: the libraries of a package partially exist in hackage, some libraries include external sources, etc. 
@@ -531,7 +531,7 @@ file patches, version range processes, etc. They need to be done manually, so **
 ## Alpm Support
 
 [alpm](https://www.archlinux.org/pacman/libalpm.3.html) is Arch Linux Package Management library.
-When running on Arch Linux, loading `community.db` and files dbs through this library is slightly faster than using the internal parser of `arch-hs`.
+When running on Arch Linux, loading `extra.db` and files dbs through this library is slightly faster than using the internal parser of `arch-hs`.
 Thus, `arch-hs` provides a flag `alpm` to enable this feature:
 
 ```
@@ -540,8 +540,8 @@ cabal build -f alpm
 
 This flag is enabled by default in `arch-hs` Arch Linux package.
 Compiled with `alpm`, `arch-hs` uses alpm to load pacman databases by default.
-In this case, the CLI flag `--no-alpm-community` and `--no-alpm-files` can be used to disable this feature.
-> When `alpm` is enabled, `arch-hs` will lose the capability of specifying the path of `community.db` and directory of files db.
+In this case, the CLI flag `--no-alpm-extra` and `--no-alpm-files` can be used to disable this feature.
+> When `alpm` is enabled, `arch-hs` will lose the capability of specifying the path of `extra.db` and directory of files db.
 
 
 ## Contributing

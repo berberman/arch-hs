@@ -16,10 +16,10 @@ import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 
 linkedHaskellPackages ::
-  Members [CommunityEnv, HackageEnv, WithMyErr, Embed IO] r =>
+  Members [ExtraEnv, HackageEnv, WithMyErr, Embed IO] r =>
   Sem r [(ArchLinuxName, ArchLinuxVersion, GenericPackageDescription)]
 linkedHaskellPackages = do
-  communityHaskellPackages <- filter (isHaskellPackage . fst) . Map.toList <$> ask @CommunityDB
+  extraHaskellPackages <- filter (isHaskellPackage . fst) . Map.toList <$> ask @ExtraDB
   hackagePackages <- Map.keys <$> ask @HackageDB
   let go xs ys ((name, desc) : pkgs) =
         let hName = toHackageName name
@@ -27,9 +27,9 @@ linkedHaskellPackages = do
               then getLatestCabal hName >>= \cabal -> go ((name, _version desc, cabal) : xs) ys pkgs
               else go xs (name : ys) pkgs
       go xs ys [] = pure (xs, ys)
-  (linked, unlinked) <- go [] [] communityHaskellPackages
+  (linked, unlinked) <- go [] [] extraHaskellPackages
   embed $
     unless (null unlinked) $ do
-      printWarn $ "Following packages in" <+> ppCommunity <+> "are not linked to hackage:"
+      printWarn $ "Following packages in" <+> ppExtra <+> "are not linked to hackage:"
       putStrLn . unlines $ unArchLinuxName <$> unlinked
   pure linked

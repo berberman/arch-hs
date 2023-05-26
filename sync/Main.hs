@@ -26,41 +26,41 @@ main :: IO ()
 main = runArgsParser >>= runMode
 
 runCheck ::
-  CommunityDB ->
+  ExtraDB ->
   HackageDB ->
   Bool ->
   IO (Either MyException ())
-runCheck community hackage includeGHC =
+runCheck extra hackage includeGHC =
   ( runFinal
       . embedToFinal @IO
       . errorToIOFinal
       . runReader hackage
-      . runReader community
+      . runReader extra
   )
     (check includeGHC)
 
 runSubmit ::
-  CommunityDB ->
+  ExtraDB ->
   HackageDB ->
   Manager ->
   Maybe String ->
   FilePath ->
   Bool ->
   IO (Either MyException ())
-runSubmit community hackage manager token output upload =
+runSubmit extra hackage manager token output upload =
   ( runFinal
       . embedToFinal @IO
       . errorToIOFinal
       . runReader manager
       . runReader hackage
-      . runReader community
+      . runReader extra
   )
     (submit token output upload)
 
 runMode :: Mode -> IO ()
 runMode = \case
   Submit CommonOptions {..} SubmitOptions {..} -> do
-    community <- loadCommunityDBFromOptions optCommunityDB
+    extra <- loadExtraDBFromOptions optExtraDB
     hackage <- loadHackageDBFromOptions optHackage
 
     token <- lookupEnv "HACKAGE_API_TOKEN"
@@ -81,16 +81,16 @@ runMode = \case
       printWarn "Run diff and check only"
 
     manager <- newTlsManager
-    runSubmit community hackage manager token optOutput optUpload & printAppResult
+    runSubmit extra hackage manager token optOutput optUpload & printAppResult
   Check CommonOptions {..} CheckOptions {..} -> do
-    community <- loadCommunityDBFromOptions optCommunityDB
+    extra <- loadExtraDBFromOptions optExtraDB
     hackage <- loadHackageDBFromOptions optHackage
-    runCheck community hackage optShowGHCLibs & printAppResult
-  List CommunityDBOptions {..} ListOptions {..} -> do
-    community <- loadCommunityDBFromOptions
+    runCheck extra hackage optShowGHCLibs & printAppResult
+  List ExtraDBOptions {..} ListOptions {..} -> do
+    extra <- loadExtraDBFromOptions
     putStrLn $
       unlines
         [ unArchLinuxName name <> (if optWithVersion then ": " <> version else "")
-          | (name, _version -> version) <- Map.toList community,
+          | (name, _version -> version) <- Map.toList extra,
             isHaskellPackage name
         ]

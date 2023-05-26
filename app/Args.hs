@@ -14,7 +14,7 @@ import Distribution.ArchHs.Utils (archHsVersion)
 
 data Options = Options
   { optHackage :: HackageDBOptions,
-    optCommunityDB :: CommunityDBOptions,
+    optExtraDB :: ExtraDBOptions,
     optFilesDB :: FilesDBOptions,
     optOutputDir :: FilePath,
     optFlags :: FlagAssignments,
@@ -35,7 +35,7 @@ cmdOptions :: Parser Options
 cmdOptions =
   Options
     <$> hackageDBOptionsParser
-      <*> communityDBOptionsParser
+      <*> extraDBOptionsParser
       <*> filesDBOptionsParser
       <*> strOption
         ( long "output"

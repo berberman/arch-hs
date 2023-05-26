@@ -37,7 +37,7 @@ ignoreList =
           "unzip"
         ]
 
--- | Packages already provided by <https://www.archlinux.org/packages/community/x86_64/ghc-libs/ ghc-libs>.
+-- | Packages already provided by <https://www.archlinux.org/packages/extra/x86_64/ghc-libs/ ghc-libs>.
 ghcLibList :: PkgList
 ghcLibList =
   mkPackageName

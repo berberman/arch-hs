@@ -10,7 +10,7 @@ import Control.Monad (forM_, unless)
 import Data.List (find)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes)
-import Distribution.ArchHs.CommunityDB
+import Distribution.ArchHs.ExtraDB
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
@@ -31,7 +31,7 @@ instance Pretty DepSrc where
 
 check ::
   Members
-    [ CommunityEnv,
+    [ ExtraEnv,
       HackageEnv,
       KnownGHCVersion,
       FlagAssignmentsEnv,
@@ -45,7 +45,7 @@ check ::
   Sem r ()
 check target = do
   let aTarget = toArchLinuxName target
-  exists <- isInCommunity aTarget
+  exists <- isInExtra aTarget
   unless exists $ throw $ PkgNotFound target
   reverseDeps <-
     ( \xs ->
@@ -64,7 +64,7 @@ check target = do
         ]
       )
       . Map.toList
-      <$> ask @CommunityDB
+      <$> ask @ExtraDB
   forM_ reverseDeps $ \(PkgDesc {..}, src) -> do
     eCabal <-
       try @MyException $

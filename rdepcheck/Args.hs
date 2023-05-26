@@ -12,7 +12,7 @@ import Distribution.ArchHs.Utils (archHsVersion)
 
 data Options = Options
   { optFlags :: FlagAssignments,
-    optCommunityDB :: CommunityDBOptions,
+    optExtraDB :: ExtraDBOptions,
     optHackage :: HackageDBOptions,
     optPackageName :: PackageName
   }
@@ -21,7 +21,7 @@ cmdOptions :: Parser Options
 cmdOptions =
   Options
     <$> optFlagAssignmentParser
-    <*> communityDBOptionsParser
+    <*> extraDBOptionsParser
     <*> hackageDBOptionsParser
     <*> argument optPackageNameReader (metavar "TARGET")
 
@@ -31,7 +31,7 @@ runArgsParser = do
     simpleOptions
       archHsVersion
       "arch-hs-rdepcheck - check the version of a dependent Haskell package"
-      "arch-hs-rdepcheck is a CLI tool that shows all reverse dependencies of a Haskell package in [community], giving the version range how it is depended on"
+      "arch-hs-rdepcheck is a CLI tool that shows all reverse dependencies of a Haskell package in [extra], giving the version range how it is depended on"
       cmdOptions
       empty
   pure x
