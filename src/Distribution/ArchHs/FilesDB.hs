@@ -119,12 +119,11 @@ lookupPkg file = Map.foldrWithKey (\k v acc -> if file `elem` v then k : acc els
 data Result = Files FilePath [File] | Desc FilePath ArchLinuxName
   deriving stock (Show)
 
--- | Three files repos: @core@, @community@, and @extra@
-data DBKind = Core | Community | Extra
+-- | Two files repos: @core@ and @extra@
+data DBKind = Core | Extra
 
 instance Show DBKind where
   show Core = "core"
-  show Community = "community"
   show Extra = "extra"
 
 -- | A file's name

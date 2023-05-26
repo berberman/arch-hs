@@ -29,20 +29,20 @@ main = printHandledIOException $
       printInfo "You assigned flags:"
       putDoc $ prettyFlagAssignments optFlags <> line
 
-    community <- loadCommunityDBFromOptions optCommunityDB
+    extra <- loadExtraDBFromOptions optExtraDB
 
     manager <- newTlsManager
 
     printInfo "Start running..."
-    runDiff community optFlags manager (subsumeGHCVersion $ diffCabal optPackageName optVersionA optVersionB) & printAppResult
+    runDiff extra optFlags manager (subsumeGHCVersion $ diffCabal optPackageName optVersionA optVersionB) & printAppResult
 
 runDiff ::
-  CommunityDB ->
+  ExtraDB ->
   FlagAssignments ->
   Manager ->
-  Sem '[CommunityEnv, FlagAssignmentsEnv, Reader Manager, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
+  Sem '[ExtraEnv, FlagAssignmentsEnv, Reader Manager, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runDiff community flags manager =
+runDiff extra flags manager =
   runFinal
     . embedToFinal
     . errorToIOFinal
@@ -50,4 +50,4 @@ runDiff community flags manager =
     . ignoreTrace
     . runReader manager
     . runReader flags
-    . runReader community
+    . runReader extra

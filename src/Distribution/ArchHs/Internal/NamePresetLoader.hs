@@ -18,9 +18,9 @@ loadNamePreset = do
   let preset = case decodeStrict @(Map String String) txt of
         Just x -> x
         _ -> error "Failed to parse json"
-  a <- genFunc "communityToHackageP" preset
-  b <- genFunc "hackageToCommunityP" $ fromList . fmap swap . toList $ preset
-  d <- genArray "communityListP" $ keys preset
+  a <- genFunc "extraToHackageP" preset
+  b <- genFunc "hackageToExtraP" $ fromList . fmap swap . toList $ preset
+  d <- genArray "extraListP" $ keys preset
   return [a, b, d]
 
 genFunc :: String -> Map String String -> DecQ

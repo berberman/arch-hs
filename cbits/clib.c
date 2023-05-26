@@ -4,7 +4,7 @@
 #include <libgen.h>
 #include <string.h>
 
-void dispatch_list(community_list_callback_t callback, const char *name,
+void dispatch_list(extra_list_callback_t callback, const char *name,
                    const char *key, alpm_list_t *src) {
   if (src == NULL)
     return;
@@ -16,13 +16,13 @@ void dispatch_list(community_list_callback_t callback, const char *name,
   }
 }
 
-void query_community(community_pkg_callback_t pkg_callback,
-                     community_list_callback_t list_callback) {
+void query_extra(extra_pkg_callback_t pkg_callback,
+                     extra_list_callback_t list_callback) {
   alpm_errno_t err;
   alpm_handle_t *handle;
   handle = alpm_initialize("/", "/var/lib/pacman", &err);
   alpm_db_t *db =
-      alpm_register_syncdb(handle, "community", ALPM_SIG_USE_DEFAULT);
+      alpm_register_syncdb(handle, "extra", ALPM_SIG_USE_DEFAULT);
   alpm_list_t *i, *pkgs = NULL;
 
   pkgs = alpm_db_get_pkgcache(db);

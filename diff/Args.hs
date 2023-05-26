@@ -12,7 +12,7 @@ import Distribution.ArchHs.Utils (archHsVersion)
 
 data Options = Options
   { optFlags :: FlagAssignments,
-    optCommunityDB :: CommunityDBOptions,
+    optExtraDB :: ExtraDBOptions,
     optPackageName :: PackageName,
     optVersionA :: Version,
     optVersionB :: Version
@@ -22,7 +22,7 @@ cmdOptions :: Parser Options
 cmdOptions =
   Options
     <$> optFlagAssignmentParser
-    <*> communityDBOptionsParser
+    <*> extraDBOptionsParser
     <*> argument optPackageNameReader (metavar "TARGET")
     <*> argument optVersionReader (metavar "VERSION_A")
     <*> argument optVersionReader (metavar "VERSION_B")
@@ -33,7 +33,7 @@ runArgsParser = do
     simpleOptions
       archHsVersion
       "arch-hs-diff - create diff between different versions of package description"
-      "arch-hs-diff is a CLI tool that shows the differences of package description between two versions of a package, and remind us if some required packages in community repo can't satisfy the version constraints, or they are non-existent"
+      "arch-hs-diff is a CLI tool that shows the differences of package description between two versions of a package, and remind us if some required packages in extra repo can't satisfy the version constraints, or they are non-existent"
       cmdOptions
       empty
   pure x

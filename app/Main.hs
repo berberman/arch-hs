@@ -22,7 +22,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Distribution.ArchHs.Aur (Aur, aurToIO, isInAur)
-import Distribution.ArchHs.CommunityDB
+import Distribution.ArchHs.ExtraDB
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.FilesDB
@@ -44,7 +44,7 @@ import System.Exit (ExitCode (ExitFailure, ExitSuccess))
 import System.FilePath (takeFileName)
 
 app ::
-  Members '[Embed IO, State (Set.Set PackageName), KnownGHCVersion, CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
+  Members '[Embed IO, State (Set.Set PackageName), KnownGHCVersion, ExtraEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
   PackageName ->
   FilePath ->
   Bool ->
@@ -59,12 +59,12 @@ app ::
 app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing loadFilesDB' = do
   (deps, sublibs, sysDeps) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
 
-  inCommunity <- isInCommunity target
+  inExtra <- isInExtra target
 
-  when inCommunity $
+  when inExtra $
     if force
-      then printWarn $ "Target has been provided by" <+> ppCommunity <> comma <+> "but you specified --force"
-      else throw $ TargetExist target ByCommunity
+      then printWarn $ "Target has been provided by" <+> ppExtra <> comma <+> "but you specified --force"
+      else throw $ TargetExist target ByExtra
 
   when aurSupport $ do
     inAur <- isInAur target
@@ -78,12 +78,12 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
       grouped = removeSublibs $ groupDeps deps
       namesFromSolved x = x ^.. each . pkgName <> x ^.. each . pkgDeps . each . depName
       allNames = nubOrd $ namesFromSolved grouped
-  communityProvideList <- (<> ghcLibList) <$> filterM (\x -> if x == target && force then return False else isInCommunity x) allNames
+  extraProvideList <- (<> ghcLibList) <$> filterM (\x -> if x == target && force then return False else isInExtra x) allNames
 
-  let providedPackages = filter (\x -> x ^. pkgName `elem` communityProvideList) grouped
+  let providedPackages = filter (\x -> x ^. pkgName `elem` extraProvideList) grouped
       abnormalDependencies =
         mapMaybe
-          ( \x -> case filter (`notElem` communityProvideList) (x ^. pkgDeps ^.. each . depName) of
+          ( \x -> case filter (`notElem` extraProvideList) (x ^. pkgDeps ^.. each . depName) of
               [] -> Nothing
               pkgs -> Just (x ^. pkgName, pkgs)
           )
@@ -101,9 +101,9 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
 
   let fillProvidedPkgs provideList provider = map (\x -> if (x ^. pkgName) `elem` provideList then ProvidedPackage (x ^. pkgName) provider else x)
       fillProvidedDeps provideList provider = map (pkgDeps %~ each %~ (\y -> if y ^. depName `elem` provideList then y & depProvider ?~ provider else y))
-      filledByCommunity = fillProvidedPkgs communityProvideList ByCommunity . fillProvidedDeps communityProvideList ByCommunity $ grouped
-      -- after filling community
-      toBePacked1 = filledByCommunity ^.. each . filtered (not . isProvided)
+      filledByExtra = fillProvidedPkgs extraProvideList ByExtra . fillProvidedDeps extraProvideList ByExtra $ grouped
+      -- after filling extra
+      toBePacked1 = filledByExtra ^.. each . filtered (not . isProvided)
 
   (filledByBoth, toBePacked2) <- do
     when aurSupport $ printInfo "Start searching AUR..."
@@ -112,7 +112,7 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
         then -- after filling aur. toBePacked1 should not appear after the next line
           filterM (\n -> do printInfo ("Searching" <+> viaPretty n); isInAur n) $ filter (\x -> not $ x == target && force) $ toBePacked1 ^.. each . pkgName
         else return []
-    let a = fillProvidedPkgs aurProvideList ByAur . fillProvidedDeps aurProvideList ByAur $ filledByCommunity
+    let a = fillProvidedPkgs aurProvideList ByAur . fillProvidedDeps aurProvideList ByAur $ filledByExtra
         b = a ^.. each . filtered (not . isProvided)
     return (a, b)
 
@@ -158,10 +158,6 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
       unless b' $ do
         extraFiles <- loadFilesDB' Extra
         modifyIORef' sysDepsRef $ fmap (trySolve extraFiles)
-        b'' <- isAllSolvedM sysDepsRef
-        unless b'' $ do
-          communityFiles <- loadFilesDB' Community
-          modifyIORef' sysDepsRef $ fmap (trySolve communityFiles)
 
   sysDepsResult <- embed $ readIORef sysDepsRef
 
@@ -212,14 +208,14 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
     let providedDepends pkg =
           pkg ^. pkgDeps
             ^.. each
-              . filtered (\x -> depNotMyself (pkg ^. pkgName) x && depNotInGHCLib x && x ^. depProvider == Just ByCommunity)
+              . filtered (\x -> depNotMyself (pkg ^. pkgName) x && depNotInGHCLib x && x ^. depProvider == Just ByExtra)
         toStr = unArchLinuxName . toArchLinuxName . _depName
         depends = unwords . nubOrd . fmap toStr . mconcat $ providedDepends <$> toBePacked3
         flattened' = filter (/= target) flattened
     case flattened' of
       [] -> pure ()
-      [x] -> printWarn $ "The following dependency is missing in" <+> ppCommunity <> colon <+> pretty (unPackageName x)
-      xs -> printWarn $ "Following dependencies are missing in" <+> ppCommunity <> colon <+> hsep (punctuate comma (pretty . unPackageName <$> xs))
+      [x] -> printWarn $ "The following dependency is missing in" <+> ppExtra <> colon <+> pretty (unPackageName x)
+      xs -> printWarn $ "Following dependencies are missing in" <+> ppExtra <> colon <+> hsep (punctuate comma (pretty . unPackageName <$> xs))
     embed $ putDoc line
     case depends of
       [] -> printInfo "No extra dependency to install"
@@ -263,15 +259,15 @@ fromEmergedSysDep (Solved file pkg) = SysDepsS file (Just pkg)
 
 runApp ::
   HackageDB ->
-  CommunityDB ->
+  ExtraDB ->
   Map.Map PackageName FlagAssignment ->
   Bool ->
   FilePath ->
   IORef (Set.Set PackageName) ->
   Manager ->
-  Sem '[CommunityEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, State (Set.Set PackageName), Aur, WithMyErr, Embed IO, Final IO] a ->
+  Sem '[ExtraEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, State (Set.Set PackageName), Aur, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runApp hackage community flags traceStdout tracePath ref manager =
+runApp hackage extra flags traceStdout tracePath ref manager =
   runFinal
     . embedToFinal
     . errorToIOFinal
@@ -281,7 +277,7 @@ runApp hackage community flags traceStdout tracePath ref manager =
     . evalState Map.empty
     . runReader flags
     . runReader hackage
-    . runReader community
+    . runReader extra
 
 runTrace :: Member (Embed IO) r => Bool -> FilePath -> Sem (Trace ': r) a -> Sem r a
 runTrace stdout path = interpret $ \case
@@ -332,7 +328,7 @@ main = printHandledIOException $
 
     let newHackage = foldr insertDB hackage parsedExtra
 
-    community <- loadCommunityDBFromOptions optCommunityDB
+    extra <- loadExtraDBFromOptions optExtraDB
 
     printInfo "Start running..."
 
@@ -342,7 +338,7 @@ main = printHandledIOException $
 
     runApp
       newHackage
-      community
+      extra
       optFlags
       optStdoutTrace
       optFileTrace

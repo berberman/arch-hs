@@ -9,7 +9,7 @@ where
 import Data.Algorithm.Diff
 import qualified Data.ByteString.Lazy as LBS
 import Data.Maybe (catMaybes, fromJust)
-import Distribution.ArchHs.CommunityDB (versionInCommunity)
+import Distribution.ArchHs.ExtraDB (versionInExtra)
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
@@ -65,7 +65,7 @@ directDependencies cabal = do
 
 -----------------------------------------------------------------------------
 
-diffCabal :: Members [KnownGHCVersion, CommunityEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Reader Manager, Embed IO] r => PackageName -> Version -> Version -> Sem r ()
+diffCabal :: Members [KnownGHCVersion, ExtraEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Reader Manager, Embed IO] r => PackageName -> Version -> Version -> Sem r ()
 diffCabal name a b = do
   ga <- getCabalFromHackage name a
   gb <- getCabalFromHackage name b
@@ -75,8 +75,8 @@ diffCabal name a b = do
       fb = genPackageFlags gb
   (ba, ma) <- directDependencies ga
   (bb, mb) <- directDependencies gb
-  queryb <- lookupDiffCommunity ba bb
-  querym <- lookupDiffCommunity ma mb
+  queryb <- lookupDiffExtra ba bb
+  querym <- lookupDiffExtra ma mb
   embed . putDoc $
     vsep
       [ annMagneta "Package" <> colon <+> viaPretty name,
@@ -109,15 +109,15 @@ ver = diffTerm "Version" (prettyShow . getPkgVersion)
 url :: PackageDescription -> PackageDescription -> Doc AnsiStyle
 url = diffTerm "URL" getUrl
 
-inRange :: Members [CommunityEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (Either (PackageName, VersionRange) (PackageName, VersionRange, Version, Bool))
+inRange :: Members [ExtraEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (Either (PackageName, VersionRange) (PackageName, VersionRange, Version, Bool))
 inRange (name, hRange) =
-  try @MyException (versionInCommunity name)
+  try @MyException (versionInExtra name)
     >>= \case
       Right y -> let version = fromJust . simpleParsec $ y in return . Right $ (name, hRange, version, withinRange version hRange)
       Left _ -> return . Left $ (name, hRange)
 
-lookupDiffCommunity :: Members [CommunityEnv, WithMyErr] r => VersionedList -> VersionedList -> Sem r (Doc AnsiStyle)
-lookupDiffCommunity va vb = do
+lookupDiffExtra :: Members [ExtraEnv, WithMyErr] r => VersionedList -> VersionedList -> Sem r (Doc AnsiStyle)
+lookupDiffExtra va vb = do
   let diff = getGroupedDiff va vb
       diffOld = mconcat $ unDiff <$> filterFirstDiff diff
       diffNew = mconcat $ unDiff <$> filterSecondDiff diff
@@ -129,7 +129,7 @@ lookupDiffCommunity va vb = do
             <+> parens (annF b $ viaPretty range)
             <> comma
             <+> "but"
-            <+> ppCommunity
+            <+> ppExtra
             <+> "provides"
             <+> parens (annF b $ viaPretty v)
             <> dot
@@ -141,7 +141,7 @@ lookupDiffCommunity va vb = do
             <+> parens (annF b $ viaPretty range)
             <> comma
             <+> "but"
-            <+> ppCommunity
+            <+> ppExtra
             <+> "does not provide this package"
             <> dot
 

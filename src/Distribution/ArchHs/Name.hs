@@ -12,7 +12,7 @@
 -- Stability: experimental
 -- Portability: portable
 --
--- Naming conversion between haskell package in hackage and archlinux community repo.
+-- Naming conversion between haskell package in hackage and archlinux extra repo.
 --
 -- To distribute a haskell package to archlinux, the name of package should be changed according to the naming convention:
 --
@@ -28,12 +28,12 @@
 --
 -- @NAME_PRESET.json@ will be loaded during the compilation, generating haskell code to be called in runtime.
 --
--- Converting a archlinux community name to hackage name following these steps:
+-- Converting a archlinux extra name to hackage name following these steps:
 --
 --   (1) Find if the name preset contains this rule
 --   (2) If it contains, then use it; or remove the @haskell-@ prefix
 --
--- Converting a hackage name to archlinux community name following these steps:
+-- Converting a hackage name to archlinux extra name following these steps:
 --
 --   (1) Find if the name preset contains this rule
 --   (2) If it contains, then use it; or add the @haskell-@ prefix
@@ -59,35 +59,35 @@ import Distribution.ArchHs.Types
 
 -- | The representation of a package name.
 data NameRep
-  = -- |  archlinx community style
+  = -- |  archlinx extra style
     ArchLinuxRep
   | -- | hackage style
     HackageRep
 
 $(loadNamePreset)
 
--- | Convert a name from community representation to hackage representation, according to the name preset.
+-- | Convert a name from extra representation to hackage representation, according to the name preset.
 -- If the preset doesn't contain this mapping rule, the function will return 'Nothing'.
 -- This function is generated from @NAME_PRESET.json@
-communityToHackageP :: MyName 'ArchLinuxRep -> Maybe (MyName 'HackageRep)
+extraToHackageP :: MyName 'ArchLinuxRep -> Maybe (MyName 'HackageRep)
 
--- | Convert a name from hackage representation to archlinux community representation, according to the name preset.
+-- | Convert a name from hackage representation to archlinux extra representation, according to the name preset.
 -- If the preset doesn't contain this mapping rule, the function will return 'Nothing'.
 --
 -- This function is generated from @NAME_PRESET.json@
-hackageToCommunityP :: MyName 'HackageRep -> Maybe (MyName 'ArchLinuxRep)
+hackageToExtraP :: MyName 'HackageRep -> Maybe (MyName 'ArchLinuxRep)
 
--- | Community haskell packages of in the name preset.
+-- | Extra haskell packages of in the name preset.
 --
 -- This function is generated from @NAME_PRESET.json@
-communityListP :: [MyName 'ArchLinuxRep]
+extraListP :: [MyName 'ArchLinuxRep]
 
 -- | A general package name representation.
 -- It has a phantom @a@, which indexes this name.
 -- Normally, the index should be the data kinds of 'NameRep'.
 --
 -- In Cabal API, packages' names are represented by the type 'PackageName';
--- in arch-hs, names parsed from @community.db@ are represented by the type 'ArchLinuxName'.
+-- in arch-hs, names parsed from @extra.db@ are represented by the type 'ArchLinuxName'.
 -- It would be tedious to use two converting functions everywhere, so here comes a intermediate data type
 -- to unify them, with type level constraints as bonus.
 newtype MyName a = MyName
@@ -106,7 +106,7 @@ class HasMyName a where
   -- | To 'MyName' in hackage style.
   toHackageRep :: a -> MyName 'HackageRep
 
-  -- | To 'MyName' in community style.
+  -- | To 'MyName' in extra style.
   toArchLinuxRep :: a -> MyName 'ArchLinuxRep
 
 instance HasMyName (MyName 'ArchLinuxRep) where
@@ -121,7 +121,7 @@ instance HasMyName PackageName where
   toHackageRep = MyName . unPackageName
   toArchLinuxRep = go . unPackageName
     where
-      go s = case hackageToCommunityP (MyName s) of
+      go s = case hackageToExtraP (MyName s) of
         Just x -> x
         _ ->
           MyName . fmap toLower $
@@ -133,7 +133,7 @@ instance HasMyName PackageName where
 instance HasMyName ArchLinuxName where
   toHackageRep = go . unArchLinuxName
     where
-      go s = case communityToHackageP (MyName s) of
+      go s = case extraToHackageP (MyName s) of
         Just x -> x
         _ -> MyName $ drop 8 s
   toArchLinuxRep = MyName . unArchLinuxName
@@ -154,12 +154,12 @@ toArchLinuxName = mToArchLinuxName . toArchLinuxRep
 toHackageName :: HasMyName n => n -> PackageName
 toHackageName = mToHackageName . toHackageRep
 
--- | Check if a package in archlinux community repo is haskell package.
+-- | Check if a package in archlinux extra repo is haskell package.
 --
 -- i.e. it is in @preset@ or has @haskell-@ prefix.
 -- Attention: There is no guarantee that the package exists in hackage.
 isHaskellPackage :: ArchLinuxName -> Bool
-isHaskellPackage (toArchLinuxRep -> rep) = rep `elem` communityListP || "haskell-" `isPrefixOf` unsafeUnMyName rep
+isHaskellPackage (toArchLinuxRep -> rep) = rep `elem` extraListP || "haskell-" `isPrefixOf` unsafeUnMyName rep
 
 -- | Check if a package is GHC or GHC Libs
 

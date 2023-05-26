@@ -21,9 +21,9 @@ module Distribution.ArchHs.Types
     PkgDependentList,
     PkgDesc (..),
     ArchLinuxVersion,
-    CommunityDB,
+    ExtraDB,
     HackageEnv,
-    CommunityEnv,
+    ExtraEnv,
     FlagAssignmentsEnv,
     KnownGHCVersion,
     DependencyType (..),
@@ -95,17 +95,17 @@ data PkgDesc = PkgDesc
   deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass (NFData)
 
--- | Version of packages in archlinux community repo
+-- | Version of packages in archlinux extra repo
 type ArchLinuxVersion = String
 
 -- | Representation of @cummunity.db@
-type CommunityDB = Map ArchLinuxName PkgDesc
+type ExtraDB = Map ArchLinuxName PkgDesc
 
 -- | Reader effect of 'HackageDB'
 type HackageEnv = Reader HackageDB
 
--- | Reader effect of 'CommunityDB'
-type CommunityEnv = Reader CommunityDB
+-- | Reader effect of 'ExtraDB'
+type ExtraEnv = Reader ExtraDB
 
 -- | A map of packages with their 'FlagAssignment'
 type FlagAssignments = Map PackageName FlagAssignment
@@ -175,12 +175,12 @@ instance Show DependencyType where
   show CSetup = "Setup"
 
 -- | Provider of a dependency.
-data DependencyProvider = ByCommunity | ByAur
+data DependencyProvider = ByExtra | ByAur
   deriving stock (Eq, Ord, Generic)
   deriving anyclass (NFData)
 
 instance Show DependencyProvider where
-  show ByCommunity = "[community]"
+  show ByExtra = "[extra]"
   show ByAur = "[aur]"
 
 -- | A solved dependency, holden by 'SolvedPackage'

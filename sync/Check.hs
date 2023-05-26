@@ -11,13 +11,13 @@ import Distribution.ArchHs.Types
 import Distribution.Package (packageName, packageVersion)
 import Utils
 
-check :: Members [HackageEnv, CommunityEnv, WithMyErr, Embed IO] r => Bool -> Sem r ()
+check :: Members [HackageEnv, ExtraEnv, WithMyErr, Embed IO] r => Bool -> Sem r ()
 check includeGHC = do
   linked <- linkedHaskellPackages
   let result =
         [ annMagneta (pretty (unArchLinuxName archName))
             <+> "in"
-            <+> ppCommunity
+            <+> ppExtra
             <+> "has version"
             <+> (if isHackageNewer then annRed else annGreen)
               (viaPretty archVersion)

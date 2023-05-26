@@ -7,15 +7,15 @@
 -- Maintainer: berberman <berberman@yandex.com>
 -- Stability: experimental
 -- Portability: portable
--- This module provides functions operating with @community.db@ of pacman.
-module Distribution.ArchHs.CommunityDB
-  ( defaultCommunityDBPath,
-    loadCommunityDB,
-    isInCommunity,
-    versionInCommunity,
+-- This module provides functions operating with @extra.db@ of pacman.
+module Distribution.ArchHs.ExtraDB
+  ( defaultExtraDBPath,
+    loadExtraDB,
+    isInExtra,
+    versionInExtra,
     getPkgDesc,
 #ifdef ALPM
-    loadCommunityDBFFI,
+    loadExtraDBFFI,
 #endif
   )
 where
@@ -45,8 +45,8 @@ import Foreign.Ptr (FunPtr, freeHaskellFunPtr)
 foreign import ccall "wrapper"
   wrap :: (CString -> CString -> CString -> CString -> IO ()) -> IO (FunPtr (CString -> CString -> CString -> CString -> IO ()))
 
-foreign import ccall "clib.h query_community"
-  query_community :: FunPtr (CString -> CString -> CString -> CString -> IO ()) -> FunPtr (CString -> CString -> CString -> CString -> IO ()) -> IO ()
+foreign import ccall "clib.h query_extra"
+  query_extra :: FunPtr (CString -> CString -> CString -> CString -> IO ()) -> FunPtr (CString -> CString -> CString -> CString -> IO ()) -> IO ()
 
 type RawPkgSet = IORef (Map.Map ArchLinuxName ((ArchLinuxVersion, String, String), IORef (Map.Map String [(ArchLinuxName, Maybe ArchLinuxVersion)])))
 
@@ -68,13 +68,13 @@ listCallback ref name key dm dv = do
   s <- snd . (\r -> r Map.! ArchLinuxName name') <$> readIORef ref
   modifyIORef' s (Map.insertWith (++) key' [(ArchLinuxName dm', if null dv' then Nothing else Just (extractFromEVR dv'))])
 
--- | The same purpose as 'loadCommunity' but use alpm to query community db instead.
-loadCommunityDBFFI :: IO CommunityDB
-loadCommunityDBFFI = do
+-- | The same purpose as 'loadExtra' but use alpm to query extra db instead.
+loadExtraDBFFI :: IO ExtraDB
+loadExtraDBFFI = do
   ref <- newIORef Map.empty
   pkgCallbackW <- wrap $ pkgCallback ref
   listCallbackW <- wrap $ listCallback ref
-  query_community pkgCallbackW listCallbackW
+  query_extra pkgCallbackW listCallbackW
   freeHaskellFunPtr pkgCallbackW
   freeHaskellFunPtr listCallbackW
   s <- readIORef ref
@@ -106,15 +106,15 @@ loadCommunityDBFFI = do
 #endif
 -----------------------------------------------------------------------------
 
--- | Default path to @community.db@.
-defaultCommunityDBPath :: FilePath
-defaultCommunityDBPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "community.db"
+-- | Default path to @extra.db@.
+defaultExtraDBPath :: FilePath
+defaultExtraDBPath = "/" </> "var" </> "lib" </> "pacman" </> "sync" </> "extra.db"
 
-loadCommunityDBC ::
+loadExtraDBC ::
   (MonadResource m, PrimMonad m, MonadThrow m) =>
   FilePath ->
   ConduitT i (ArchLinuxName, PkgDesc) m ()
-loadCommunityDBC path = do
+loadExtraDBC path = do
   sourceFileBS path .| Zlib.ungzip .| Tar.untarChunks .| Tar.withEntries action
   where
     action header =
@@ -134,27 +134,27 @@ loadCommunityDBC path = do
               Left _ -> []
         yieldMany $ (\desc -> (_name desc, desc)) <$> result
 
--- | Load @community.db@ from @path@.
+-- | Load @extra.db@ from @path@.
 -- @desc@ files in the db will be parsed by @descParser@.
-loadCommunityDB :: FilePath -> IO CommunityDB
-loadCommunityDB path = Map.fromList <$> runConduitRes (loadCommunityDBC path .| sinkList)
+loadExtraDB :: FilePath -> IO ExtraDB
+loadExtraDB path = Map.fromList <$> runConduitRes (loadExtraDBC path .| sinkList)
 
 -----------------------------------------------------------------------------
 
--- | Check if a package exists in archlinux community repo.
+-- | Check if a package exists in archlinux extra repo.
 -- See 'HasMyName'.
-isInCommunity :: (HasMyName n, Member CommunityEnv r) => n -> Sem r Bool
-isInCommunity name = ask @CommunityDB >>= \db -> return $ toArchLinuxName name `Map.member` db
+isInExtra :: (HasMyName n, Member ExtraEnv r) => n -> Sem r Bool
+isInExtra name = ask @ExtraDB >>= \db -> return $ toArchLinuxName name `Map.member` db
 
--- | Get the version of a package in archlinux community repo.
+-- | Get the version of a package in archlinux extra repo.
 -- If the package does not exist, 'PkgNotFound' will be thrown.
-versionInCommunity :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n -> Sem r ArchLinuxVersion
-versionInCommunity name = _version <$> getPkgDesc name
+versionInExtra :: (HasMyName n, Members [ExtraEnv, WithMyErr] r) => n -> Sem r ArchLinuxVersion
+versionInExtra name = _version <$> getPkgDesc name
 
--- | Get the pkgdesc a package in archlinux community repo.
+-- | Get the pkgdesc a package in archlinux extra repo.
 -- If the package does not exist, 'PkgNotFound' will be thrown.
-getPkgDesc :: (HasMyName n, Members [CommunityEnv, WithMyErr] r) => n -> Sem r PkgDesc
+getPkgDesc :: (HasMyName n, Members [ExtraEnv, WithMyErr] r) => n -> Sem r PkgDesc
 getPkgDesc name =
-  ask @CommunityDB >>= \db -> case db Map.!? toArchLinuxName name of
+  ask @ExtraDB >>= \db -> case db Map.!? toArchLinuxName name of
     Just x -> pure x
     _ -> throw $ PkgNotFound name

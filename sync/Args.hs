@@ -15,12 +15,12 @@ import Distribution.ArchHs.Utils (archHsVersion)
 
 data CommonOptions = CommonOptions
   { optHackage :: HackageDBOptions,
-    optCommunityDB :: CommunityDBOptions
+    optExtraDB :: ExtraDBOptions
   }
 
 commonOptionsParser :: Parser CommonOptions
 commonOptionsParser =
-  CommonOptions <$> hackageDBOptionsParser <*> communityDBOptionsParser
+  CommonOptions <$> hackageDBOptionsParser <*> extraDBOptionsParser
 
 -----------------------------------------------------------------------------
 
@@ -73,14 +73,14 @@ listOptionsParser =
 data Mode
   = Submit CommonOptions SubmitOptions
   | Check CommonOptions CheckOptions
-  | List CommunityDBOptions ListOptions
+  | List ExtraDBOptions ListOptions
 
 runArgsParser :: IO Mode
 runArgsParser =
   snd <$> do
     simpleOptions
       archHsVersion
-      "arch-hs-sync - sync metadata of Haskell packages between [community] and Hackage"
+      "arch-hs-sync - sync metadata of Haskell packages between [extra] and Hackage"
       "arch-hs-sync is designed to be used by Hackage distribution maintainers"
       (pure ())
       $ do
@@ -96,6 +96,6 @@ runArgsParser =
           (Check <$> commonOptionsParser <*> checkOptionsParser)
         addCommand
           "list"
-          "list all Haskell packages in [community]"
+          "list all Haskell packages in [extra]"
           id
-          (List <$> communityDBOptionsParser <*> listOptionsParser)
+          (List <$> extraDBOptionsParser <*> listOptionsParser)

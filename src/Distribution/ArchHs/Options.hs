@@ -9,9 +9,9 @@
 -- This module contains CLI parsers used in executables.
 -- "Options.Applicative.Simple" is re-exported.
 module Distribution.ArchHs.Options
-  ( -- * Load Community DB
-    CommunityDBOptions (..),
-    communityDBOptionsParser,
+  ( -- * Load Extra DB
+    ExtraDBOptions (..),
+    extraDBOptionsParser,
 
     -- * Load files DB
     FilesDBOptions (..),
@@ -33,7 +33,7 @@ module Distribution.ArchHs.Options
 where
 
 import qualified Data.Map.Strict as Map
-import Distribution.ArchHs.CommunityDB
+import Distribution.ArchHs.ExtraDB
 import Distribution.ArchHs.FilesDB
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
@@ -43,51 +43,51 @@ import Options.Applicative.Simple
 
 -----------------------------------------------------------------------------
 
--- | Parsed options for loading [community]
-newtype CommunityDBOptions = CommunityDBOptions
-  { loadCommunityDBFromOptions :: IO CommunityDB
+-- | Parsed options for loading [extra]
+newtype ExtraDBOptions = ExtraDBOptions
+  { loadExtraDBFromOptions :: IO ExtraDB
   }
 
--- | CLI options parser of 'CommunityDBOptions'
+-- | CLI options parser of 'ExtraDBOptions'
 --
--- When alpm is enabled, it reads a flag @no-alpm-community@;
--- otherwise it reads a string option @community@.
-communityDBOptionsParser :: Parser CommunityDBOptions
+-- When alpm is enabled, it reads a flag @no-alpm-extra@;
+-- otherwise it reads a string option @extra@.
+extraDBOptionsParser :: Parser ExtraDBOptions
 
 #ifndef ALPM
-communityDBOptionsParser =
-  CommunityDBOptions
+extraDBOptionsParser =
+  ExtraDBOptions
     <$> fmap
       ( \s ->
           do
-            printInfo $ "Loading community.db from" <+> pretty s
-            loadCommunityDB s
+            printInfo $ "Loading extra.db from" <+> pretty s
+            loadExtraDB s
       )
       ( strOption $
-          long "community"
+          long "extra"
             <> metavar "PATH"
             <> short 'c'
-            <> help "Path to community.db"
+            <> help "Path to extra.db"
             <> showDefault
-            <> value defaultCommunityDBPath
+            <> value defaultExtraDBPath
       )
 #else
-communityDBOptionsParser =
-  CommunityDBOptions
+extraDBOptionsParser =
+  ExtraDBOptions
     <$> fmap
       ( \b ->
           do
-            let src = if b then "libalpm" else defaultCommunityDBPath
-            printInfo $ "Loading community.db from" <+> pretty src
+            let src = if b then "libalpm" else defaultExtraDBPath
+            printInfo $ "Loading extra.db from" <+> pretty src
             if b
-              then loadCommunityDBFFI
-              else loadCommunityDB defaultCommunityDBPath
+              then loadExtraDBFFI
+              else loadExtraDB defaultExtraDBPath
       )
       ( flag
           True
           False
-          ( long "no-alpm-community"
-              <> help "Do not use libalpm to parse community db"
+          ( long "no-alpm-extra"
+              <> help "Do not use libalpm to parse extra db"
           )
       )
 #endif
@@ -98,7 +98,7 @@ newtype FilesDBOptions = FilesDBOptions
   { loadFilesDBFromOptions :: DBKind -> IO FilesDB
   }
 
--- | CLI options parser of 'CommunityDBOptions'
+-- | CLI options parser of 'ExtraDBOptions'
 --
 -- When alpm is enabled, it reads a flag @no-alpm-files@;
 -- otherwise it reads a string option @files@.
@@ -119,7 +119,7 @@ filesDBOptionsParser =
             <> metavar "PATH"
             <> short 'f'
             <> help
-              "Path of dir that includes core.files, extra.files and community.files"
+              "Path of dir that includes core.files, extra.files and extra.files"
             <> showDefault
             <> value defaultFilesDBDir
       )

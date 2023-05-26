@@ -98,7 +98,7 @@ library
   autogen-modules: Paths_arch_hs
   exposed-modules:
     Distribution.ArchHs.Aur
-    Distribution.ArchHs.CommunityDB
+    Distribution.ArchHs.ExtraDB
     Distribution.ArchHs.Compat
     Distribution.ArchHs.Core
     Distribution.ArchHs.Exception
