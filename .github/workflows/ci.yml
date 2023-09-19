@@ -11,22 +11,23 @@ permissions:
 
 jobs:
   build:
-    name: GHC ${{ matrix.ghc-version }} on ${{ matrix.os }}
+    name: GHC ${{ matrix.ghc-version }} with Cabal ${{ matrix.cabal-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
         ghc-version: ['9.4', '9.2', '9.0', '8.10']
+        cabal-version: ['3.8', '3.6', '3.4', '3.2']
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up GHC ${{ matrix.ghc-version }}
+      - name: Set up GHC ${{ matrix.ghc-version }} with Cabal ${{ matrix.cabal-version }}
         uses: haskell/actions/setup@v2
         id: setup
         with:
           ghc-version: ${{ matrix.ghc-version }}
-          cabal-version: 'latest'
+          cabal-version: ${{ matrix.cabal-version }}
 
       - name: Configure the build
         run: |
