@@ -17,8 +17,19 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        ghc-version: ['9.4', '9.2', '9.0', '8.10']
-        cabal-version: ['3.8', '3.6', '3.4', '3.2']
+        ghc-version: ["9.4", "9.2", "9.0", "8.10"]
+        cabal-version: ["3.8", "3.6", "3.4", "3.2"]
+        exclude:
+          - ghc-version: "9.4"
+            cabal-version: "3.2"    
+          - ghc-version: "9.4"
+            cabal-version: "3.4"          
+          - ghc-version: "9.2"
+            cabal-version: "3.2"    
+          - ghc-version: "9.2"
+            cabal-version: "3.4"
+          - ghc-version: "9.0"
+            cabal-version: "3.2"
     steps:
       - uses: actions/checkout@v3
 
