@@ -22,9 +22,9 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Distribution.ArchHs.Aur (Aur, aurToIO, isInAur)
-import Distribution.ArchHs.ExtraDB
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Exception
+import Distribution.ArchHs.ExtraDB
 import Distribution.ArchHs.FilesDB
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
@@ -44,7 +44,7 @@ import System.Exit (ExitCode (ExitFailure, ExitSuccess))
 import System.FilePath (takeFileName)
 
 app ::
-  Members '[Embed IO, State (Set.Set PackageName), KnownGHCVersion, ExtraEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r =>
+  (Members '[Embed IO, State (Set.Set PackageName), KnownGHCVersion, ExtraEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r) =>
   PackageName ->
   FilePath ->
   Bool ->
@@ -105,6 +105,12 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
       -- after filling extra
       toBePacked1 = filledByExtra ^.. each . filtered (not . isProvided)
 
+  -- always keep the target
+  when (target `elem` missingChildren) $
+    printWarn "Target is in package(s) above, but we won't skip it"
+  -- missingChildren should not appear after the next line
+  let missingChildrenExcludedTarget = filter (/= target) missingChildren
+
   (filledByBoth, toBePacked2) <- do
     when aurSupport $ printInfo "Start searching AUR..."
     aurProvideList <-
@@ -116,15 +122,12 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
         b = a ^.. each . filtered (not . isProvided)
     return (a, b)
 
-  when (null filledByBoth) $
-    throw $ TargetDisappearException target
-
   printInfo "Solved:"
   embed $ T.putStrLn . prettySolvedPkgs $ filledByBoth
 
   printInfo "Recommended package order:"
   -- remove missingChildren from the graph iff noSkipMissing is not enabled
-  let vertexesToBeRemoved = (if noSkipMissing then [] else missingChildren) <> filledByBoth ^.. each . filtered isProvided ^.. each . pkgName
+  let vertexesToBeRemoved = (if noSkipMissing then [] else missingChildrenExcludedTarget) <> filledByBoth ^.. each . filtered isProvided ^.. each . pkgName
       removeSelfCycle g = foldr (\n acc -> GL.removeEdge n n acc) g $ toBePacked2 ^.. each . pkgName
       newGraph = GL.induce (`notElem` vertexesToBeRemoved) deps
   flattened <- case G.topSort . GL.skeleton $ removeSelfCycle newGraph of
@@ -136,10 +139,12 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
   let toBePacked3 = filter (\x -> x ^. pkgName `elem` flattened) toBePacked2
 
   -- add sign for missing children if we have
-  embed . putDoc $ (prettyDeps . reverse $ map (\x -> (x, x `elem` missingChildren)) flattened) <> line <> line
+  embed . putDoc $ (prettyDeps . reverse $ map (\x -> (x, x `elem` missingChildrenExcludedTarget)) flattened) <> line <> line
 
-  unless (null missingChildren || not noSkipMissing) $
-    embed . putDoc $ annotate italicized $ yellowStarInParens <+> "indicates a missing package" <> line <> line
+  unless (null missingChildrenExcludedTarget || not noSkipMissing) $
+    embed . putDoc $
+      annotate italicized $
+        yellowStarInParens <+> "indicates a missing package" <> line <> line
 
   let sysDepsToBePacked = Map.filterWithKey (\k _ -> k `elem` flattened) sysDeps
 
@@ -206,7 +211,8 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
 
   when installDeps $ do
     let providedDepends pkg =
-          pkg ^. pkgDeps
+          pkg
+            ^. pkgDeps
             ^.. each
               . filtered (\x -> depNotMyself (pkg ^. pkgName) x && depNotInGHCLib x && x ^. depProvider == Just ByExtra)
         toStr = unArchLinuxName . toArchLinuxName . _depName
@@ -235,7 +241,7 @@ trySolve :: FilesDB -> EmergedSysDep -> EmergedSysDep
 trySolve db dep
   | (Unsolved x) <- dep,
     (pkg : _) <- lookupPkg x db =
-    Solved x pkg
+      Solved x pkg
   | otherwise = dep
 
 isAllSolved :: [EmergedSysDep] -> Bool
@@ -279,7 +285,7 @@ runApp hackage extra flags traceStdout tracePath ref manager =
     . runReader hackage
     . runReader extra
 
-runTrace :: Member (Embed IO) r => Bool -> FilePath -> Sem (Trace ': r) a -> Sem r a
+runTrace :: (Member (Embed IO) r) => Bool -> FilePath -> Sem (Trace ': r) a -> Sem r a
 runTrace stdout path = interpret $ \case
   Trace m -> do
     when stdout (embed $ putStrLn m)
@@ -322,7 +328,8 @@ main = printHandledIOException $
     optExtraCabal <- mapM findCabalFile optExtraCabalDirs
 
     unless isExtraEmpty $
-      printInfo $ "You added" <+> hsep (punctuate comma $ pretty . takeFileName <$> optExtraCabal) <+> "as extra cabal file(s), starting parsing right now"
+      printInfo $
+        "You added" <+> hsep (punctuate comma $ pretty . takeFileName <$> optExtraCabal) <+> "as extra cabal file(s), starting parsing right now"
 
     parsedExtra <- mapM parseCabalFile optExtraCabal
 
