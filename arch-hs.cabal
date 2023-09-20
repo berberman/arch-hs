@@ -41,7 +41,7 @@ common common-options
     , arch-web                     ^>=0.2
     , base                         >=4.12     && <5
     , bytestring
-    , Cabal                        >=3.2      && <3.7
+    , Cabal                        >=3.2      && <3.9
     , conduit                      ^>=1.3.2
     , conduit-extra                ^>=1.3.5
     , containers
@@ -52,7 +52,7 @@ common common-options
     , hackage-db                   ^>=2.1.0
     , http-client
     , http-client-tls
-    , megaparsec                   ^>=9.0.0   || ^>=9.1.0  || ^>=9.2.0 || ^>=9.3.0
+    , megaparsec                   ^>=9.0.0   || ^>=9.1.0  || ^>=9.2.0  || ^>=9.3.0
     , microlens                    ^>=0.4.11
     , microlens-th                 ^>=0.4.3
     , neat-interpolation           ^>=0.5.1
@@ -63,7 +63,7 @@ common common-options
     , servant-client               >=0.18.2   && <0.20
     , split                        ^>=0.2.3
     , tar-conduit                  ^>=0.3.2   || ^>=0.4.0
-    , template-haskell             ^>=2.16.0  || ^>=2.17.0 || ^>=2.18.0
+    , template-haskell             ^>=2.16.0  || ^>=2.17.0 || ^>=2.18.0 || ^>=2.19.0
     , text
 
   ghc-options:
@@ -98,10 +98,10 @@ library
   autogen-modules: Paths_arch_hs
   exposed-modules:
     Distribution.ArchHs.Aur
-    Distribution.ArchHs.ExtraDB
     Distribution.ArchHs.Compat
     Distribution.ArchHs.Core
     Distribution.ArchHs.Exception
+    Distribution.ArchHs.ExtraDB
     Distribution.ArchHs.FilesDB
     Distribution.ArchHs.Hackage
     Distribution.ArchHs.Internal.Prelude
