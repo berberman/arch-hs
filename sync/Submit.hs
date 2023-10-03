@@ -34,7 +34,7 @@ genCSV = do
                 if isGHCLibs hackageName
                   then "ghc"
                   else unArchLinuxName archLinuxName
-              prefix = "https://www.archlinux.org/packages/extra/x86_64/"
+              prefix = "https://archlinux.org/packages/extra/x86_64/"
       ]
 
 -- | Check and submit distro CSV to Hackage
