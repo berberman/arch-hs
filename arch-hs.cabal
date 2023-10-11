@@ -60,7 +60,7 @@ common common-options
     , polysemy                     >=1.5.0    && <1.10
     , prettyprinter                ^>=1.7.0
     , prettyprinter-ansi-terminal  ^>=1.1.2
-    , servant-client               >=0.18.2   && <0.20
+    , servant-client               >=0.18.2   && <0.21
     , split                        ^>=0.2.3
     , tar-conduit                  ^>=0.3.2   || ^>=0.4.0
     , template-haskell             ^>=2.16.0  || ^>=2.17.0 || ^>=2.18.0 || ^>=2.19.0
