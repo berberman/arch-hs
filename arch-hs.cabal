@@ -52,7 +52,7 @@ common common-options
     , hackage-db                   ^>=2.1.0
     , http-client
     , http-client-tls
-    , megaparsec                   ^>=9.0.0   || ^>=9.1.0  || ^>=9.2.0  || ^>=9.3.0
+    , megaparsec                   ^>=9.0.0   || ^>=9.1.0  || ^>=9.2.0  || ^>=9.3.0  || ^>=9.4.0
     , microlens                    ^>=0.4.11
     , microlens-th                 ^>=0.4.3
     , neat-interpolation           ^>=0.5.1
