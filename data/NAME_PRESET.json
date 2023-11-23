@@ -103,6 +103,7 @@
   "misfortune": "misfortune",
   "pandoc-cli": "pandoc-cli",
   "pandoc-crossref": "pandoc-crossref",
+  "pandoc-plot": "pandoc-plot",
   "postgrest": "postgrest",
   "shellcheck": "ShellCheck",
   "stack": "stack",
