@@ -33,6 +33,7 @@ ignoreList =
           "Win32",
           "ghc-heap",
           "ghc-byteorder",
+          "ghc-platform",
           -- a build-tools of "zip-archive", which is not haskell package
           "unzip"
         ]
