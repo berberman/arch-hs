@@ -99,6 +99,7 @@
   "hslua-cli": "hslua-cli",
   "idris": "idris",
   "ihaskell": "ihaskell",
+  "kmonad": "kmonad",
   "mighttpd2": "mighttpd2",
   "misfortune": "misfortune",
   "pandoc-cli": "pandoc-cli",
