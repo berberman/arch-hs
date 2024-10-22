@@ -48,8 +48,6 @@ data PkgBuild = PkgBuild
     _licenseFile :: Maybe String,
     -- | Whether generate @prepare()@ bash function which calls @uusi@
     _enableUusi :: Bool,
-    -- | Whether generate @check()@ bash function
-    _enableCheck :: Bool,
     -- | Command-line flags
     _flags :: String
   }
@@ -114,7 +112,7 @@ applyTemplate PkgBuild {..} =
           _ -> "\n"
       )
       (if _enableUusi then "\n" <> uusi <> "\n\n" else "\n")
-      (if _enableCheck then "\n" <> check <> "\n\n" else "\n")
+      ("\n" <> check <> "\n\n")
       ( pack $ case _flags of
           [] -> ""
           xs -> "\\\n" <> xs
