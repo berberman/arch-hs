@@ -11,15 +11,7 @@
       overlays.default = final: prev:
         let
           hpkgs = prev.haskellPackages.override {
-            overrides = hself: hsuper: {
-              arch-web = prev.haskell.lib.dontCheck
-                (hself.callCabal2nix "arch-web" (builtins.fetchTarball {
-                  url =
-                    "https://hackage.haskell.org/package/arch-web-0.2/arch-web-0.2.tar.gz";
-                  sha256 =
-                    "0306ky9a4rfc4lz838kykl91br6s7sm9dkp446425g3yjh6x26zl";
-                }) { });
-            };
+            overrides = hself: hsuper: {};
           };
           arch-hs = hpkgs.callCabal2nix "arch-hs" ./. { };
         in with final;

@@ -38,7 +38,7 @@ common common-options
   build-depends:
     , aeson                        >=1.5.4    && <2.3
     , algebraic-graphs             >=0.5      && <0.8
-    , arch-web                     ^>=0.2
+    , arch-web                     ^>=0.3.1
     , base                         >=4.12     && <5
     , bytestring
     , Cabal                        >=3.2      && <3.11
