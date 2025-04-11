@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               arch-hs
-version:            0.12.0.0
+version:            0.12.0.1
 synopsis:           Distribute hackage packages to archlinux
 description:
   @arch-hs@ is a command-line program, which simplifies the process of producing
