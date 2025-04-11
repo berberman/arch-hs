@@ -34,6 +34,7 @@ ignoreList =
           "ghc-heap",
           "ghc-byteorder",
           "ghc-platform",
+          "system-cxx-std-lib",
           -- a build-tools of "zip-archive", which is not haskell package
           "unzip"
         ]
