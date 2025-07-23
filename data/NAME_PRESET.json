@@ -108,6 +108,7 @@
   "shellcheck": "ShellCheck",
   "stack": "stack",
   "stylish-haskell": "stylish-haskell",
+  "taffybar": "taffybar",
   "tamarin-prover": "tamarin-prover",
   "tidalcycles": "tidal",
   "unlambda": "unlambda",
