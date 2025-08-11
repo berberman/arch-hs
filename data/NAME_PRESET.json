@@ -88,6 +88,7 @@
   "haskell-x11": "X11",
   "haskell-x11-xft": "X11-xft",
   "hasktags": "hasktags",
+  "hindent": "hindent",
   "hledger": "hledger",
   "hledger-iadd": "hledger-iadd",
   "hledger-ui": "hledger-ui",
