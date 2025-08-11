@@ -3,6 +3,10 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.12.0.3
+
+- Add hindent to name preset
+
 ## 0.12.0.2
 
 - Add taffybar to name preset
