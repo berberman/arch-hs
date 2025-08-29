@@ -22,6 +22,7 @@
   "dhall-yaml": "dhall-yaml",
   "git-annex": "git-annex",
   "git-repair": "git-repair",
+  "gitit": "gitit",
   "glirc": "glirc",
   "happy": "happy",
   "haskell-boolean": "Boolean",
