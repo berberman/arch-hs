@@ -9,6 +9,7 @@
   "haskell-cabal": "Cabal",
   "cabal-install": "cabal-install",
   "cabal-plan": "cabal-plan",
+  "haskell-cabal-syntax": "Cabal-syntax",
   "cbor-tool": "cbor-tool",
   "cgrep": "cgrep",
   "clash-ghc": "clash-ghc",
