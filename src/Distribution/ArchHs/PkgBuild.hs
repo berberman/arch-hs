@@ -509,13 +509,11 @@ mapLicense Zlib = Arch.Zlib
 mapLicense ZPL_1_1 = Arch.ZPL_1_1
 mapLicense ZPL_2_0 = Arch.ZPL_2_0
 mapLicense ZPL_2_1 = Arch.ZPL_2_1
-mapLicense x = Arch.Custom (show x)
+mapLicense x = Arch.Custom (licenseId x)
 
 -- | Show an archlinux license
 showArchLicense :: Arch.License -> String
-showArchLicense license = case license of
-  Arch.Custom s -> "custom:" <> s
-  _ -> Arch.licenseId license
+showArchLicense = Arch.licenseId
 
 -- | Apply 'PkgBuild' to 'felixTemplate'.
 applyTemplate :: PkgBuild -> String
