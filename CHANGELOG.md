@@ -3,6 +3,14 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.12.1
+
+- Use license id from arch-web 0.3.2
+
+- Allow Diff 0.5
+
+- Add Cabal-syntax to NAME_PRESET.json
+
 ## 0.12.0.4
 
 - Add gitit to name preset
