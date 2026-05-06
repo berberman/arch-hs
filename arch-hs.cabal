@@ -37,7 +37,7 @@ flag alpm
 common common-options
   build-depends:
     , aeson                        >=1.5.4    && <2.3
-    , algebraic-graphs             >=0.5      && <0.8
+    , algebraic-graphs             >=0.5      && <0.9
     , arch-web                     ^>=0.3.2
     , base                         >=4.12     && <5
     , bytestring
