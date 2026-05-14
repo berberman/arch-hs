@@ -20,29 +20,60 @@ module Distribution.ArchHs.Hackage
   )
 where
 
+import Control.Monad (filterM)
 import qualified Data.ByteString as BS
+import Data.List (maximumBy)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust)
+import Data.Maybe (catMaybes, fromJust)
+import Data.Ord (comparing)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (getPkgName, getPkgVersion)
 import Distribution.Hackage.DB (HackageDB, VersionData (VersionData, cabalFile), readTarball, tarballHashes)
+import Distribution.Hackage.DB.Path (cabalStateDir)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import System.Directory (findFile, getHomeDirectory, listDirectory)
+import System.Directory (doesDirectoryExist, doesFileExist, getModificationTime, listDirectory)
 
--- | Look up hackage tarball path from @~/.cabal@.
--- Arbitrary hackage mirror is potential to be selected.
--- Preferred to @01-index.tar@, whereas fallback to @00-index.tar@.
+-- | Look up hackage tarball path from Cabal's package index cache.
+-- Preferred to the newest @01-index.tar@, whereas fallback to the newest @00-index.tar@.
 lookupHackagePath :: IO FilePath
 lookupHackagePath = do
-  home <- (\d -> d </> ".cabal" </> "packages") <$> getHomeDirectory
-  subs <- fmap (home </>) <$> listDirectory home
-  legacy <- findFile subs "00-index.tar"
-  new <- findFile subs "01-index.tar"
-  case new <|> legacy of
+  root <- (</> "packages") <$> cabalStateDir
+  candidates <- hackageIndexCandidates root
+  case newestIndex "01-index.tar" candidates <|> newestIndex "00-index.tar" candidates of
     Just x -> return x
-    Nothing -> fail $ "Unable to find hackage index tarball from " <> show subs
+    Nothing -> fail $ "Unable to find hackage index tarball from " <> root
+  where
+    hackageIndexCandidates root = do
+      exists <- doesDirectoryExist root
+      if exists
+        then do
+          rootIndexes <- indexesIn root
+          dirs <- fmap (root </>) <$> listDirectory root
+          repoDirs <- filterM doesDirectoryExist dirs
+          repoIndexes <- concat <$> traverse indexesIn repoDirs
+          pure $ rootIndexes <> repoIndexes
+        else pure []
+
+    indexesIn dir =
+      catMaybes
+        <$> traverse
+          ( \name -> do
+              let path = dir </> name
+              exists <- doesFileExist path
+              if exists
+                then do
+                  time <- getModificationTime path
+                  pure $ Just (name, path, time)
+                else pure Nothing
+          )
+          ["01-index.tar", "00-index.tar"]
+
+    newestIndex name candidates =
+      case filter (\(candidateName, _, _) -> candidateName == name) candidates of
+        [] -> Nothing
+        xs -> Just $ (\(_, path, _) -> path) (maximumBy (comparing (\(_, _, time) -> time)) xs)
 
 -- | Read and parse hackage index tarball.
 loadHackageDB :: FilePath -> IO HackageDB
