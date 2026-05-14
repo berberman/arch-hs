@@ -18,6 +18,7 @@ import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
 import Distribution.Package (packageName)
 import Network.HTTP.Client
+import Network.HTTP.Types.Status (statusCode, statusIsSuccessful, statusMessage)
 import Submit.CSV
 import Utils
 
@@ -48,8 +49,8 @@ submit token output upload = do
       writeFile output v
   check csv
   manager <- ask
-  interceptHttpException $
-    when ((not . null) token && upload) $ do
+  when ((not . null) token && upload) $ do
+    status <- interceptHttpException $ do
       printInfo "Uploading..."
       initialRequest <- parseRequest "https://hackage.haskell.org/distro/Arch/packages"
       let req =
@@ -62,9 +63,13 @@ submit token output upload = do
                   ]
               }
       result <- httpLbs req manager
-      printInfo $ "Status" <> colon <+> viaShow (responseStatus result)
+      let status = responseStatus result
+      printInfo $ "Status" <> colon <+> viaShow status
       printInfo "ResponseBody:"
       printInfo . pretty . decodeUtf8 . LBS.toStrict $ responseBody result
+      pure status
+    unless (statusIsSuccessful status) $
+      throw . HackageUploadFailed (statusCode status) . BS.unpack $ statusMessage status
 
 -- | Download Distro CSV from Hackage and print differences from @extra@
 check :: Members [HackageEnv, WithMyErr, Reader Manager, Embed IO] r => DistroCSV -> Sem r ()

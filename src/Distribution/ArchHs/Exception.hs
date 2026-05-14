@@ -37,6 +37,7 @@ data MyException
   | TargetExist PackageName DependencyProvider
   | CyclicExist [PackageName]
   | NetworkException ClientError
+  | HackageUploadFailed Int String
   | VersionNoParse String
 
 instance Show MyException where
@@ -45,6 +46,10 @@ instance Show MyException where
   show (TargetExist name provider) = "Target \"" <> unPackageName name <> "\" has been provided by " <> show provider
   show (CyclicExist c) = "Graph contains a cycle \"" <> show (fmap unPackageName c) <> "\""
   show (NetworkException e) = show e
+  show (HackageUploadFailed status message) =
+    "Hackage upload failed with HTTP status "
+      <> show status
+      <> if null message then "" else " " <> message
   show (VersionNoParse v) = "String \"" <> v <> "\" can not be parsed to Cabal version"
 
 -- | Catch 'CE.IOException' and print it.
