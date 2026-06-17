@@ -16,6 +16,7 @@ import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import GHC.IO.Encoding (setLocaleEncoding)
 import GHC.IO.Encoding.UTF8 (utf8)
+import System.Exit (exitFailure)
 
 main :: IO ()
 main = printHandledIOException $
@@ -32,7 +33,19 @@ main = printHandledIOException $
     extra <- loadExtraDBFromOptions optExtraDB
 
     printInfo "Start running..."
-    runCheck hackage extra optFlags (subsumeGHCVersion $ check optPackageName) & printAppResult
+    runCheck hackage extra optFlags (subsumeGHCVersion $ check optCheckVersion optPackageName) & printRdepcheckResult
+
+printRdepcheckResult :: IO (Either MyException Int) -> IO ()
+printRdepcheckResult io = do
+  result <- io
+  case result of
+    Left x -> do
+      printError $ "Runtime Exception" <> colon <+> viaShow x
+      exitFailure
+    Right 0 -> printSuccess "Success!"
+    Right n -> do
+      printError $ pretty n <+> "reverse dependency range check(s) failed."
+      exitFailure
 
 runCheck ::
   HackageDB ->

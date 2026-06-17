@@ -6,7 +6,7 @@
 
 module Check (check) where
 
-import Control.Monad (forM_, unless)
+import Control.Monad (forM, unless)
 import Data.List (find)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes)
@@ -41,9 +41,10 @@ check ::
       Embed IO
     ]
     r =>
+  Maybe Version ->
   PackageName ->
-  Sem r ()
-check target = do
+  Sem r Int
+check mVersion target = do
   let aTarget = toArchLinuxName target
   exists <- isInExtra aTarget
   unless exists $ throw $ PkgNotFound target
@@ -65,7 +66,7 @@ check target = do
       )
       . Map.toList
       <$> ask @ExtraDB
-  forM_ reverseDeps $ \(PkgDesc {..}, src) -> do
+  failures <- forM reverseDeps $ \(PkgDesc {..}, src) -> do
     eCabal <-
       try @MyException $
         getCabal (toHackageName _name) =<< case simpleParsec _version of
@@ -74,15 +75,46 @@ check target = do
     case eCabal of
       Right cabal -> do
         result <- getDepVersion cabal target src
+        let failedRanges = versionFailures mVersion result
         embed . putDoc $
           vsep
             ( annMagneta "Reverse dependency" <> colon
                 <+> pretty (unArchLinuxName _name)
-                : [indent 2 $ pretty s <> colon <+> viaPretty r | (s, r) <- result]
+                : (rangeDocs result <> versionErrors mVersion failedRanges)
             )
             <> line
-      Left e ->
+        pure $ length failedRanges
+      Left e -> do
         printWarn $ "Skip" <+> pretty (unArchLinuxName _name) <> colon <+> viaShow e
+        pure 0
+  pure $ sum failures
+
+rangeDocs :: [(DepSrc, VersionRange)] -> [Doc AnsiStyle]
+rangeDocs result =
+  [ indent 2 $ pretty s <> colon <+> viaPretty r
+    | (s, r) <- result
+  ]
+
+versionFailures :: Maybe Version -> [(DepSrc, VersionRange)] -> [(DepSrc, VersionRange)]
+versionFailures Nothing _ = []
+versionFailures (Just version) result =
+  [ (src, range)
+    | (src, range) <- result,
+      not $ withinRange version range
+  ]
+
+versionErrors :: Maybe Version -> [(DepSrc, VersionRange)] -> [Doc AnsiStyle]
+versionErrors Nothing _ = []
+versionErrors (Just version) result =
+  [ indent 2 $
+      annRed "Error:"
+        <+> viaPretty version
+        <+> "is outside"
+        <+> pretty src
+        <+> "range"
+        <+> parens (viaPretty range)
+    | (src, range) <- result
+  ]
 
 getDepVersion ::
   Members

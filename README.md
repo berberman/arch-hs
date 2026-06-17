@@ -511,7 +511,29 @@ Flags:
 ✔ Success!
 ```
 
-`arch-hs-diff` does not require hackage db, it downloads cabal files from hackage server instead. 
+`arch-hs-diff` does not require hackage db, it downloads cabal files from hackage server instead.
+
+## Reverse dependency checks
+
+`arch-hs-rdepcheck` lists Haskell reverse dependencies in [extra] and the Cabal version ranges they require:
+
+```
+$ arch-hs-rdepcheck aeson
+Reverse dependency: agda
+  Depends: >=1.1.2.0 && <2.3
+...
+```
+
+Pass an optional version to check whether that version satisfies every listed range. Out-of-range entries are printed as errors, and the command exits with a non-zero status if any range fails:
+
+```
+$ arch-hs-rdepcheck aeson 3.0
+Reverse dependency: agda
+  Depends: >=1.1.2.0 && <2.3
+  Error: 3.0 is outside Depends range (>=1.1.2.0 && <2.3)
+...
+68 reverse dependency range check(s) failed.
+```
 
 ## Sync
 

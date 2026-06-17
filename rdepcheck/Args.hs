@@ -14,7 +14,8 @@ data Options = Options
   { optFlags :: FlagAssignments,
     optExtraDB :: ExtraDBOptions,
     optHackage :: HackageDBOptions,
-    optPackageName :: PackageName
+    optPackageName :: PackageName,
+    optCheckVersion :: Maybe Version
   }
 
 cmdOptions :: Parser Options
@@ -24,14 +25,15 @@ cmdOptions =
     <*> extraDBOptionsParser
     <*> hackageDBOptionsParser
     <*> argument optPackageNameReader (metavar "TARGET")
+    <*> optional (argument optVersionReader (metavar "VERSION"))
 
 runArgsParser :: IO Options
 runArgsParser = do
   (x, ()) <-
     simpleOptions
       archHsVersion
-      "arch-hs-rdepcheck - check the version of a dependent Haskell package"
-      "arch-hs-rdepcheck is a CLI tool that shows all reverse dependencies of a Haskell package in [extra], giving the version range how it is depended on"
+      "arch-hs-rdepcheck - inspect reverse dependency version ranges"
+      "arch-hs-rdepcheck shows all reverse dependencies of a Haskell package in [extra] and the version ranges they require. If VERSION is provided, it reports ranges that do not accept VERSION and exits with failure."
       cmdOptions
       empty
   pure x
