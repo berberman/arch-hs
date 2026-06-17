@@ -1,7 +1,6 @@
 # arch-hs
 
 [![Hackage](https://img.shields.io/hackage/v/arch-hs.svg?logo=haskell)](https://hackage.haskell.org/package/arch-hs)
-[![Dependency](https://img.shields.io/hackage-deps/v/arch-hs)](https://packdeps.haskellers.com/feed?needle=arch-hs)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 | Env              | CI                                                                                                                        |
