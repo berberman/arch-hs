@@ -3,6 +3,16 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.12.3
+
+- Teach `arch-hs-rdepcheck` to validate a candidate version against reverse dependency ranges
+
+- Use the newest cached Hackage index when multiple mirrors are available
+
+- Update supported GHC/Cabal dependency bounds
+
+- Update name preset
+
 ## 0.12.2
 
 - Fail `arch-hs-sync submit` when Hackage returns an unsuccessful upload status
