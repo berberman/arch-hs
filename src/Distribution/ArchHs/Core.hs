@@ -27,6 +27,7 @@ import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Data.Bifunctor (second)
 import Data.Containers.ListUtils (nubOrd)
 import qualified Data.Map as Map
+import Data.List (sort)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -336,7 +337,7 @@ cabalToPkgBuild pkg uusi sysDeps = do
                            || depIsKind Setup x
                        )
               )
-      depsToString k deps = deps <&> (wrap . unArchLinuxName . toArchLinuxName . k) & mconcat
+      depsToString k deps = (sort $ deps <&> (wrap . unArchLinuxName . toArchLinuxName . k)) & mconcat
       _depends = depsToString _depName depends <> depsToString id sysDeps
       _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString _depName makeDepends
       _url = getUrl cabal
