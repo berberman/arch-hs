@@ -3,6 +3,16 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.13
+
+- Speed up the internal pacman database parser and restore the original explicit `--alpm` opt-in model for ALPM-enabled builds
+
+- Make `arch-hs-diff` read revision 0 cabal files from the local Hackage index by default, with `--online` for Hackage downloads
+
+- Include `--enable-debug-info` in generated PKGBUILD templates
+
+- Update README documentation and remove the broken hackage-deps badge
+
 ## 0.12.3
 
 - Teach `arch-hs-rdepcheck` to validate a candidate version against reverse dependency ranges
