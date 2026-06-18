@@ -33,10 +33,9 @@ data Options = Options
 
 cmdOptions :: Parser Options
 cmdOptions =
-  Options
+  mkOptions
     <$> hackageDBOptionsParser
-      <*> extraDBOptionsParser
-      <*> filesDBOptionsParser
+      <*> pacmanDBOptionsParser
       <*> strOption
         ( long "output"
             <> metavar "PATH"
@@ -99,6 +98,9 @@ cmdOptions =
             <> help "Try to package if the dependent of this package exist whereas this package does not"
         )
       <*> argument optPackageNameReader (metavar "TARGET")
+  where
+    mkOptions hackage (extra, files) =
+      Options hackage extra files
 
 runArgsParser :: IO Options
 runArgsParser = do

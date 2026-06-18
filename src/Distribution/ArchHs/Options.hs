@@ -16,6 +16,7 @@ module Distribution.ArchHs.Options
     -- * Load files DB
     FilesDBOptions (..),
     filesDBOptionsParser,
+    pacmanDBOptionsParser,
 
     -- * Load Hackage DB
     HackageDBOptions (..),
@@ -50,47 +51,35 @@ newtype ExtraDBOptions = ExtraDBOptions
 
 -- | CLI options parser of 'ExtraDBOptions'
 --
--- When alpm is enabled, it reads a flag @no-alpm-extra@;
--- otherwise it reads a string option @extra@.
+-- When alpm is enabled, it also reads a flag @alpm@.
 extraDBOptionsParser :: Parser ExtraDBOptions
+extraDBOptionsParser =
+  mkExtraDBOptions <$> alpmOptionsParser <*> extraDBPathParser
 
-#ifndef ALPM
-extraDBOptionsParser =
+extraDBPathParser :: Parser FilePath
+extraDBPathParser =
+  strOption $
+    long "extra"
+      <> metavar "PATH"
+      <> short 'c'
+      <> help "Path to extra.db"
+      <> showDefault
+      <> value defaultExtraDBPath
+
+mkExtraDBOptions :: Bool -> FilePath -> ExtraDBOptions
+mkExtraDBOptions useAlpm path =
   ExtraDBOptions
-    <$> fmap
-      ( \s ->
-          do
-            printInfo $ "Loading extra.db from" <+> pretty s
-            loadExtraDB s
-      )
-      ( strOption $
-          long "extra"
-            <> metavar "PATH"
-            <> short 'c'
-            <> help "Path to extra.db"
-            <> showDefault
-            <> value defaultExtraDBPath
-      )
+    ( do
+        let src = if useAlpm then "libalpm" else path
+        printInfo $ "Loading extra.db from" <+> pretty src
+#ifdef ALPM
+        if useAlpm
+          then loadExtraDBFFI
+          else loadExtraDB path
 #else
-extraDBOptionsParser =
-  ExtraDBOptions
-    <$> fmap
-      ( \b ->
-          do
-            let src = if b then "libalpm" else defaultExtraDBPath
-            printInfo $ "Loading extra.db from" <+> pretty src
-            if b
-              then loadExtraDBFFI
-              else loadExtraDB defaultExtraDBPath
-      )
-      ( flag
-          True
-          False
-          ( long "no-alpm-extra"
-              <> help "Do not use libalpm to parse extra db"
-          )
-      )
+        loadExtraDB path
 #endif
+    )
 -----------------------------------------------------------------------------
 
 -- | Parsed options for loading 'FilesDB'
@@ -100,47 +89,58 @@ newtype FilesDBOptions = FilesDBOptions
 
 -- | CLI options parser of 'ExtraDBOptions'
 --
--- When alpm is enabled, it reads a flag @no-alpm-files@;
--- otherwise it reads a string option @files@.
+-- When alpm is enabled, it also reads a flag @alpm@.
 filesDBOptionsParser :: Parser FilesDBOptions
+filesDBOptionsParser =
+  mkFilesDBOptions <$> alpmOptionsParser <*> filesDBPathParser
 
-#ifndef ALPM
-filesDBOptionsParser =
+filesDBPathParser :: Parser FilePath
+filesDBPathParser =
+  strOption $
+    long "files"
+      <> metavar "PATH"
+      <> short 'f'
+      <> help
+        "Path of dir that includes core.files, extra.files and extra.files"
+      <> showDefault
+      <> value defaultFilesDBDir
+
+mkFilesDBOptions :: Bool -> FilePath -> FilesDBOptions
+mkFilesDBOptions useAlpm path =
   FilesDBOptions
-    <$> fmap
-      ( \s db ->
-          do
-            printInfo $
-              "Loading" <+> ppDBKind db <+> "files from" <+> pretty s
-            loadFilesDB db s
-      )
-      ( strOption $
-          long "files"
-            <> metavar "PATH"
-            <> short 'f'
-            <> help
-              "Path of dir that includes core.files, extra.files and extra.files"
-            <> showDefault
-            <> value defaultFilesDBDir
-      )
+    ( \db ->
+        do
+          let src = if useAlpm then "libalpm" else path
+          printInfo $
+            "Loading" <+> ppDBKind db <+> "files from" <+> pretty src
+#ifdef ALPM
+          if useAlpm then loadFilesDBFFI db else loadFilesDB db path
 #else
-filesDBOptionsParser =
-  FilesDBOptions
-    <$> fmap
-      ( \b db ->
-          do
-            let src = if b then "libalpm" else defaultFilesDBDir
-            printInfo $
-              "Loading" <+> ppDBKind db <+> "files from" <+> pretty src
-            if b then loadFilesDBFFI db else loadFilesDB db defaultFilesDBDir
-      )
-      ( flag
-          True
-          False
-          ( long "no-alpm-files"
-              <> help "Do not use libalpm to parse files db"
-          )
-      )
+          loadFilesDB db path
+#endif
+    )
+
+-- | CLI options parser for commands that need both pacman database loaders.
+--
+-- When alpm is enabled, it reads @alpm@ once and applies it to both loaders.
+pacmanDBOptionsParser :: Parser (ExtraDBOptions, FilesDBOptions)
+pacmanDBOptionsParser =
+  mkPacmanDBOptions
+    <$> alpmOptionsParser
+    <*> extraDBPathParser
+    <*> filesDBPathParser
+  where
+    mkPacmanDBOptions useAlpm extraPath filesPath =
+      (mkExtraDBOptions useAlpm extraPath, mkFilesDBOptions useAlpm filesPath)
+
+alpmOptionsParser :: Parser Bool
+#ifndef ALPM
+alpmOptionsParser = pure False
+#else
+alpmOptionsParser =
+  switch $
+    long "alpm"
+      <> help "Use libalpm to load pacman databases"
 #endif
 -----------------------------------------------------------------------------
 

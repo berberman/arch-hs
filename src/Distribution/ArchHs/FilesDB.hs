@@ -28,7 +28,7 @@ import qualified Data.Conduit.Zlib as Zlib
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.PkgDesc (runDescFieldsParser)
+import Distribution.ArchHs.PkgDesc (parseDescFields)
 import Distribution.ArchHs.Types
 
 #ifdef ALPM
@@ -83,8 +83,8 @@ loadFilesDBC db dir = do
           let txt = decodeUtf8 x
           case t of
             "files" -> yield . Files fp $ [T.unpack fname | (extract -> Just fname) <- tail $ T.lines txt]
-            "desc" -> case runDescFieldsParser fp (T.unpack txt) of
-              Right r | [name] <- r Map.! "NAME" -> yield . Desc fp $ ArchLinuxName name
+            "desc" -> case parseDescFields txt Map.!? "NAME" of
+              Just [name] -> yield . Desc fp $ ArchLinuxName $ T.unpack name
               _ -> return ()
             _ -> return ()
       | otherwise = return ()

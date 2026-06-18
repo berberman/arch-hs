@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -24,19 +25,16 @@ import Conduit
 import qualified Data.Conduit.Tar as Tar
 import qualified Data.Conduit.Zlib as Zlib
 import qualified Data.Map.Strict as Map
-import qualified Data.Text as T
+import Data.Maybe (mapMaybe)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Name
 import Distribution.ArchHs.PkgDesc
 import Distribution.ArchHs.Types
-import Data.Maybe (mapMaybe)
 
 -----------------------------------------------------------------------------
 
 #ifdef ALPM
-{-# LANGUAGE ForeignFunctionInterface #-}
-
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Distribution.ArchHs.Utils (extractFromEVR)
 import Foreign.C.String (CString, peekCString)
@@ -120,10 +118,8 @@ loadExtraDBC path = do
     action header =
       when (Tar.headerFileType header == Tar.FTNormal) $ do
         x <- mconcat <$> sinkList
-        let txt = T.unpack . decodeUtf8 $ x
-            parsed = runDescParser (Tar.headerFilePath header) txt
-            result = case parsed of
-              Right desc ->
+        let result = case parseDescEntry . decodeUtf8 $ x of
+              Just desc ->
                 desc
                   : ( if _name desc == ArchLinuxName "ghc"
                         || _name desc == ArchLinuxName "ghc-libs"
@@ -131,11 +127,11 @@ loadExtraDBC path = do
                         else []
                     )
               -- Drop it if failed to parse
-              Left _ -> []
+              Nothing -> []
         yieldMany $ (\desc -> (_name desc, desc)) <$> result
 
 -- | Load @extra.db@ from @path@.
--- @desc@ files in the db will be parsed by @descParser@.
+-- @desc@ files in the db will be parsed by 'parseDescEntry'.
 loadExtraDB :: FilePath -> IO ExtraDB
 loadExtraDB path = Map.fromList <$> runConduitRes (loadExtraDBC path .| sinkList)
 

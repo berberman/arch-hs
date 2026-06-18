@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 -- | Copyright: (c) 2020-2021 berberman
@@ -9,27 +10,19 @@
 -- This module provides parser of @desc@ file in pacman db.
 module Distribution.ArchHs.PkgDesc
   ( PkgDesc (..),
-    DescParser,
-    descParser,
-    descFieldsParser,
-    runDescFieldsParser,
-    runDescParser,
+    parseDescEntry,
+    parseDescFields,
     promoteDependent,
     containsDep,
   )
 where
 
-import Control.Monad (void)
 import qualified Data.Map.Strict as Map
-import Data.Void (Void)
+import Data.Maybe (isJust)
+import qualified Data.Text as T
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (extractFromEVR)
-import Text.Megaparsec
-import Text.Megaparsec.Char
-
--- | A parser takes 'String' as input, without user state.
-type DescParser = Parsec Void String
 
 -- Common fields
 {- fieldList =
@@ -77,63 +70,52 @@ promoteDependent PkgDependent {..} =
 containsDep :: PkgDependentList -> ArchLinuxName -> Bool
 containsDep deps name = name `elem` (_pdName <$> deps)
 
--- | Parse fields of @desc@.
-descFieldsParser :: DescParser (Map.Map String [String])
-descFieldsParser =
-  Map.fromList
-    <$> ( do
-            sep
-            field <- manyTill anySingle sep
-            _ <- newline
-            content <- manyTill line (lookAhead sep <|> eof)
-            return (field, filter (/= "") content)
-        )
-    `manyTill` eof
+-- | Parse fields of a pacman @desc@ file.
+parseDescFields :: T.Text -> Map.Map T.Text [T.Text]
+parseDescFields = go Map.empty . dropWhile T.null . T.lines
   where
-    sep = void $ char '%'
-    line = manyTill anySingle newline
+    go acc [] = acc
+    go acc (line : rest)
+      | Just field <- fieldName line =
+        let (content, rest') = break (isJust . fieldName) rest
+         in go (Map.insert field (filter (not . T.null) content) acc) (dropWhile T.null rest')
+      | otherwise = go acc rest
 
--- | Parse a desc file.
-descParser :: DescParser PkgDesc
-descParser =
-  descFieldsParser
-    >>= ( \fields -> do
-            _name <- ArchLinuxName <$> lookupSingle fields "NAME"
-            _version <- extractFromEVR <$> lookupSingle fields "VERSION"
-            _desc <- lookupSingle fields "DESC"
-            _url <- lookupSingleMaybe fields "URL"
-            _depends <- toDepList =<< lookupList fields "DEPENDS"
-            _makeDepends <- toDepList =<< lookupList fields "MAKEDEPENDS"
-            _provides <- toDepList =<< lookupList fields "PROVIDES"
-            _optDepends <- toDepList =<< lookupList fields "OPTDEPENDS"
-            _replaces <- toDepList =<< lookupList fields "REPLACES"
-            _conflicts <- toDepList =<< lookupList fields "CONFLICTS"
-            _checkDepends <- toDepList =<< lookupList fields "CHECKDEPENDS"
-            return PkgDesc {..}
-        )
+    fieldName line
+      | Just rest <- T.stripPrefix "%" line,
+        Just field <- T.stripSuffix "%" rest =
+        Just field
+      | otherwise = Nothing
+
+-- | Parse a pacman @desc@ file into a package description.
+parseDescEntry :: T.Text -> Maybe PkgDesc
+parseDescEntry txt = do
+  _name <- ArchLinuxName . T.unpack <$> lookupSingle "NAME"
+  _version <- extractFromEVR . T.unpack <$> lookupSingle "VERSION"
+  _desc <- T.unpack <$> lookupSingle "DESC"
+  _depends <- toDepList $ lookupList "DEPENDS"
+  _makeDepends <- toDepList $ lookupList "MAKEDEPENDS"
+  _provides <- toDepList $ lookupList "PROVIDES"
+  _optDepends <- toDepList $ lookupList "OPTDEPENDS"
+  _replaces <- toDepList $ lookupList "REPLACES"
+  _conflicts <- toDepList $ lookupList "CONFLICTS"
+  _checkDepends <- toDepList $ lookupList "CHECKDEPENDS"
+  let _url = T.unpack <$> lookupSingleMaybe "URL"
+  pure PkgDesc {..}
   where
-    toDepList = mapM $ \t -> case splitOn "=" t of
-      [name, version] -> pure $ PkgDependent (ArchLinuxName name) (Just version)
-      [name] -> pure $ PkgDependent (ArchLinuxName name) Nothing
-      _ -> fail $ "Unable to parse dep list " <> t
-    lookupSingle fields f = case Map.lookup f fields of
-      (Just x) -> case x of
-        (e : _) -> return e
-        _ -> fail $ "Expect a singleton " <> f
-      _ -> fail $ "Unable to find field " <> f
-    lookupSingleMaybe fields f = return $ case Map.lookup f fields of
-      (Just x) -> case x of
-        (e : _) -> Just e
-        _ -> Nothing
+    fields = parseDescFields txt
+
+    lookupSingle field = case Map.lookup field fields of
+      Just (x : _) -> Just x
       _ -> Nothing
-    lookupList fields f = return $ case Map.lookup f fields of
-      (Just x) -> x
-      _ -> []
 
--- | Run the desc fields parser.
-runDescFieldsParser :: String -> String -> Either (ParseErrorBundle String Void) (Map.Map String [String])
-runDescFieldsParser = parse descFieldsParser
+    lookupSingleMaybe field = case Map.lookup field fields of
+      Just (x : _) -> Just x
+      _ -> Nothing
 
--- | Run the desc parser.
-runDescParser :: String -> String -> Either (ParseErrorBundle String Void) PkgDesc
-runDescParser = parse descParser
+    lookupList field = Map.findWithDefault [] field fields
+
+    toDepList = traverse $ \t -> case splitOn "=" $ T.unpack t of
+      [name, version] -> Just $ PkgDependent (ArchLinuxName name) (Just version)
+      [name] -> Just $ PkgDependent (ArchLinuxName name) Nothing
+      _ -> Nothing

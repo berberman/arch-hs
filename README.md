@@ -32,7 +32,7 @@ thus there is no guarantee of dependencies' version consistency.
 ## Installation
 
 `arch-hs` is portable, which means it's not restricted to Arch Linux.
-However, `arch-hs` can use libalpm to load pacman database on Arch Linux,
+However, `arch-hs` can optionally use libalpm to load pacman database on Arch Linux,
 and if you want to run on other systems, you have to build it from source.
 
 ### Install the latest release
@@ -83,7 +83,7 @@ Output:
 ```
 $ arch-hs -o ~/test gi-gdk
 ⓘ Loading hackage from /home/berberman/.cabal/packages/hackage.haskell.org/01-index.tar
-ⓘ Loading extra.db from libalpm
+ⓘ Loading extra.db from /var/lib/pacman/sync/extra.db
 ⓘ Start running...
 ⓘ Solved:
 ...
@@ -188,8 +188,8 @@ gi-harfbuzz: harfbuzz.pc, harfbuzz-gobject.pc
 gi-pango:    pango.pc
 
 ⓘ Now finding corresponding system package(s) using files db:
-ⓘ Loading [core] files from libalpm
-ⓘ Loading [extra] files from libalpm
+ⓘ Loading [core] files from /var/lib/pacman/sync
+ⓘ Loading [extra] files from /var/lib/pacman/sync
 ⓘ Done:
 gtk4.pc               ⇒   gtk4
 gdk-pixbuf-2.0.pc     ⇒   gdk-pixbuf2
@@ -420,7 +420,7 @@ This is useful in the subsequent maintenance of a package. For example:
 
 ```
 $ arch-hs-diff comonad 5.0.6 5.0.7
-ⓘ Loading extra.db from libalpm
+ⓘ Loading extra.db from /var/lib/pacman/sync/extra.db
 ⓘ Start running...
 ⓘ Downloading cabal file from https://hackage.haskell.org/package/comonad-5.0.6/revision/0.cabal...
 ⓘ Downloading cabal file from https://hackage.haskell.org/package/comonad-5.0.7/revision/0.cabal...
@@ -552,17 +552,24 @@ file patches, version range processes, etc. They need to be done manually, so **
 ## Alpm Support
 
 [alpm](https://www.archlinux.org/pacman/libalpm.3.html) is Arch Linux Package Management library.
-When running on Arch Linux, loading `extra.db` and files dbs through this library is slightly faster than using the internal parser of `arch-hs`.
-Thus, `arch-hs` provides a Cabal flag `alpm` to enable this feature:
+When running on Arch Linux, `arch-hs` can load `extra.db` and files dbs through this library instead of using its internal parser.
+`arch-hs` provides a Cabal flag `alpm` to build this feature:
 
 ```
 cabal build -f alpm
 ```
 
 This flag is enabled by default in `arch-hs` Arch Linux package.
-Compiled with `alpm`, `arch-hs` uses alpm to load pacman databases by default.
-In this case, the CLI flags `--no-alpm-extra` and `--no-alpm-files` can be used to disable this feature.
-> When `alpm` is enabled, `arch-hs` will lose the capability of specifying the path of `extra.db` and directory of files db.
+Compiled with `alpm`, `arch-hs` still reads pacman databases from `/var/lib/pacman/sync` by default.
+Pass `--alpm` to load pacman databases through libalpm explicitly:
+
+```
+arch-hs --alpm -o ~/test gi-gdk
+```
+
+For commands that load only `extra.db`, such as `arch-hs-diff`, `arch-hs-sync`, and `arch-hs-rdepcheck`, `--alpm` applies to `extra.db`.
+For `arch-hs`, `--alpm` applies to both `extra.db` and files dbs.
+When `--alpm` is used, explicit `--extra` and `--files` paths are ignored.
 
 
 ## Contributing
