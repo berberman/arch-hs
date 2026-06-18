@@ -589,7 +589,7 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends sha
   build() {
     cd $$_hkgname-$$pkgver
 
-    runhaskell Setup configure -O --enable-shared --enable-executable-dynamic --disable-library-vanilla \
+    runhaskell Setup configure -O --enable-shared --enable-debug-info --enable-executable-dynamic --disable-library-vanilla \
       --prefix=/usr --docdir=/usr/share/doc/$$pkgname --datasubdir=$$pkgname --enable-tests \
       --dynlibdir=/usr/lib --libsubdir=\$$compiler/site-local/\$$pkgid \
       --ghc-option=-optl-Wl\,-z\,relro\,-z\,now \
