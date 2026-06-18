@@ -8,9 +8,12 @@ module Diff
 where
 
 import Data.Algorithm.Diff
+import Control.Monad (unless)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Conduit.Tar as Tar
+import Data.IORef (modifyIORef', newIORef, readIORef)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromJust)
 import Conduit
 import Distribution.ArchHs.Core
@@ -43,35 +46,53 @@ getCabalFromHackage manager name version = do
     Just x -> return x
     _ -> error "Failed to parse .cabal file"
 
-getCabalFromIndex :: Members [Embed IO, WithMyErr] r => FilePath -> PackageName -> Version -> Sem r GenericPackageDescription
-getCabalFromIndex hackagePath name version = do
+getCabalsFromIndex :: Members [Embed IO, WithMyErr] r => FilePath -> PackageName -> [Version] -> Sem r (Map.Map Version GenericPackageDescription)
+getCabalsFromIndex hackagePath name versions = do
   let pkg = unPackageName name
-      cabalPath = pkg </> prettyShow version </> (pkg <> ".cabal")
-  printInfo $ "Reading revision 0 cabal file from" <+> pretty hackagePath <> colon <+> pretty cabalPath
-  cabalFile <- embed $ findCabalFileInIndex hackagePath cabalPath
-  case parseGenericPackageDescriptionMaybe =<< cabalFile of
-    Just x -> return x
-    Nothing -> throw $ VersionNotFound name version
-
-findCabalFileInIndex :: FilePath -> FilePath -> IO (Maybe BS.ByteString)
-findCabalFileInIndex hackagePath cabalPath =
-  runConduitRes $
-    sourceFileBS hackagePath
-      .| Tar.untarChunks
-      .| Tar.withEntries action
-      .| await
+      cabalPaths = Map.fromList [(pkg </> prettyShow version </> (pkg <> ".cabal"), version) | version <- nub versions]
+  mapM_ (\cabalPath -> printInfo $ "Reading revision 0 cabal file from" <+> pretty hackagePath <> colon <+> pretty cabalPath) $ Map.keys cabalPaths
+  cabalFiles <- embed $ findCabalFilesInIndex hackagePath cabalPaths
+  Map.fromList <$> traverse (parseCabal cabalFiles) (nub versions)
   where
-    action header
+    parseCabal cabalFiles version =
+      case parseGenericPackageDescriptionMaybe =<< Map.lookup version cabalFiles of
+        Just cabal -> return (version, cabal)
+        Nothing -> throw $ VersionNotFound name version
+
+findCabalFilesInIndex :: FilePath -> Map.Map FilePath Version -> IO (Map.Map Version BS.ByteString)
+findCabalFilesInIndex hackagePath cabalPaths = do
+  foundRef <- newIORef Map.empty
+  Map.fromList
+    <$> runConduitRes
+      ( sourceFileBS hackagePath
+          .| Tar.untarChunks
+          .| Tar.withEntries (action foundRef)
+          .| takeC (Map.size cabalPaths)
+          .| sinkList
+      )
+  where
+    action foundRef header
       | Tar.FTNormal <- Tar.headerFileType header,
-        Tar.headerFilePath header == cabalPath =
-        yield . mconcat =<< sinkList
+        Just version <- Map.lookup (Tar.headerFilePath header) cabalPaths = do
+        found <- liftIO $ readIORef foundRef
+        unless (Map.member version found) $ do
+          cabalFile <- mconcat <$> sinkList
+          liftIO $ modifyIORef' foundRef (Map.insert version ())
+          yield (version, cabalFile)
       | otherwise = return ()
 
-getCabalFromSource :: Members [Embed IO, WithMyErr, Reader CabalSource] r => PackageName -> Version -> Sem r GenericPackageDescription
-getCabalFromSource name version =
+getCabalsFromSource :: Members [Embed IO, WithMyErr, Reader CabalSource] r => PackageName -> Version -> Version -> Sem r (GenericPackageDescription, GenericPackageDescription)
+getCabalsFromSource name a b =
   ask @CabalSource >>= \case
-    Online manager -> getCabalFromHackage manager name version
-    Offline hackagePath -> getCabalFromIndex hackagePath name version
+    Online manager -> (,) <$> getCabalFromHackage manager name a <*> getCabalFromHackage manager name b
+    Offline hackagePath -> do
+      cabals <- getCabalsFromIndex hackagePath name [a, b]
+      (,) <$> lookupCabal cabals a <*> lookupCabal cabals b
+  where
+    lookupCabal cabals version =
+      case Map.lookup version cabals of
+        Just cabal -> return cabal
+        Nothing -> throw $ VersionNotFound name version
 
 directDependencies ::
   Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r =>
@@ -104,8 +125,7 @@ directDependencies cabal = do
 
 diffCabal :: Members [KnownGHCVersion, ExtraEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Reader CabalSource, Embed IO] r => PackageName -> Version -> Version -> Sem r ()
 diffCabal name a b = do
-  ga <- getCabalFromSource name a
-  gb <- getCabalFromSource name b
+  (ga, gb) <- getCabalsFromSource name a b
   let pa = packageDescription ga
       pb = packageDescription gb
       fa = genPackageFlags ga
