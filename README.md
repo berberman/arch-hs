@@ -81,7 +81,7 @@ Output:
 </summary>
 
 ```
-$ arch-hs -o ~/test --alpm gi-gdk 
+$ arch-hs -o ~/test gi-gdk
 ⓘ Loading hackage from /home/berberman/.cabal/packages/hackage.haskell.org/01-index.tar
 ⓘ Loading extra.db from libalpm
 ⓘ Start running...
@@ -417,7 +417,7 @@ and remind us if some required packages in extra repo can't satisfy the version 
 This is useful in the subsequent maintenance of a package. For example:
 
 ```
-$ arch-hs-diff --alpm comonad 5.0.6 5.0.7
+$ arch-hs-diff comonad 5.0.6 5.0.7
 ⓘ Loading extra.db from libalpm
 ⓘ Start running...
 ⓘ Downloading cabal file from https://hackage.haskell.org/package/comonad-5.0.6/revision/0.cabal...
@@ -553,7 +553,7 @@ file patches, version range processes, etc. They need to be done manually, so **
 
 [alpm](https://www.archlinux.org/pacman/libalpm.3.html) is Arch Linux Package Management library.
 When running on Arch Linux, loading `extra.db` and files dbs through this library is slightly faster than using the internal parser of `arch-hs`.
-Thus, `arch-hs` provides a flag `alpm` to enable this feature:
+Thus, `arch-hs` provides a Cabal flag `alpm` to enable this feature:
 
 ```
 cabal build -f alpm
@@ -561,7 +561,7 @@ cabal build -f alpm
 
 This flag is enabled by default in `arch-hs` Arch Linux package.
 Compiled with `alpm`, `arch-hs` uses alpm to load pacman databases by default.
-In this case, the CLI flag `--no-alpm-extra` and `--no-alpm-files` can be used to disable this feature.
+In this case, the CLI flags `--no-alpm-extra` and `--no-alpm-files` can be used to disable this feature.
 > When `alpm` is enabled, `arch-hs` will lose the capability of specifying the path of `extra.db` and directory of files db.
 
 
