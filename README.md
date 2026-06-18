@@ -414,6 +414,8 @@ whose name conform to above-mentioned situation, the name preset should be upgra
 
 `arch-hs` also provides a component called `arch-hs-diff`. `arch-hs-diff` can show the differences of package description between two versions of a package,
 and remind us if some required packages in extra repo can't satisfy the version constraints, or they are non-existent.
+By default, `arch-hs-diff` downloads revision 0 cabal files from Hackage. Use `--offline` to read revision 0 from the local Hackage index instead;
+`-h`/`--hackage` can be used to specify the index tarball path.
 This is useful in the subsequent maintenance of a package. For example:
 
 ```
@@ -509,8 +511,6 @@ Flags:
         isManual: True
 ✔ Success!
 ```
-
-`arch-hs-diff` does not require hackage db, it downloads cabal files from hackage server instead.
 
 ## Reverse dependency checks
 

@@ -13,6 +13,8 @@ import Distribution.ArchHs.Utils (archHsVersion)
 data Options = Options
   { optFlags :: FlagAssignments,
     optExtraDB :: ExtraDBOptions,
+    optHackagePath :: FilePath,
+    optOffline :: Bool,
     optPackageName :: PackageName,
     optVersionA :: Version,
     optVersionB :: Version
@@ -23,6 +25,18 @@ cmdOptions =
   Options
     <$> optFlagAssignmentParser
     <*> extraDBOptionsParser
+    <*> strOption
+      ( long "hackage"
+          <> metavar "PATH"
+          <> short 'h'
+          <> help "Path to hackage index tarball for --offline"
+          <> showDefault
+          <> value ""
+      )
+    <*> switch
+      ( long "offline"
+          <> help "Read cabal files from the local Hackage index instead of downloading them"
+      )
     <*> argument optPackageNameReader (metavar "TARGET")
     <*> argument optVersionReader (metavar "VERSION_A")
     <*> argument optVersionReader (metavar "VERSION_B")

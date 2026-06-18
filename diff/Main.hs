@@ -10,12 +10,12 @@ import qualified Data.Map as Map
 import Diff
 import Distribution.ArchHs.Core (subsumeGHCVersion)
 import Distribution.ArchHs.Exception
+import Distribution.ArchHs.Hackage (lookupHackagePath)
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Options
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
-import Network.HTTP.Client (Manager)
 import Network.HTTP.Client.TLS (newTlsManager)
 
 main :: IO ()
@@ -31,23 +31,29 @@ main = printHandledIOException $
 
     extra <- loadExtraDBFromOptions optExtraDB
 
-    manager <- newTlsManager
+    cabalSource <-
+      if optOffline
+        then do
+          hackagePath <- if null optHackagePath then lookupHackagePath else pure optHackagePath
+          printInfo $ "Loading hackage from" <+> pretty hackagePath
+          pure $ Offline hackagePath
+        else Online <$> newTlsManager
 
     printInfo "Start running..."
-    runDiff extra optFlags manager (subsumeGHCVersion $ diffCabal optPackageName optVersionA optVersionB) & printAppResult
+    runDiff extra optFlags cabalSource (subsumeGHCVersion $ diffCabal optPackageName optVersionA optVersionB) & printAppResult
 
 runDiff ::
   ExtraDB ->
   FlagAssignments ->
-  Manager ->
-  Sem '[ExtraEnv, FlagAssignmentsEnv, Reader Manager, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
+  CabalSource ->
+  Sem '[ExtraEnv, FlagAssignmentsEnv, Reader CabalSource, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runDiff extra flags manager =
+runDiff extra flags cabalSource =
   runFinal
     . embedToFinal
     . errorToIOFinal
     . evalState Map.empty
     . ignoreTrace
-    . runReader manager
+    . runReader cabalSource
     . runReader flags
     . runReader extra
