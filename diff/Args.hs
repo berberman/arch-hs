@@ -14,7 +14,7 @@ data Options = Options
   { optFlags :: FlagAssignments,
     optExtraDB :: ExtraDBOptions,
     optHackagePath :: FilePath,
-    optOffline :: Bool,
+    optOnline :: Bool,
     optPackageName :: PackageName,
     optVersionA :: Version,
     optVersionB :: Version
@@ -29,13 +29,13 @@ cmdOptions =
       ( long "hackage"
           <> metavar "PATH"
           <> short 'h'
-          <> help "Path to hackage index tarball for --offline"
+          <> help "Path to hackage index tarball"
           <> showDefault
           <> value ""
       )
     <*> switch
-      ( long "offline"
-          <> help "Read cabal files from the local Hackage index instead of downloading them"
+      ( long "online"
+          <> help "Download cabal files from Hackage instead of reading the local Hackage index"
       )
     <*> argument optPackageNameReader (metavar "TARGET")
     <*> argument optVersionReader (metavar "VERSION_A")

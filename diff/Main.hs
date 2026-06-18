@@ -32,12 +32,12 @@ main = printHandledIOException $
     extra <- loadExtraDBFromOptions optExtraDB
 
     cabalSource <-
-      if optOffline
-        then do
+      if optOnline
+        then Online <$> newTlsManager
+        else do
           hackagePath <- if null optHackagePath then lookupHackagePath else pure optHackagePath
           printInfo $ "Loading hackage from" <+> pretty hackagePath
           pure $ Offline hackagePath
-        else Online <$> newTlsManager
 
     printInfo "Start running..."
     runDiff extra optFlags cabalSource (subsumeGHCVersion $ diffCabal optPackageName optVersionA optVersionB) & printAppResult
