@@ -50,3 +50,5 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: Build
         run: cabal build all
+      - name: Test
+        run: cabal test all --test-show-details=direct

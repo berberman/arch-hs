@@ -21,17 +21,29 @@ jobs:
         pacman -S --needed --noconfirm ghc base-devel ghc-libs \
           haskell-aeson haskell-algebraic-graphs haskell-conduit \
           haskell-conduit-extra haskell-hackage-db haskell-megaparsec \
-          haskell-microlens haskell-microlens-th haskell-neat-interpolation \
+          haskell-hspec haskell-microlens haskell-microlens-th haskell-neat-interpolation \
           haskell-optparse-simple haskell-polysemy haskell-req haskell-split \
           haskell-tar-conduit haskell-diff haskell-prettyprinter haskell-prettyprinter-ansi-terminal \
           haskell-arch-web
 
-    - name: Build
+    - name: Build and test without ALPM
       run: |
         runhaskell Setup configure -O --enable-shared --enable-executable-dynamic --disable-library-vanilla \
           --prefix=/usr --enable-tests \
           --dynlibdir=/usr/lib --libsubdir=\$compiler/site-local/\$pkgid \
           --ghc-option=-optl-Wl\,-z\,relro\,-z\,now \
           --ghc-option='-pie' \
-          -f alpm
+          --flags=-alpm
         runhaskell Setup build
+        runhaskell Setup test
+
+    - name: Build and test with ALPM
+      run: |
+        runhaskell Setup configure -O --enable-shared --enable-executable-dynamic --disable-library-vanilla \
+          --prefix=/usr --enable-tests \
+          --dynlibdir=/usr/lib --libsubdir=\$compiler/site-local/\$pkgid \
+          --ghc-option=-optl-Wl\,-z\,relro\,-z\,now \
+          --ghc-option='-pie' \
+          --flags=alpm
+        runhaskell Setup build
+        runhaskell Setup test
