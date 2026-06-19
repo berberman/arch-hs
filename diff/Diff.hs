@@ -14,7 +14,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Conduit.Tar as Tar
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (catMaybes, fromJust)
+import Data.Maybe (catMaybes)
 import Conduit
 import Distribution.ArchHs.Core
 import Distribution.ArchHs.Exception
@@ -170,7 +170,10 @@ inRange :: Members [ExtraEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem
 inRange (name, hRange) =
   try @MyException (versionInExtra name)
     >>= \case
-      Right y -> let version = fromJust . simpleParsec $ y in return . Right $ (name, hRange, version, withinRange version hRange)
+      Right rawVersion ->
+        case simpleParsec rawVersion of
+          Just version -> return . Right $ (name, hRange, version, withinRange version hRange)
+          Nothing -> throw $ VersionNoParse rawVersion
       Left _ -> return . Left $ (name, hRange)
 
 lookupDiffExtra :: Members [ExtraEnv, WithMyErr] r => VersionedList -> VersionedList -> Sem r (Doc AnsiStyle)
