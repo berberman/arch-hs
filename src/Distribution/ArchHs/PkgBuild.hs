@@ -577,8 +577,8 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends sha
   pkgname=$pkgname
   pkgver=$pkgver
   pkgrel=1
-  pkgdesc="$pkgdesc"
-  url="$url"
+  pkgdesc='${pkgdesc}'
+  url='${url}'
   license=("$license")
   arch=('x86_64')
   depends=('ghc-libs'$depends)
