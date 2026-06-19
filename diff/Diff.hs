@@ -4,6 +4,7 @@
 module Diff
   ( CabalSource (..),
     diffCabal,
+    inRange,
   )
 where
 

@@ -165,3 +165,22 @@ executable arch-hs-rdepcheck
 
   build-depends:  arch-hs
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+
+test-suite arch-hs-tests
+  import:          common-options
+  type:            exitcode-stdio-1.0
+  hs-source-dirs:
+    test
+    diff
+    sync
+
+  main-is:         Main.hs
+  other-modules:
+    Diff
+    Submit.CSV
+
+  build-depends:
+    , arch-hs
+    , hspec
+
+  ghc-options:     -threaded -rtsopts -with-rtsopts=-N
