@@ -165,14 +165,9 @@ getDepVersion ::
   [DepSrc] ->
   Sem r [(DepSrc, VersionRange)]
 getDepVersion cabal name src = do
-  (libDeps, libToolsDeps, _) <- collectLibDeps id cabal
-  (subLibDeps, subLibToolsDeps, _) <- collectSubLibDeps id cabal []
-  (exeDeps, exeToolsDeps, _) <- collectExeDeps id cabal []
-  (testDeps, testToolsDeps, _) <- collectTestDeps id cabal []
-  setupDeps <- collectSetupDeps id cabal
-  let flatten = mconcat . fmap snd
-      deps = libDeps <> concatMap flatten [exeDeps, subLibDeps]
-      makeOrCheckDeps = libToolsDeps <> setupDeps <> concatMap flatten [subLibToolsDeps, exeToolsDeps, testDeps, testToolsDeps]
+  depsWithVersion <- getDepsWithVersion cabal
+  let (deps, makeDeps, checkDeps) = depsWithVersion
+      makeOrCheckDeps = makeDeps <> checkDeps
   pure $
     catMaybes
       [ case s of

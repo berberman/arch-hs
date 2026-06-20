@@ -16,6 +16,7 @@ module Distribution.ArchHs.Hackage
     insertDB,
     parseCabalFile,
     getLatestCabal,
+    getLatestVersion,
     getNewerVersions,
     getCabal,
     getCabalIncludingDeprecated,
@@ -27,7 +28,7 @@ module Distribution.ArchHs.Hackage
   )
 where
 
-import Control.Monad (filterM)
+import Control.Monad (filterM, liftM)
 import Conduit
 import qualified Data.ByteString as BS
 import qualified Data.Conduit.Tar as Tar
@@ -205,6 +206,10 @@ withLatestVersion f name = do
 -- | Get the latest 'GenericPackageDescription'.
 getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
 getLatestCabal = withLatestVersion cabalFile
+
+-- | Get the latest 'Version'.
+getLatestVersion :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r Version
+getLatestVersion = (liftM $ getPkgVersion . packageDescription) . getLatestCabal
 
 -- | Get all Hackage versions newer than the given version.
 --
