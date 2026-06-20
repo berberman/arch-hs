@@ -20,12 +20,14 @@ module Distribution.ArchHs.Core
     collectTestDeps,
     collectSubLibDeps,
     collectSetupDeps,
+    getDepsWithVersion,
   )
 where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
 import Data.Bifunctor (second)
 import Data.Containers.ListUtils (nubOrd)
+import Data.Function (on)
 import qualified Data.Map as Map
 import Data.List (sort)
 import Data.Maybe (fromMaybe)
@@ -37,6 +39,9 @@ import Distribution.ArchHs.Hackage
   ( getLatestCabal,
     getLatestSHA256,
     getPackageFlag,
+    getLatestVersion,
+    getCabalIncludingDeprecated,
+    RawHackageDB,
   )
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local (ignoreList)
@@ -54,7 +59,6 @@ import Distribution.SPDX
 import Distribution.System (Arch (X86_64), OS (Linux))
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
-import Distribution.Types.Dependency (Dependency)
 import Distribution.Utils.ShortText (fromShortText)
 
 archEnv :: Version -> FlagAssignment -> ConfVar -> Either ConfVar Bool
@@ -278,6 +282,28 @@ collectSetupDeps k cabal = do
       return result
     _ -> return mempty
 
+getDepsWithVersion ::
+  Members
+    [ KnownGHCVersion,
+      FlagAssignmentsEnv,
+      DependencyRecord,
+      Trace
+    ]
+    r =>
+  GenericPackageDescription ->
+  Sem r ([(PackageName, VersionRange)], [(PackageName, VersionRange)], [(PackageName, VersionRange)])
+getDepsWithVersion cabal = do
+  (libDeps, libToolsDeps, _) <- collectLibDeps id cabal
+  (subLibDeps, subLibToolsDeps, _) <- collectSubLibDeps id cabal []
+  (exeDeps, exeToolsDeps, _) <- collectExeDeps id cabal []
+  (testDeps, testToolsDeps, _) <- collectTestDeps id cabal []
+  setupDeps <- collectSetupDeps id cabal
+  let flatten = mconcat . fmap snd
+      deps = libDeps <> concatMap flatten [exeDeps, subLibDeps]
+      makeDeps = libToolsDeps <> setupDeps <> concatMap flatten [subLibToolsDeps, exeToolsDeps]
+      checkDeps = concatMap flatten [testDeps, testToolsDeps]
+  pure $ (deps, makeDeps, checkDeps)
+
 updateDependencyRecord :: Member DependencyRecord r => PackageName -> VersionRange -> Sem r ()
 updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 
@@ -286,9 +312,31 @@ updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 
 -----------------------------------------------------------------------------
 
+-- | Get the version of a package in archlinux extra repo as 'Version'.
+-- If the package does not exist, returns 'Nothing'.
+-- If the package has an unparsable version, 'VersionNoParse' will be thrown.
+getVersionInExtra :: Members [ExtraEnv, WithMyErr] r => PackageName -> Sem r (Maybe Version)
+getVersionInExtra name =
+  try @MyException (versionInExtra name)
+    >>= \case
+      Right rawVersion ->
+        case simpleParsec rawVersion of
+          Just version -> return $ Just version
+          Nothing -> throw $ VersionNoParse rawVersion
+      Left _ -> return $ Nothing
+
+-- | Get a map from the dependencies to their combined version ranges, as declared in the given 'GenericPackageDescription'.
+depsVersionMap :: Members [KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace] r => GenericPackageDescription -> Sem r (Map.Map PackageName VersionRange)
+depsVersionMap cabalfile = do
+  (deps, makeDeps, checkDeps) <- getDepsWithVersion cabalfile
+  return $ Map.fromList $ map (\l -> (fst (head l), foldr1 intersectVersionRanges (map snd l)))
+                          $ groupBy ((==) `on` fst)
+                            $ sortBy (compare `on` fst)
+                              $ deps <> makeDeps <> checkDeps
+
 -- | Generate 'PkgBuild' for a 'SolvedPackage'.
-cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> Bool -> [ArchLinuxName] -> Sem r PkgBuild
-cabalToPkgBuild pkg uusi sysDeps = do
+cabalToPkgBuild :: Members [Embed IO, ExtraEnv, RawHackageEnv, HackageEnv, KnownGHCVersion, FlagAssignmentsEnv, DependencyRecord, Trace, WithMyErr] r => ([(PackageName, Version)] -> IO (RawHackageDB, RawHackageDB)) -> SolvedPackage -> Bool -> [ArchLinuxName] -> Sem r PkgBuild
+cabalToPkgBuild loadHackageRevisions' pkg uusi sysDeps = do
   let name = pkg ^. pkgName
   cabal <- packageDescription <$> getLatestCabal name
   pkgFlags <- getPackageFlag name
@@ -298,7 +346,8 @@ cabalToPkgBuild pkg uusi sysDeps = do
   _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> getLatestSHA256 name
   let _hkgName = pkg ^. pkgName & unPackageName
       _pkgName = unArchLinuxName . toArchLinuxName $ pkg ^. pkgName
-      _pkgVer = prettyShow $ getPkgVersion cabal
+      pkgVersion = getPkgVersion cabal
+      _pkgVer = prettyShow $ pkgVersion
       _pkgDesc = fromShortText $ synopsis cabal
       getL NONE = ""
       getL (License e) = getE e
@@ -339,11 +388,36 @@ cabalToPkgBuild pkg uusi sysDeps = do
               )
       depsToString k deps = (sort $ deps <&> (wrap . unArchLinuxName . toArchLinuxName . k)) & mconcat
       _depends = depsToString _depName depends <> depsToString id sysDeps
-      _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString _depName makeDepends
       _url = getUrl cabal
       wrap s = " '" <> s <> "'"
       _licenseFile = licenseFile cabal
-      _enableUusi = uusi
+
+  let packages = [(name, pkgVersion)]
+  (revised, original) <- embed $ loadHackageRevisions' packages
+
+  combinedDepVersionRanges <- (local @RawHackageDB (const revised) (getCabalIncludingDeprecated name pkgVersion)) >>= depsVersionMap
+  combinedUnrevisedDepVersionRanges <- (local @RawHackageDB (const original) (getCabalIncludingDeprecated name pkgVersion)) >>= depsVersionMap
+
+  -- Resolve versions associated with the declared dependencies
+  let deps = Map.keys $ Map.union combinedDepVersionRanges combinedUnrevisedDepVersionRanges
+  depsWithExtraVersion <- mapM (\d -> getVersionInExtra d >>= (\v -> return (d, v))) deps
+  -- If dep doesn't have version in extra, use latest version from Hackage
+  depsWithVersion <- mapM (\case (d, Just v) -> return (d, v); (d, Nothing) -> (getLatestVersion d >>= (\v -> return (d, v)))) depsWithExtraVersion
+  let depToResolvedVersionMap = Map.fromList depsWithVersion
+      isInRange dep range = withinRange (fromMaybe (error $ "Internal error: Dependency '" <> prettyShow dep <> "' is not in the dependency version map")
+                                                   $ Map.lookup dep depToResolvedVersionMap) range
+      isNotInRange dep range = not (isInRange dep range)
+
+      -- If dep has been removed in revision, then it clearly isn't needed, so ignore the version bounds
+      revisedIsInRange dep = (\case Just range -> isInRange dep range; Nothing -> True) (Map.lookup dep combinedDepVersionRanges)
+      -- If dep has been added in revision, manual intervention is needed
+      unrevisedIsNotInRange dep = (\case Just range -> isNotInRange dep range; Nothing -> False) (Map.lookup dep combinedUnrevisedDepVersionRanges)
+
+      outOfBounds = filter unrevisedIsNotInRange $ sort $ deps
+      revisedInBounds = filter revisedIsInRange $ outOfBounds
+      _removeBoundsWithUusi = map prettyShow revisedInBounds
+      _enableUusi = uusi || (not (null _removeBoundsWithUusi))
+      _makeDepends = (if _enableUusi then " 'uusi'" else "") <> depsToString _depName makeDepends
   return PkgBuild {..}
 
 -----------------------------------------------------------------------------

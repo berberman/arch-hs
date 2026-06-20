@@ -44,7 +44,7 @@ import System.Exit (ExitCode (ExitFailure, ExitSuccess))
 import System.FilePath (takeFileName)
 
 app ::
-  (Members '[Embed IO, State (Set.Set PackageName), KnownGHCVersion, ExtraEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r) =>
+  (Members '[Embed IO, State (Set.Set PackageName), KnownGHCVersion, ExtraEnv, HackageEnv, RawHackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, Aur, WithMyErr] r) =>
   PackageName ->
   FilePath ->
   Bool ->
@@ -55,8 +55,9 @@ app ::
   FilePath ->
   Bool ->
   (DBKind -> IO FilesDB) ->
+  ([(PackageName, Version)] -> IO (RawHackageDB, RawHackageDB)) ->
   Sem r ()
-app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing loadFilesDB' = do
+app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing loadFilesDB' loadHackageRevisions' = do
   (deps, sublibs, sysDeps) <- getDependencies (fmap mkUnqualComponentName skip) Nothing target
 
   inExtra <- isInExtra target
@@ -197,7 +198,7 @@ app target path aurSupport skip uusi force installDeps jsonPath noSkipMissing lo
   unless (null path) $
     mapM_
       ( \solved -> do
-          pkgBuild <- cabalToPkgBuild solved uusi $ getSysDeps (solved ^. pkgName)
+          pkgBuild <- cabalToPkgBuild loadHackageRevisions' solved uusi $ getSysDeps (solved ^. pkgName)
           let pName = N._pkgName pkgBuild
               dir = path </> pName
               fileName = dir </> "PKGBUILD"
@@ -264,6 +265,7 @@ fromEmergedSysDep (Solved file pkg) = SysDepsS file (Just pkg)
 -----------------------------------------------------------------------------
 
 runApp ::
+  RawHackageDB ->
   HackageDB ->
   ExtraDB ->
   Map.Map PackageName FlagAssignment ->
@@ -271,9 +273,9 @@ runApp ::
   FilePath ->
   IORef (Set.Set PackageName) ->
   Manager ->
-  Sem '[ExtraEnv, HackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, State (Set.Set PackageName), Aur, WithMyErr, Embed IO, Final IO] a ->
+  Sem '[ExtraEnv, HackageEnv, RawHackageEnv, FlagAssignmentsEnv, DependencyRecord, Trace, State (Set.Set PackageName), Aur, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
-runApp hackage extra flags traceStdout tracePath ref manager =
+runApp rawHackage hackage extra flags traceStdout tracePath ref manager =
   runFinal
     . embedToFinal
     . errorToIOFinal
@@ -282,6 +284,7 @@ runApp hackage extra flags traceStdout tracePath ref manager =
     . runTrace traceStdout tracePath
     . evalState Map.empty
     . runReader flags
+    . runReader rawHackage
     . runReader hackage
     . runReader extra
 
@@ -323,6 +326,7 @@ main = printHandledIOException $
     when optUusi $ printInfo "You specified --uusi, uusi will become makedepends of each package"
 
     hackage <- loadHackageDBFromOptions optHackage
+    rawHackage <- loadRawHackageDBFromOptions optHackage
 
     let isExtraEmpty = null optExtraCabalDirs
     optExtraCabal <- mapM findCabalFile optExtraCabalDirs
@@ -344,6 +348,7 @@ main = printHandledIOException $
     manager <- newTlsManager
 
     runApp
+      rawHackage
       newHackage
       extra
       optFlags
@@ -351,7 +356,7 @@ main = printHandledIOException $
       optFileTrace
       ref
       manager
-      (subsumeGHCVersion $ app optTarget optOutputDir optAur optSkip optUusi optForce optInstallDeps optJson optNoSkipMissing (loadFilesDBFromOptions optFilesDB))
+      (subsumeGHCVersion $ app optTarget optOutputDir optAur optSkip optUusi optForce optInstallDeps optJson optNoSkipMissing (loadFilesDBFromOptions optFilesDB) (loadRawHackageRevisionsFromOptions optHackage))
       & printAppResult
 
 -----------------------------------------------------------------------------
