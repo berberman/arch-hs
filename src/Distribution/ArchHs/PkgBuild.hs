@@ -19,6 +19,7 @@ where
 
 import Data.Text (Text, pack, unpack)
 import Distribution.SPDX.LicenseId
+import Lens.Micro ((&), (<&>))
 import NeatInterpolation (text)
 import qualified Web.ArchLinux.Types as Arch
 
@@ -46,6 +47,8 @@ data PkgBuild = PkgBuild
     _licenseFile :: Maybe String,
     -- | Whether generate @prepare()@ bash function which calls @uusi@
     _enableUusi :: Bool,
+    -- | List of dependencies whose version ranges will be removed in the @prepare()@ bash function using @uusi@
+    _removeWithUusi :: [String],
     -- | Command-line flags
     _flags :: String
   }
@@ -533,7 +536,7 @@ applyTemplate PkgBuild {..} =
           Just n -> "\n" <> installLicense (pack n)
           _ -> "\n"
       )
-      (if _enableUusi then "\n" <> uusi <> "\n\n" else "\n")
+      (if _enableUusi then "\n" <> (prepare . pack $ "uusi" <> (_removeWithUusi <&> (\r -> " -u " <> r) & mconcat)) <> "\n\n" else "\n")
       ("\n" <> check <> "\n\n")
       ( pack $ case _flags of
           [] -> ""
@@ -558,11 +561,12 @@ installLicense licenseFile =
     rm -f "$$pkgdir"/usr/share/doc/$$pkgname/$licenseFile
 |]
 
-uusi :: Text
-uusi =
+prepare :: Text -> Text
+prepare uusi =
   [text|
   prepare() {
-    uusi $$_hkgname-$$pkgver/$$_hkgname.cabal
+    cd $$_hkgname-$$pkgver
+    $uusi
   }
 |]
 

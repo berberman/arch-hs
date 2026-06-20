@@ -24,8 +24,13 @@ module Distribution.ArchHs.Core
 where
 
 import qualified Algebra.Graph.Labelled.AdjacencyMap as G
+import Conduit
+import Control.Monad (filterM, unless)
 import Data.Bifunctor (second)
+import qualified Data.ByteString as BS
+import qualified Data.Conduit.Tar as Tar
 import Data.Containers.ListUtils (nubOrd)
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Map as Map
 import Data.List (sort)
 import Data.Maybe (fromMaybe)
@@ -37,6 +42,7 @@ import Distribution.ArchHs.Hackage
   ( getLatestCabal,
     getLatestSHA256,
     getPackageFlag,
+    lookupHackagePath,
   )
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local (ignoreList)
@@ -48,13 +54,15 @@ import Distribution.ArchHs.PkgBuild
   )
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
-import Distribution.Compiler (CompilerFlavor (..))
+import Distribution.Compiler (CompilerFlavor (..), AbiTag (..), buildCompilerId, unknownCompilerInfo)
 import Distribution.PackageDescription hiding (pkgName)
+import Distribution.PackageDescription.Configuration
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import Distribution.SPDX
-import Distribution.System (Arch (X86_64), OS (Linux))
+import Distribution.System (Arch (X86_64), OS (Linux), Platform (..))
 import qualified Distribution.Types.BuildInfo.Lens as L
 import Distribution.Types.CondTree (simplifyCondTree)
-import Distribution.Types.Dependency (Dependency)
+import Distribution.Types.ComponentRequestedSpec (ComponentRequestedSpec (..))
 import Distribution.Utils.ShortText (fromShortText)
 
 archEnv :: Version -> FlagAssignment -> ConfVar -> Either ConfVar Bool
@@ -286,11 +294,68 @@ updateDependencyRecord name range = modify' $ Map.insertWith (<>) name [range]
 
 -----------------------------------------------------------------------------
 
+inRange :: Members [ExtraEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (Either (PackageName, VersionRange) (PackageName, VersionRange, Version, Bool))
+inRange (name, hRange) =
+  try @MyException (versionInExtra name)
+    >>= \case
+      Right rawVersion ->
+        case simpleParsec rawVersion of
+          Just version -> return . Right $ (name, hRange, version, withinRange version hRange)
+          Nothing -> throw $ VersionNoParse rawVersion
+      Left _ -> return . Left $ (name, hRange)
+
+isInRangeBool :: Members [ExtraEnv, WithMyErr] r => PackageName -> VersionRange -> Sem r Bool
+isInRangeBool name hRange = do
+  l <- inRange (name, hRange)
+  case l of
+    Right (_, _, _, i) -> return i
+    Left _ -> return False
+
+isNotInRangeBool :: Members [ExtraEnv, WithMyErr] r => PackageName -> VersionRange -> Sem r Bool
+isNotInRangeBool name hRange = do
+  l <- isInRangeBool name hRange
+  return (not l)
+
+getCabalsFromIndex :: Members [Embed IO, WithMyErr] r => FilePath -> PackageName -> [Version] -> Sem r (Map.Map Version GenericPackageDescription)
+getCabalsFromIndex hackagePath name versions = do
+  let pkg = unPackageName name
+      cabalPaths = Map.fromList [(pkg </> prettyShow version </> (pkg <> ".cabal"), version) | version <- nub versions]
+  cabalFiles <- embed $ findCabalFilesInIndex hackagePath cabalPaths
+  Map.fromList <$> traverse (parseCabal cabalFiles) (nub versions)
+  where
+    parseCabal cabalFiles version =
+      case parseGenericPackageDescriptionMaybe =<< Map.lookup version cabalFiles of
+        Just cabal -> return (version, cabal)
+        Nothing -> throw $ VersionNotFound name version
+
+findCabalFilesInIndex :: FilePath -> Map.Map FilePath Version -> IO (Map.Map Version BS.ByteString)
+findCabalFilesInIndex hackagePath cabalPaths = do
+  foundRef <- newIORef Map.empty
+  Map.fromList
+    <$> runConduitRes
+      ( sourceFileBS hackagePath
+          .| Tar.untarChunks
+          .| Tar.withEntries (action foundRef)
+          .| takeC (Map.size cabalPaths)
+          .| sinkList
+      )
+  where
+    action foundRef header
+      | Tar.FTNormal <- Tar.headerFileType header,
+        Just version <- Map.lookup (Tar.headerFilePath header) cabalPaths = do
+        found <- liftIO $ readIORef foundRef
+        unless (Map.member version found) $ do
+          cabalFile <- mconcat <$> sinkList
+          liftIO $ modifyIORef' foundRef (Map.insert version ())
+          yield (version, cabalFile)
+      | otherwise = return ()
+
 -- | Generate 'PkgBuild' for a 'SolvedPackage'.
-cabalToPkgBuild :: Members [HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> Bool -> [ArchLinuxName] -> Sem r PkgBuild
+cabalToPkgBuild :: Members [Embed IO, ExtraEnv, HackageEnv, FlagAssignmentsEnv, WithMyErr] r => SolvedPackage -> Bool -> [ArchLinuxName] -> Sem r PkgBuild
 cabalToPkgBuild pkg uusi sysDeps = do
   let name = pkg ^. pkgName
-  cabal <- packageDescription <$> getLatestCabal name
+  latestCabal <- getLatestCabal name
+  let cabal = packageDescription latestCabal
   pkgFlags <- getPackageFlag name
   assignment <- getFlagAssignment name <$> ask
   let showFlagForCmd (unFlagName -> fName, enabled) = "-f" <> (if enabled then "" else "-") <> fName
@@ -298,7 +363,8 @@ cabalToPkgBuild pkg uusi sysDeps = do
   _sha256sums <- (\case Just s -> "'" <> s <> "'"; Nothing -> "'SKIP'") <$> getLatestSHA256 name
   let _hkgName = pkg ^. pkgName & unPackageName
       _pkgName = unArchLinuxName . toArchLinuxName $ pkg ^. pkgName
-      _pkgVer = prettyShow $ getPkgVersion cabal
+      pkgVersion = getPkgVersion cabal
+      _pkgVer = prettyShow $ pkgVersion
       _pkgDesc = fromShortText $ synopsis cabal
       getL NONE = ""
       getL (License e) = getE e
@@ -339,11 +405,32 @@ cabalToPkgBuild pkg uusi sysDeps = do
               )
       depsToString k deps = (sort $ deps <&> (wrap . unArchLinuxName . toArchLinuxName . k)) & mconcat
       _depends = depsToString _depName depends <> depsToString id sysDeps
-      _makeDepends = (if uusi then " 'uusi'" else "") <> depsToString _depName makeDepends
       _url = getUrl cabal
       wrap s = " '" <> s <> "'"
       _licenseFile = licenseFile cabal
-      _enableUusi = uusi
+      pd = (finalizePD assignment (ComponentRequestedSpec True False) (\_ -> True) (Platform X86_64 Linux) (unknownCompilerInfo buildCompilerId NoAbiTag) [] latestCabal)
+      finalisedPackageDescription = (\case Right (x, _) -> x; Left _ -> error $ "Missing dependencies") pd
+      versionRanges = Map.fromList $ enabledBuildDepends finalisedPackageDescription (ComponentRequestedSpec True False) <&> (\dep -> (depPkgName dep, depVerRange dep))
+      -- If dep has been removed in revision, then it clearly isn't needed, so ignore the version bounds
+      revisedIsInRange dep = (\case Just version -> isInRangeBool dep version; Nothing -> return True) (Map.lookup dep versionRanges)
+
+  hackagePath <- embed $ lookupHackagePath
+  cabals <- getCabalsFromIndex hackagePath name [pkgVersion]
+  let lookupCabal cs version = (\case Just c -> return c; Nothing -> throw $ VersionNotFound name version) $ Map.lookup version cs
+  unrevisedCabalFile <- lookupCabal cabals pkgVersion
+  let unrevisedPd = (finalizePD assignment (ComponentRequestedSpec True False) (\_ -> True) (Platform X86_64 Linux) (unknownCompilerInfo buildCompilerId NoAbiTag) [] unrevisedCabalFile)
+      finalisedUnrevisedPackageDescription = (\case Right (x, _) -> x; Left _ -> error $ "Missing dependencies") unrevisedPd
+      unRevisedEnabledBuildDepends = enabledBuildDepends finalisedUnrevisedPackageDescription (ComponentRequestedSpec True False)
+      unrevisedVersionRanges = Map.fromList $ unRevisedEnabledBuildDepends <&> (\dep -> (depPkgName dep, depVerRange dep))
+      unrevisedIsNotInRange x = isNotInRangeBool x (fromMaybe (error $ "Internal error: Dependency '" <> prettyShow x <> "' is declared as depends or makedepends " <>
+                                                                       "while not being a dependency of an enabled component in the unrevised .cabal.")
+                                                              $ Map.lookup x unrevisedVersionRanges)
+  outOfBounds <- filterM unrevisedIsNotInRange $ sort (unRevisedEnabledBuildDepends <&> depPkgName)
+  revisedInBounds <- filterM revisedIsInRange $ outOfBounds
+  let _removeWithUusi = map prettyShow revisedInBounds
+      _enableUusi = uusi || (not (null _removeWithUusi))
+      _makeDepends = (if _enableUusi then " 'uusi'" else "") <> depsToString _depName makeDepends
+  -- _ <- error $ ((Map.assocs versionRanges) <&> (\x -> " " <> prettyShow (fst x) <> " " <> prettyShow (snd x)) & mconcat) <> "\nUnrevised version ranges: " <> ((Map.assocs unrevisedVersionRanges) <&> (\x -> " " <> prettyShow (fst x) <> " " <> prettyShow (snd x)) & mconcat) <> "\nTo remove with uusi: " <> (mconcat (map (\x -> x <> " ") (_removeWithUusi)))
   return PkgBuild {..}
 
 -----------------------------------------------------------------------------
