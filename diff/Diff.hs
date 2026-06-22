@@ -140,6 +140,7 @@ diffCabal name a b = do
       [ annMagneta "Package" <> colon <+> viaPretty name,
         ver pa pb,
         desc pa pb,
+        lic pa pb,
         url pa pb,
         dep "Depends" ba bb,
         queryb,
@@ -166,6 +167,9 @@ ver = diffTerm "Version" (prettyShow . getPkgVersion)
 
 url :: PackageDescription -> PackageDescription -> Doc AnsiStyle
 url = diffTerm "URL" getUrl
+
+lic :: PackageDescription -> PackageDescription -> Doc AnsiStyle
+lic = diffTerm "License" (prettyShow . license)
 
 inRange :: Members [ExtraEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (Either (PackageName, VersionRange) (PackageName, VersionRange, Version, Bool))
 inRange (name, hRange) =
