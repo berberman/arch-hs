@@ -31,8 +31,9 @@ runCheck ::
   HackageDB ->
   Bool ->
   Bool ->
+  Bool ->
   IO (Either MyException ())
-runCheck extra hackage includeGHC runDepCheck =
+runCheck extra hackage includeGHC runDepCheck verbose =
   ( runFinal
       . embedToFinal @IO
       . errorToIOFinal
@@ -43,8 +44,8 @@ runCheck extra hackage includeGHC runDepCheck =
       . runReader extra
   )
     ( if runDepCheck
-        then subsumeGHCVersion $ check includeGHC runDepCheck
-        else runReader nullVersion $ check includeGHC runDepCheck
+        then subsumeGHCVersion $ check includeGHC runDepCheck verbose
+        else runReader nullVersion $ check includeGHC runDepCheck verbose
     )
 
 runSubmit ::
@@ -93,7 +94,7 @@ runMode = \case
   Check CommonOptions {..} CheckOptions {..} -> do
     extra <- loadExtraDBFromOptions optExtraDB
     hackage <- loadHackageDBFromOptions optHackage
-    runCheck extra hackage optShowGHCLibs optDepCheck & printAppResult
+    runCheck extra hackage optShowGHCLibs optDepCheck optVerbose & printAppResult
   List ExtraDBOptions {..} ListOptions {..} -> do
     extra <- loadExtraDBFromOptions
     putStrLn $

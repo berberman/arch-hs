@@ -554,6 +554,16 @@ $ arch-hs-sync check --depcheck
 haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has newer versions 2.2.3.1 (ok), 2.2.3.2 (blocked: dep=1, rdep=3)
 ```
 
+Add `--verbose` with `--depcheck` to list the dependency and reverse dependency ranges that block a version:
+
+```
+$ arch-hs-sync check --depcheck --verbose
+haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has newer versions 2.2.3.2 (blocked: dep=1, rdep=1)
+  2.2.3.2:
+    dep: scientific requires >=0.3 && <0.4, [extra] has 0.4
+    rdep: agda Depends requires >=1.1.2.0 && <2.3
+```
+
 Other sync commands, including `submit` and `list`, are documented in `arch-hs-sync --help`.
 
 ## Limitations

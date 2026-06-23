@@ -16,12 +16,14 @@ import Distribution.ArchHs.Types
 import Distribution.Package (packageName)
 import Utils
 
-data NewerVersion = NewerVersion Version (Maybe CheckFailures)
+data NewerVersion = NewerVersion Version (Maybe CheckResult)
 
-data CheckFailures = CheckFailures
-  { depFailures :: Int,
-    rdepFailures :: Int
+data CheckResult = CheckResult
+  { depFailures :: [DependencyFailure],
+    rdepFailures :: [ReverseDependencyFailure]
   }
+
+data ReverseDependencyFailure = ReverseDependencyFailure ArchLinuxName DepSrc VersionRange
 
 check ::
   Members
@@ -37,8 +39,9 @@ check ::
     r =>
   Bool ->
   Bool ->
+  Bool ->
   Sem r ()
-check includeGHC runDepCheck = do
+check includeGHC runDepCheck verbose = do
   linked <- linkedHaskellPackageDescs
   checked <-
     traverse
@@ -53,7 +56,7 @@ check includeGHC runDepCheck = do
                     then pure ([], [])
                     else do
                       (newerVersions, skipped) <- checkNewerVersions runDepCheck hackageName hackageVersions
-                      pure ([prettyNewerVersions archName (_rawVersion desc) hackageName archVersion newerVersions], skipped)
+                      pure ([prettyNewerVersions verbose archName (_rawVersion desc) hackageName archVersion newerVersions], skipped)
             _ -> pure ([], [])
       )
       linked
@@ -89,14 +92,14 @@ checkNewerVersions True hackageName hackageVersions = do
   newerVersions <-
     forM hackageVersions $ \hackageVersion -> do
       cabal <- getCabal hackageName hackageVersion
-      depFailureCount <- length <$> dependencyFailures cabal
+      depFailureDetails <- dependencyFailures cabal
       pure $
         NewerVersion
           hackageVersion
           ( Just
-              CheckFailures
-                { depFailures = depFailureCount,
-                  rdepFailures = rdepFailureCount hackageVersion reverseDeps
+              CheckResult
+                { depFailures = depFailureDetails,
+                  rdepFailures = rdepFailureDetails hackageVersion reverseDeps
                 }
           )
   pure (newerVersions, skipped)
@@ -112,27 +115,35 @@ uniqueSkippedReverseDeps =
           )
       )
 
-rdepFailureCount :: Version -> [ReverseDep] -> Int
-rdepFailureCount version reverseDeps =
-  sum
-    [ length $ versionFailures (Just version) ranges
-      | ReverseDep _ ranges <- reverseDeps
+rdepFailureDetails :: Version -> [ReverseDep] -> [ReverseDependencyFailure]
+rdepFailureDetails version reverseDeps =
+  [ ReverseDependencyFailure name src range
+    | ReverseDep name ranges <- reverseDeps,
+      (src, range) <- versionFailures (Just version) ranges
     ]
 
-prettyNewerVersions :: ArchLinuxName -> ArchLinuxVersion -> PackageName -> Version -> [NewerVersion] -> Doc AnsiStyle
-prettyNewerVersions archName rawArchVersion hackageName archVersion hackageVersions =
-  annMagneta (pretty (unArchLinuxName archName))
-    <+> "in"
-    <+> ppExtra
-    <+> "has version"
-    <+> prettyArchVersion rawArchVersion archVersion
-    <> comma
-      <+> "but linked"
-      <+> annMagneta (pretty (unPackageName hackageName))
-      <+> "in"
-      <+> annCyan "Hackage"
-      <+> (if length hackageVersions == 1 then "has newer version" else "has newer versions")
-      <+> hsep (punctuate comma $ prettyNewerVersion <$> hackageVersions)
+prettyNewerVersions :: Bool -> ArchLinuxName -> ArchLinuxVersion -> PackageName -> Version -> [NewerVersion] -> Doc AnsiStyle
+prettyNewerVersions verbose archName rawArchVersion hackageName archVersion hackageVersions =
+  base <> verboseDetails
+  where
+    base =
+      annMagneta (pretty (unArchLinuxName archName))
+        <+> "in"
+        <+> ppExtra
+        <+> "has version"
+        <+> prettyArchVersion rawArchVersion archVersion
+        <> comma
+          <+> "but linked"
+          <+> annMagneta (pretty (unPackageName hackageName))
+          <+> "in"
+          <+> annCyan "Hackage"
+          <+> (if length hackageVersions == 1 then "has newer version" else "has newer versions")
+          <+> hsep (punctuate comma $ prettyNewerVersion <$> hackageVersions)
+
+    verboseDetails =
+      case concatMap prettyVerboseNewerVersion hackageVersions of
+        details | verbose && not (null details) -> line <> indent 2 (vsep details)
+        _ -> mempty
 
 prettyArchVersion :: ArchLinuxVersion -> Version -> Doc AnsiStyle
 prettyArchVersion rawVersion archVersion =
@@ -151,13 +162,49 @@ pkgrelSuffix rawVersion =
 
 prettyNewerVersion :: NewerVersion -> Doc AnsiStyle
 prettyNewerVersion (NewerVersion version Nothing) = annGreen $ viaPretty version
-prettyNewerVersion (NewerVersion version (Just CheckFailures {depFailures = 0, rdepFailures = 0})) =
+prettyNewerVersion (NewerVersion version (Just CheckResult {depFailures = [], rdepFailures = []})) =
   annGreen $ viaPretty version <+> parens "ok"
 prettyNewerVersion (NewerVersion version (Just failures)) =
   annRed $ viaPretty version <+> parens ("blocked:" <+> prettyCheckFailures failures)
 
-prettyCheckFailures :: CheckFailures -> Doc AnsiStyle
-prettyCheckFailures CheckFailures {..} =
+prettyCheckFailures :: CheckResult -> Doc AnsiStyle
+prettyCheckFailures CheckResult {..} =
   hsep . punctuate comma $
-    ["dep=" <> pretty depFailures | depFailures > 0]
-      <> ["rdep=" <> pretty rdepFailures | rdepFailures > 0]
+    ["dep=" <> pretty (length depFailures) | not (null depFailures)]
+      <> ["rdep=" <> pretty (length rdepFailures) | not (null rdepFailures)]
+
+prettyVerboseNewerVersion :: NewerVersion -> [Doc AnsiStyle]
+prettyVerboseNewerVersion (NewerVersion _ Nothing) = []
+prettyVerboseNewerVersion (NewerVersion _ (Just CheckResult {depFailures = [], rdepFailures = []})) = []
+prettyVerboseNewerVersion (NewerVersion version (Just CheckResult {..})) =
+  (viaPretty version <> colon)
+    : fmap (indent 2 . prettyDependencyFailure) depFailures
+      <> fmap (indent 2 . prettyReverseDependencyFailure) rdepFailures
+
+prettyDependencyFailure :: DependencyFailure -> Doc AnsiStyle
+prettyDependencyFailure = \case
+  MissingDependency name range ->
+    annRed "dep:"
+      <+> viaPretty name
+      <+> "requires"
+      <+> viaPretty range
+      <> comma
+      <+> ppExtra
+      <+> "missing"
+  DependencyOutOfRange name range version ->
+    annRed "dep:"
+      <+> viaPretty name
+      <+> "requires"
+      <+> viaPretty range
+      <> comma
+      <+> ppExtra
+      <+> "has"
+      <+> viaPretty version
+
+prettyReverseDependencyFailure :: ReverseDependencyFailure -> Doc AnsiStyle
+prettyReverseDependencyFailure (ReverseDependencyFailure name src range) =
+  annRed "rdep:"
+    <+> pretty (unArchLinuxName name)
+    <+> pretty src
+    <+> "requires"
+    <+> viaPretty range

@@ -50,7 +50,8 @@ submitOptionsParser =
 
 data CheckOptions = CheckOptions
   { optShowGHCLibs :: Bool,
-    optDepCheck :: Bool
+    optDepCheck :: Bool,
+    optVerbose :: Bool
   }
 
 checkOptionsParser :: Parser CheckOptions
@@ -58,6 +59,7 @@ checkOptionsParser =
   CheckOptions
     <$> switch (long "show-ghc-libs" <> help "Include GHC and GHC libs")
     <*> switch (long "depcheck" <> help "Check whether newer Hackage versions are currently upgradable")
+    <*> switch (long "verbose" <> help "Show dependency and reverse dependency ranges that block --depcheck candidates")
 
 -----------------------------------------------------------------------------
 
