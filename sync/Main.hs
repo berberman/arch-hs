@@ -9,6 +9,7 @@ import Args
 import Check
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
+import Distribution.ArchHs.Core (subsumeGHCVersion)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
@@ -29,15 +30,22 @@ runCheck ::
   ExtraDB ->
   HackageDB ->
   Bool ->
+  Bool ->
   IO (Either MyException ())
-runCheck extra hackage includeGHC =
+runCheck extra hackage includeGHC runDepCheck =
   ( runFinal
       . embedToFinal @IO
       . errorToIOFinal
+      . evalState (Map.empty :: Map.Map PackageName [VersionRange])
+      . ignoreTrace
+      . runReader (Map.empty :: FlagAssignments)
       . runReader hackage
       . runReader extra
   )
-    (check includeGHC)
+    ( if runDepCheck
+        then subsumeGHCVersion $ check includeGHC runDepCheck
+        else runReader nullVersion $ check includeGHC runDepCheck
+    )
 
 runSubmit ::
   ExtraDB ->
@@ -85,7 +93,7 @@ runMode = \case
   Check CommonOptions {..} CheckOptions {..} -> do
     extra <- loadExtraDBFromOptions optExtraDB
     hackage <- loadHackageDBFromOptions optHackage
-    runCheck extra hackage optShowGHCLibs & printAppResult
+    runCheck extra hackage optShowGHCLibs optDepCheck & printAppResult
   List ExtraDBOptions {..} ListOptions {..} -> do
     extra <- loadExtraDBFromOptions
     putStrLn $

@@ -101,6 +101,7 @@ library
     Distribution.ArchHs.Aur
     Distribution.ArchHs.Compat
     Distribution.ArchHs.Core
+    Distribution.ArchHs.DepCheck
     Distribution.ArchHs.Exception
     Distribution.ArchHs.ExtraDB
     Distribution.ArchHs.FilesDB
@@ -112,6 +113,7 @@ library
     Distribution.ArchHs.PkgBuild
     Distribution.ArchHs.PkgDesc
     Distribution.ArchHs.PP
+    Distribution.ArchHs.RDepCheck
     Distribution.ArchHs.Types
     Distribution.ArchHs.Utils
 

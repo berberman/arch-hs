@@ -48,14 +48,16 @@ submitOptionsParser =
 
 -----------------------------------------------------------------------------
 
-newtype CheckOptions = CheckOptions
-  { optShowGHCLibs :: Bool
+data CheckOptions = CheckOptions
+  { optShowGHCLibs :: Bool,
+    optDepCheck :: Bool
   }
 
 checkOptionsParser :: Parser CheckOptions
 checkOptionsParser =
   CheckOptions
     <$> switch (long "show-ghc-libs" <> help "Include GHC and GHC libs")
+    <*> switch (long "depcheck" <> help "Check whether newer Hackage versions are currently upgradable")
 
 -----------------------------------------------------------------------------
 
@@ -91,7 +93,7 @@ runArgsParser =
           (Submit <$> commonOptionsParser <*> submitOptionsParser)
         addCommand
           "check"
-          "check inconsistencies of Haskell packages version"
+          "check newer Hackage versions for Haskell packages in [extra]"
           id
           (Check <$> commonOptionsParser <*> checkOptionsParser)
         addCommand

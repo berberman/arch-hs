@@ -538,7 +538,23 @@ Reverse dependency: agda
 
 ## Sync
 
-For hackage distribution maintainers only, see `arch-hs-sync --help` for details.
+For Hackage distribution maintainers, `arch-hs-sync check` compares Haskell package versions in [extra] with Hackage:
+
+```
+$ arch-hs-sync check
+haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has newer versions 2.2.3.1, 2.2.3.2
+```
+
+Only non-deprecated Hackage versions newer than the [extra] version are reported.
+
+Pass `--depcheck` to check whether each newer Hackage version is currently upgradable with the packages already in [extra]. A version is shown as upgradable only when both its dependency ranges are satisfied by [extra] and all current reverse dependency ranges accept that version:
+
+```
+$ arch-hs-sync check --depcheck
+haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has newer versions 2.2.3.1 (upgradable), 2.2.3.2 (not upgradable: 1 dependency range failure(s), 3 reverse dependency range failure(s))
+```
+
+Other sync commands, including `submit` and `list`, are documented in `arch-hs-sync --help`.
 
 ## Limitations
 

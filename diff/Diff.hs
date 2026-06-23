@@ -17,9 +17,8 @@ import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes)
 import Conduit
-import Distribution.ArchHs.Core
+import Distribution.ArchHs.DepCheck
 import Distribution.ArchHs.Exception
-import Distribution.ArchHs.ExtraDB (versionInExtra)
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
@@ -27,8 +26,6 @@ import Distribution.ArchHs.Utils
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import Distribution.Utils.ShortText (fromShortText)
 import Network.HTTP.Client
-
-type VersionedList = [(PackageName, VersionRange)]
 
 data CabalSource
   = Online Manager
@@ -95,33 +92,6 @@ getCabalsFromSource name a b =
         Just cabal -> return cabal
         Nothing -> throw $ VersionNotFound name version
 
-directDependencies ::
-  Members [KnownGHCVersion, FlagAssignmentsEnv, Trace, DependencyRecord] r =>
-  GenericPackageDescription ->
-  Sem r (VersionedList, VersionedList)
-directDependencies cabal = do
-  (libDeps, libToolsDeps, _) <- collectLibDeps id cabal
-  (subLibDeps, subLibToolsDeps, _) <- collectSubLibDeps id cabal []
-  (exeDeps, exeToolsDeps, _) <- collectExeDeps id cabal []
-  (testDeps, testToolsDeps, _) <- collectTestDeps id cabal []
-  setupDeps <- collectSetupDeps id cabal
-  let flatten = mconcat . fmap snd
-      l = libDeps
-      lt = libToolsDeps
-      sl = flatten subLibDeps
-      slt = flatten subLibToolsDeps
-      e = flatten exeDeps
-      et = flatten exeToolsDeps
-      t = flatten testDeps
-      tt = flatten testToolsDeps
-      mySubLibs = fmap (unqualComponentNameToPackageName . fst) subLibDeps
-      notMyselfOrSubLib = (&&) <$> (/= getPkgName' cabal) <*> (`notElem` mySubLibs)
-      distinct = filter (notMyselfOrSubLib . fst) . nub
-      depends = distinct $ l <> sl <> e
-      makedepends = distinct (lt <> slt <> et <> t <> tt <> setupDeps) \\ depends
-      sort' = sortBy (\x y -> uncurry compare $ getTwo _1 x y)
-  return (sort' depends, sort' makedepends)
-
 -----------------------------------------------------------------------------
 
 diffCabal :: Members [KnownGHCVersion, ExtraEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord, Reader CabalSource, Embed IO] r => PackageName -> Version -> Version -> Sem r ()
@@ -170,16 +140,6 @@ url = diffTerm "URL" getUrl
 
 lic :: PackageDescription -> PackageDescription -> Doc AnsiStyle
 lic = diffTerm "License" (prettyShow . license)
-
-inRange :: Members [ExtraEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r (Either (PackageName, VersionRange) (PackageName, VersionRange, Version, Bool))
-inRange (name, hRange) =
-  try @MyException (versionInExtra name)
-    >>= \case
-      Right rawVersion ->
-        case simpleParsec rawVersion of
-          Just version -> return . Right $ (name, hRange, version, withinRange version hRange)
-          Nothing -> throw $ VersionNoParse rawVersion
-      Left _ -> return . Left $ (name, hRange)
 
 lookupDiffExtra :: Members [ExtraEnv, WithMyErr] r => VersionedList -> VersionedList -> Sem r (Doc AnsiStyle)
 lookupDiffExtra va vb = do
