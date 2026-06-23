@@ -82,6 +82,7 @@ type PkgDependentList = [PkgDependent]
 data PkgDesc = PkgDesc
   { _name :: ArchLinuxName,
     _version :: ArchLinuxVersion,
+    _rawVersion :: ArchLinuxVersion,
     _desc :: String,
     _url :: Maybe String,
     _provides :: PkgDependentList,

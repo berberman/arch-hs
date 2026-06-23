@@ -39,11 +39,12 @@ check ::
   Bool ->
   Sem r ()
 check includeGHC runDepCheck = do
-  linked <- linkedHaskellPackages
+  linked <- linkedHaskellPackageDescs
   checked <-
     traverse
-      ( \(archName, rawArchVersion, cabal) -> do
+      ( \(archName, desc, cabal) -> do
           let hackageName = packageName cabal
+              rawArchVersion = _version desc
           case simpleParsec rawArchVersion of
             Just archVersion
               | includeGHC || not (isGHCLibs hackageName) -> do
@@ -52,7 +53,7 @@ check includeGHC runDepCheck = do
                     then pure ([], [])
                     else do
                       (newerVersions, skipped) <- checkNewerVersions runDepCheck hackageName hackageVersions
-                      pure ([prettyNewerVersions archName hackageName archVersion newerVersions], skipped)
+                      pure ([prettyNewerVersions archName (_rawVersion desc) hackageName archVersion newerVersions], skipped)
             _ -> pure ([], [])
       )
       linked
@@ -118,13 +119,13 @@ rdepFailureCount version reverseDeps =
       | ReverseDep _ ranges <- reverseDeps
     ]
 
-prettyNewerVersions :: ArchLinuxName -> PackageName -> Version -> [NewerVersion] -> Doc AnsiStyle
-prettyNewerVersions archName hackageName archVersion hackageVersions =
+prettyNewerVersions :: ArchLinuxName -> ArchLinuxVersion -> PackageName -> Version -> [NewerVersion] -> Doc AnsiStyle
+prettyNewerVersions archName rawArchVersion hackageName archVersion hackageVersions =
   annMagneta (pretty (unArchLinuxName archName))
     <+> "in"
     <+> ppExtra
     <+> "has version"
-    <+> annRed (viaPretty archVersion)
+    <+> prettyArchVersion rawArchVersion archVersion
     <> comma
       <+> "but linked"
       <+> annMagneta (pretty (unPackageName hackageName))
@@ -132,6 +133,21 @@ prettyNewerVersions archName hackageName archVersion hackageVersions =
       <+> annCyan "Hackage"
       <+> (if length hackageVersions == 1 then "has newer version" else "has newer versions")
       <+> hsep (punctuate comma $ prettyNewerVersion <$> hackageVersions)
+
+prettyArchVersion :: ArchLinuxVersion -> Version -> Doc AnsiStyle
+prettyArchVersion rawVersion archVersion =
+  annRed (viaPretty archVersion) <> maybe mempty (annBlue . pretty) (pkgrelSuffix rawVersion)
+
+pkgrelSuffix :: ArchLinuxVersion -> Maybe String
+pkgrelSuffix rawVersion =
+  case splitOn "-" withoutEpoch of
+    _ : pkgrelParts@(_ : _) -> Just $ "-" <> intercalate "-" pkgrelParts
+    _ -> Nothing
+  where
+    withoutEpoch =
+      case splitOn ":" rawVersion of
+        [_epoch, versionRelease] -> versionRelease
+        _ -> rawVersion
 
 prettyNewerVersion :: NewerVersion -> Doc AnsiStyle
 prettyNewerVersion (NewerVersion version Nothing) = annGreen $ viaPretty version

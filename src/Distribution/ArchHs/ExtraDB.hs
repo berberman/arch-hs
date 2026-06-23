@@ -46,7 +46,7 @@ foreign import ccall "wrapper"
 foreign import ccall "clib.h query_extra"
   query_extra :: FunPtr (CString -> CString -> CString -> CString -> IO ()) -> FunPtr (CString -> CString -> CString -> CString -> IO ()) -> IO ()
 
-type RawPkgSet = IORef (Map.Map ArchLinuxName ((ArchLinuxVersion, String, String), IORef (Map.Map String [(ArchLinuxName, Maybe ArchLinuxVersion)])))
+type RawPkgSet = IORef (Map.Map ArchLinuxName ((ArchLinuxVersion, ArchLinuxVersion, String, String), IORef (Map.Map String [(ArchLinuxName, Maybe ArchLinuxVersion)])))
 
 pkgCallback :: RawPkgSet -> CString -> CString -> CString -> CString -> IO ()
 pkgCallback ref name version desc url = do
@@ -55,7 +55,7 @@ pkgCallback ref name version desc url = do
   desc' <- peekCString desc
   url' <- peekCString url
   m <- newIORef Map.empty
-  modifyIORef' ref (Map.insert (ArchLinuxName name') ((extractFromEVR version', desc', url'), m))
+  modifyIORef' ref (Map.insert (ArchLinuxName name') ((extractFromEVR version', version', desc', url'), m))
 
 listCallback :: RawPkgSet -> CString -> CString -> CString -> CString -> IO ()
 listCallback ref name key dm dv = do
@@ -78,7 +78,7 @@ loadExtraDBFFI = do
   s <- readIORef ref
   re <-
     mapM
-      ( \(name, ((ver, desc, url), r)) -> do
+      ( \(name, ((ver, rawVer, desc, url), r)) -> do
           l <- readIORef r
           let f (Just xs) = uncurry PkgDependent <$> xs
               f Nothing = []
@@ -87,6 +87,7 @@ loadExtraDBFFI = do
               PkgDesc
                 { _name = name,
                   _version = ver,
+                  _rawVersion = rawVer,
                   _desc = desc,
                   _url = if null url then Nothing else Just url,
                   _depends = f $ l Map.!? "depends",

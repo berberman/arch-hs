@@ -3,6 +3,7 @@
 
 module Utils
   ( linkedHaskellPackages,
+    linkedHaskellPackageDescs,
   )
 where
 
@@ -18,13 +19,19 @@ import Distribution.ArchHs.Types
 linkedHaskellPackages ::
   Members [ExtraEnv, HackageEnv, WithMyErr, Embed IO] r =>
   Sem r [(ArchLinuxName, ArchLinuxVersion, GenericPackageDescription)]
-linkedHaskellPackages = do
+linkedHaskellPackages =
+  fmap (\(name, desc, cabal) -> (name, _version desc, cabal)) <$> linkedHaskellPackageDescs
+
+linkedHaskellPackageDescs ::
+  Members [ExtraEnv, HackageEnv, WithMyErr, Embed IO] r =>
+  Sem r [(ArchLinuxName, PkgDesc, GenericPackageDescription)]
+linkedHaskellPackageDescs = do
   extraHaskellPackages <- filter (isHaskellPackage . fst) . Map.toList <$> ask @ExtraDB
   hackagePackages <- Map.keys <$> ask @HackageDB
   let go xs ys ((name, desc) : pkgs) =
         let hName = toHackageName name
          in if hName `elem` hackagePackages
-              then getLatestCabal hName >>= \cabal -> go ((name, _version desc, cabal) : xs) ys pkgs
+              then getLatestCabal hName >>= \cabal -> go ((name, desc, cabal) : xs) ys pkgs
               else go xs (name : ys) pkgs
       go xs ys [] = pure (xs, ys)
   (linked, unlinked) <- go [] [] extraHaskellPackages

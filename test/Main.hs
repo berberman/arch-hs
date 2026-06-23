@@ -4,7 +4,7 @@
 module Main (main) where
 
 import Control.Monad (forM_)
-import Data.List (sortOn)
+import Data.List (isPrefixOf, sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe, mapMaybe)
 import Diff (inRange)
@@ -35,6 +35,12 @@ main = hspec $ do
         _version `shouldSatisfy` not . null
         unPackageName (toHackageName archName) `shouldSatisfy` not . null
         archName `shouldSatisfy` isHaskellPackage
+
+    it "keeps raw Arch EVR for a real Haskell package with pkgrel" $ do
+      extra <- loadLiveExtraDB
+      (_, PkgDesc {_version, _rawVersion}) <- requireHaskellPackage extra
+      _rawVersion `shouldSatisfy` (_version `isPrefixOf`)
+      drop (length _version) _rawVersion `shouldSatisfy` isPkgrelSuffix
 
     it "renders Hackage distro CSV rows from current extra.db and parses them back" $ do
       extra <- loadLiveExtraDB
@@ -93,6 +99,10 @@ requireParseableHackagePackage extra =
   case listToMaybe $ parseableHaskellPackages extra of
     Just sample -> pure sample
     Nothing -> skip "current extra.db has no Haskell packages with Cabal-style versions"
+
+isPkgrelSuffix :: String -> Bool
+isPkgrelSuffix ('-' : rest) = not (null rest)
+isPkgrelSuffix _ = False
 
 haskellPackages :: ExtraDB -> [(ArchLinuxName, PkgDesc)]
 haskellPackages =

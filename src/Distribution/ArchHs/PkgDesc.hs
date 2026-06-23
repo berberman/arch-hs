@@ -53,6 +53,7 @@ promoteDependent PkgDependent {..} =
       PkgDesc
         { _name = _pdName,
           _version = ver,
+          _rawVersion = ver,
           _desc = "",
           _url = Nothing,
           _provides = [],
@@ -91,7 +92,8 @@ parseDescFields = go Map.empty . dropWhile T.null . T.lines
 parseDescEntry :: T.Text -> Maybe PkgDesc
 parseDescEntry txt = do
   _name <- ArchLinuxName . T.unpack <$> lookupSingle "NAME"
-  _version <- extractFromEVR . T.unpack <$> lookupSingle "VERSION"
+  _rawVersion <- T.unpack <$> lookupSingle "VERSION"
+  let _version = extractFromEVR _rawVersion
   _desc <- T.unpack <$> lookupSingle "DESC"
   _depends <- toDepList $ lookupList "DEPENDS"
   _makeDepends <- toDepList $ lookupList "MAKEDEPENDS"
