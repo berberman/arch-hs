@@ -12,6 +12,7 @@ module Distribution.ArchHs.Hackage
     insertDB,
     parseCabalFile,
     getLatestCabal,
+    getNewerVersions,
     getCabal,
     getPackageFlag,
     traverseHackage,
@@ -108,6 +109,17 @@ withLatestVersion f name = do
 -- | Get the latest 'GenericPackageDescription'.
 getLatestCabal :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r GenericPackageDescription
 getLatestCabal = withLatestVersion cabalFile
+
+-- | Get all Hackage versions newer than the given version.
+--
+-- The parsed 'HackageDB' has already applied Hackage's preferred-version
+-- range, which excludes deprecated versions.
+getNewerVersions :: Members [HackageEnv, WithMyErr] r => PackageName -> Version -> Sem r [Version]
+getNewerVersions name version = do
+  db <- ask @HackageDB
+  case Map.lookup name db of
+    Just packageData -> return [hackageVersion | hackageVersion <- Map.keys packageData, hackageVersion > version]
+    Nothing -> throw $ PkgNotFound name
 
 -- | Get the latest SHA256 sum of the tarball .
 getLatestSHA256 :: Members [HackageEnv, WithMyErr] r => PackageName -> Sem r (Maybe String)
