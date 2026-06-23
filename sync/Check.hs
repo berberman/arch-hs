@@ -152,12 +152,12 @@ pkgrelSuffix rawVersion =
 prettyNewerVersion :: NewerVersion -> Doc AnsiStyle
 prettyNewerVersion (NewerVersion version Nothing) = annGreen $ viaPretty version
 prettyNewerVersion (NewerVersion version (Just CheckFailures {depFailures = 0, rdepFailures = 0})) =
-  annGreen $ viaPretty version <+> parens "upgradable"
+  annGreen $ viaPretty version <+> parens "ok"
 prettyNewerVersion (NewerVersion version (Just failures)) =
-  annRed $ viaPretty version <+> parens ("not upgradable:" <+> prettyCheckFailures failures)
+  annRed $ viaPretty version <+> parens ("blocked:" <+> prettyCheckFailures failures)
 
 prettyCheckFailures :: CheckFailures -> Doc AnsiStyle
 prettyCheckFailures CheckFailures {..} =
   hsep . punctuate comma $
-    [pretty depFailures <+> "dependency range failure(s)" | depFailures > 0]
-      <> [pretty rdepFailures <+> "reverse dependency range failure(s)" | rdepFailures > 0]
+    ["dep=" <> pretty depFailures | depFailures > 0]
+      <> ["rdep=" <> pretty rdepFailures | rdepFailures > 0]

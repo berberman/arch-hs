@@ -547,11 +547,11 @@ haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has ne
 
 Only non-deprecated Hackage versions newer than the [extra] version are reported.
 
-Pass `--depcheck` to check whether each newer Hackage version is currently upgradable with the packages already in [extra]. A version is shown as upgradable only when both its dependency ranges are satisfied by [extra] and all current reverse dependency ranges accept that version:
+Pass `--depcheck` to check whether each newer Hackage version is currently upgradable with the packages already in [extra]. A version is shown as `ok` only when both its dependency ranges are satisfied by [extra] and all current reverse dependency ranges accept that version:
 
 ```
 $ arch-hs-sync check --depcheck
-haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has newer versions 2.2.3.1 (upgradable), 2.2.3.2 (not upgradable: 1 dependency range failure(s), 3 reverse dependency range failure(s))
+haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has newer versions 2.2.3.1 (ok), 2.2.3.2 (blocked: dep=1, rdep=3)
 ```
 
 Other sync commands, including `submit` and `list`, are documented in `arch-hs-sync --help`.
