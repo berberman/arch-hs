@@ -3,6 +3,20 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.14
+
+- Teach `arch-hs-sync check` to report all newer non-deprecated Hackage versions
+
+- Add `arch-hs-sync check --depcheck` and `--verbose` to show whether newer Hackage versions are currently upgradable and list blocking dependency and reverse dependency ranges
+
+- Preserve Arch pkgrel in `arch-hs-sync check` output
+
+- Show package licenses in `arch-hs-diff` output and handle unparseable [extra] versions without crashing
+
+- Sort generated dependencies by mapped Arch package name
+
+- Allow Diff 1.0 and add live extra database and CI test coverage
+
 ## 0.13
 
 - Speed up the internal pacman database parser and restore the original explicit `--alpm` opt-in model for ALPM-enabled builds
