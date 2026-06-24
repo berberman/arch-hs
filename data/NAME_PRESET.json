@@ -10,7 +10,6 @@
   "cabal-install": "cabal-install",
   "cabal-fmt": "cabal-fmt",
   "cabal-plan": "cabal-plan",
-  "haskell-cabal-syntax": "Cabal-syntax",
   "cbor-tool": "cbor-tool",
   "cgrep": "cgrep",
   "clash-ghc": "clash-ghc",

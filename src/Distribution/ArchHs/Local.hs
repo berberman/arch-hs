@@ -48,6 +48,7 @@ ghcLibList =
           "binary",
           "bytestring",
           "Cabal",
+          "Cabal-syntax",
           "containers",
           "deepseq",
           "directory",
