@@ -3,6 +3,12 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## 0.14.1
+
+- Keep `arch-hs-sync check --depcheck` suggestions on Hackage's non-deprecated preferred versions while still reading exact deprecated cabal files for current reverse dependency checks
+
+- Treat `Cabal-syntax` as part of GHC libraries
+
 ## 0.14
 
 - Teach `arch-hs-sync check` to report all newer non-deprecated Hackage versions
