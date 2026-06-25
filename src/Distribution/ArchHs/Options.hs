@@ -145,29 +145,38 @@ alpmOptionsParser =
 -----------------------------------------------------------------------------
 
 -- | Parsed options for loading 'HackageDB'
-newtype HackageDBOptions = HackageDBOptions
-  { loadHackageDBFromOptions :: IO HackageDB
+data HackageDBOptions = HackageDBOptions
+  { loadHackageDBFromOptions :: IO HackageDB,
+    loadRawHackageDBFromOptions :: IO RawHackageDB,
+    loadHackageDBsFromOptions :: IO (HackageDB, RawHackageDB)
   }
 
 -- | CLI options parser that reads a string option @hackage@.
 hackageDBOptionsParser :: Parser HackageDBOptions
 hackageDBOptionsParser =
-  HackageDBOptions
-    <$> fmap
-      ( \s ->
-          do
-            hackagePath <- if null s then lookupHackagePath else pure s
-            printInfo $ "Loading hackage from" <+> pretty hackagePath
-            loadHackageDB hackagePath
+  mkHackageDBOptions
+    <$> strOption
+      ( long "hackage"
+          <> metavar "PATH"
+          <> short 'h'
+          <> help "Path to hackage index tarball"
+          <> showDefault
+          <> value ""
       )
-      ( strOption $
-          long "hackage"
-            <> metavar "PATH"
-            <> short 'h'
-            <> help "Path to hackage index tarball"
-            <> showDefault
-            <> value ""
-      )
+  where
+    resolvePath s = if null s then lookupHackagePath else pure s
+
+    withHackagePath s load = do
+      hackagePath <- resolvePath s
+      printInfo $ "Loading hackage from" <+> pretty hackagePath
+      load hackagePath
+
+    mkHackageDBOptions s =
+      HackageDBOptions
+        { loadHackageDBFromOptions = withHackagePath s loadHackageDB,
+          loadRawHackageDBFromOptions = withHackagePath s loadRawHackageDB,
+          loadHackageDBsFromOptions = withHackagePath s loadHackageDBs
+        }
 
 -----------------------------------------------------------------------------
 

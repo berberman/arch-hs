@@ -39,6 +39,7 @@ data MyException
   | NetworkException ClientError
   | HackageUploadFailed Int String
   | VersionNoParse String
+  | CabalNoParse PackageName Version
 
 instance Show MyException where
   show (PkgNotFound name) = "Unable to find \"" <> unPackageName (toHackageName name) <> "\""
@@ -51,6 +52,7 @@ instance Show MyException where
       <> show status
       <> if null message then "" else " " <> message
   show (VersionNoParse v) = "String \"" <> v <> "\" can not be parsed to Cabal version"
+  show (CabalNoParse name version) = "Unable to parse \"" <> unPackageName name <> "\" " <> prettyShow version <> " cabal file"
 
 -- | Catch 'CE.IOException' and print it.
 printHandledIOException :: IO () -> IO ()

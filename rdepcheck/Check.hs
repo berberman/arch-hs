@@ -13,7 +13,7 @@ import Distribution.ArchHs.Types
 check ::
   Members
     [ ExtraEnv,
-      HackageEnv,
+      RawHackageEnv,
       KnownGHCVersion,
       FlagAssignmentsEnv,
       Trace,

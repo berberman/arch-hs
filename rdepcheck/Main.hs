@@ -29,7 +29,7 @@ main = printHandledIOException $
       printInfo "You assigned flags:"
       putDoc $ prettyFlagAssignments optFlags <> line
 
-    hackage <- loadHackageDBFromOptions optHackage
+    hackage <- loadRawHackageDBFromOptions optHackage
     extra <- loadExtraDBFromOptions optExtraDB
 
     printInfo "Start running..."
@@ -48,10 +48,10 @@ printRdepcheckResult io = do
       exitFailure
 
 runCheck ::
-  HackageDB ->
+  RawHackageDB ->
   ExtraDB ->
   FlagAssignments ->
-  Sem '[HackageEnv, ExtraEnv, FlagAssignmentsEnv, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
+  Sem '[RawHackageEnv, ExtraEnv, FlagAssignmentsEnv, Trace, DependencyRecord, WithMyErr, Embed IO, Final IO] a ->
   IO (Either MyException a)
 runCheck extra flags manager =
   runFinal

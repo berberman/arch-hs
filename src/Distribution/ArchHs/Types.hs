@@ -23,6 +23,7 @@ module Distribution.ArchHs.Types
     ArchLinuxVersion,
     ExtraDB,
     HackageEnv,
+    RawHackageEnv,
     ExtraEnv,
     FlagAssignmentsEnv,
     KnownGHCVersion,
@@ -44,7 +45,8 @@ where
 
 import Data.Map.Strict (Map)
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.Hackage.DB (HackageDB)
+import qualified Distribution.Hackage.DB as Hackage
+import qualified Distribution.Hackage.DB.Unparsed as RawHackage
 import Lens.Micro.TH (makeLenses)
 
 -- | A list of 'PackageName'
@@ -103,7 +105,13 @@ type ArchLinuxVersion = String
 type ExtraDB = Map ArchLinuxName PkgDesc
 
 -- | Reader effect of 'HackageDB'
-type HackageEnv = Reader HackageDB
+type HackageEnv = Reader Hackage.HackageDB
+
+-- | Reader effect of the unfiltered Hackage database.
+--
+-- This keeps exact package versions available even when Hackage's
+-- preferred-version range marks them as deprecated.
+type RawHackageEnv = Reader RawHackage.HackageDB
 
 -- | Reader effect of 'ExtraDB'
 type ExtraEnv = Reader ExtraDB

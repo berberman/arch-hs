@@ -4,16 +4,22 @@
 module Main (main) where
 
 import Control.Monad (forM_)
+import qualified Data.ByteString.Char8 as B8
 import Data.List (isPrefixOf, sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe, mapMaybe)
 import Diff (inRange)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.ExtraDB (defaultExtraDBPath, loadExtraDB)
+import Distribution.ArchHs.Hackage (getCabalIncludingDeprecated, getNewerVersions)
 import Distribution.ArchHs.Name (isGHCLibs, isHaskellPackage, toHackageName)
 import Distribution.ArchHs.Types
+import qualified Distribution.Hackage.DB.Parsed as Hackage
+import qualified Distribution.Hackage.DB.Unparsed as RawHackage
+import Distribution.Package (packageName, packageVersion)
+import Distribution.PackageDescription (GenericPackageDescription, packageDescription)
 import Distribution.Parsec (simpleParsec)
-import Distribution.Types.PackageName (PackageName, unPackageName)
+import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.Version (Version)
 import Distribution.Types.VersionRange (VersionRange, anyVersion)
 import Polysemy (run)
@@ -73,6 +79,22 @@ main = hspec $ do
           rawVersion `shouldBe` badVersion
         result ->
           expectationFailure $ "expected VersionNoParse, got: " <> show result
+
+  describe "Hackage preferred-version handling" $ do
+    it "does not report masked versions as newer candidates" $ do
+      let (preferred, _, name, version100, version101) = maskedHackageDBs
+      assertGetNewerVersions preferred name version100 []
+      assertGetNewerVersions preferred name version101 []
+
+    it "can still load an exact masked cabal from the raw Hackage DB" $ do
+      let (_, raw, name, _, version101) = maskedHackageDBs
+      case runGetCabalIncludingDeprecated raw name version101 of
+        Right cabal -> do
+          let desc = packageDescription cabal
+          packageName desc `shouldBe` name
+          packageVersion desc `shouldBe` version101
+        Left err ->
+          expectationFailure $ "expected masked cabal lookup to succeed, got: " <> show err
 
 loadLiveExtraDB :: IO ExtraDB
 loadLiveExtraDB = do
@@ -143,6 +165,60 @@ runInRange extra name range =
     . runError @MyException
     . runReader extra
     $ inRange (name, range)
+
+maskedHackageDBs :: (Hackage.HackageDB, RawHackage.HackageDB, PackageName, Version, Version)
+maskedHackageDBs =
+  (Hackage.parseDB raw, raw, name, version100, version101)
+  where
+    name = mkPackageName "masked"
+    version100 = parseVersion "1.0.0"
+    version101 = parseVersion "1.0.1"
+    raw =
+      Map.singleton
+        name
+        ( RawHackage.PackageData
+            (B8.pack "masked <1.0.1 || >1.0.1")
+            ( Map.fromList
+                [ (version100, RawHackage.VersionData (cabalFile "1.0.0") (B8.pack "{}")),
+                  (version101, RawHackage.VersionData (cabalFile "1.0.1") (B8.pack "{}"))
+                ]
+            )
+        )
+
+    cabalFile version =
+      B8.pack $
+        unlines
+          [ "cabal-version: 1.12",
+            "name: masked",
+            "version: " <> version,
+            "build-type: Simple"
+          ]
+
+parseVersion :: String -> Version
+parseVersion raw =
+  case simpleParsec raw of
+    Just version -> version
+    Nothing -> error $ "test fixture version does not parse: " <> raw
+
+runGetNewerVersions :: Hackage.HackageDB -> PackageName -> Version -> Either MyException [Version]
+runGetNewerVersions hackage name version =
+  run
+    . runError @MyException
+    . runReader hackage
+    $ getNewerVersions name version
+
+assertGetNewerVersions :: Hackage.HackageDB -> PackageName -> Version -> [Version] -> Expectation
+assertGetNewerVersions hackage name version expected =
+  case runGetNewerVersions hackage name version of
+    Right actual -> actual `shouldBe` expected
+    Left err -> expectationFailure $ "expected newer versions, got: " <> show err
+
+runGetCabalIncludingDeprecated :: RawHackage.HackageDB -> PackageName -> Version -> Either MyException GenericPackageDescription
+runGetCabalIncludingDeprecated hackage name version =
+  run
+    . runError @MyException
+    . runReader hackage
+    $ getCabalIncludingDeprecated name version
 
 skip :: String -> IO a
 skip reason = pendingWith reason >> error "unreachable"

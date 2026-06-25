@@ -29,17 +29,19 @@ main = runArgsParser >>= runMode
 runCheck ::
   ExtraDB ->
   HackageDB ->
+  RawHackageDB ->
   Bool ->
   Bool ->
   Bool ->
   IO (Either MyException ())
-runCheck extra hackage includeGHC runDepCheck verbose =
+runCheck extra hackage rawHackage includeGHC runDepCheck verbose =
   ( runFinal
       . embedToFinal @IO
       . errorToIOFinal
       . evalState (Map.empty :: Map.Map PackageName [VersionRange])
       . ignoreTrace
       . runReader (Map.empty :: FlagAssignments)
+      . runReader rawHackage
       . runReader hackage
       . runReader extra
   )
@@ -93,8 +95,13 @@ runMode = \case
     runSubmit extra hackage manager token optOutput optUpload & printAppResult
   Check CommonOptions {..} CheckOptions {..} -> do
     extra <- loadExtraDBFromOptions optExtraDB
-    hackage <- loadHackageDBFromOptions optHackage
-    runCheck extra hackage optShowGHCLibs optDepCheck optVerbose & printAppResult
+    (hackage, rawHackage) <-
+      if optDepCheck
+        then loadHackageDBsFromOptions optHackage
+        else do
+          hackage <- loadHackageDBFromOptions optHackage
+          pure (hackage, Map.empty)
+    runCheck extra hackage rawHackage optShowGHCLibs optDepCheck optVerbose & printAppResult
   List ExtraDBOptions {..} ListOptions {..} -> do
     extra <- loadExtraDBFromOptions
     putStrLn $

@@ -28,6 +28,7 @@ data ReverseDependencyFailure = ReverseDependencyFailure ArchLinuxName DepSrc Ve
 check ::
   Members
     [ HackageEnv,
+      RawHackageEnv,
       ExtraEnv,
       KnownGHCVersion,
       FlagAssignmentsEnv,
@@ -73,6 +74,7 @@ checkNewerVersions ::
   Members
     [ ExtraEnv,
       HackageEnv,
+      RawHackageEnv,
       KnownGHCVersion,
       FlagAssignmentsEnv,
       Trace,

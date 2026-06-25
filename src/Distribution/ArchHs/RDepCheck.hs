@@ -56,7 +56,7 @@ prettySkippedReverseDep SkippedReverseDep {..} =
 reverseDependencyRanges ::
   Members
     [ ExtraEnv,
-      HackageEnv,
+      RawHackageEnv,
       KnownGHCVersion,
       FlagAssignmentsEnv,
       Trace,
@@ -75,7 +75,7 @@ reverseDependencyRanges target = do
 reverseDependencyRangesWithSkips ::
   Members
     [ ExtraEnv,
-      HackageEnv,
+      RawHackageEnv,
       KnownGHCVersion,
       FlagAssignmentsEnv,
       Trace,
@@ -112,7 +112,7 @@ reverseDependencyRangesWithSkips target = do
     forM reverseDeps $ \(PkgDesc {..}, src) -> do
       eCabal <-
         try @MyException $
-          getCabal (toHackageName _name) =<< case simpleParsec _version of
+          getCabalIncludingDeprecated (toHackageName _name) =<< case simpleParsec _version of
             Just v -> pure v
             _ -> throw $ VersionNoParse _version
       case eCabal of

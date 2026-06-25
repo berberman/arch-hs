@@ -9,15 +9,19 @@
 module Distribution.ArchHs.Hackage
   ( lookupHackagePath,
     loadHackageDB,
+    loadRawHackageDB,
+    loadHackageDBs,
     insertDB,
     parseCabalFile,
     getLatestCabal,
     getNewerVersions,
     getCabal,
+    getCabalIncludingDeprecated,
     getPackageFlag,
     traverseHackage,
     getLatestSHA256,
     HackageDB,
+    RawHackageDB,
   )
 where
 
@@ -33,8 +37,12 @@ import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (getPkgName, getPkgVersion)
 import Distribution.Hackage.DB (HackageDB, VersionData (VersionData, cabalFile), readTarball, tarballHashes)
 import Distribution.Hackage.DB.Path (cabalStateDir)
+import qualified Distribution.Hackage.DB.Parsed as Parsed
+import qualified Distribution.Hackage.DB.Unparsed as Unparsed
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import System.Directory (doesDirectoryExist, doesFileExist, getModificationTime, listDirectory)
+
+type RawHackageDB = Unparsed.HackageDB
 
 -- | Look up hackage tarball path from Cabal's package index cache.
 -- Preferred to the newest @01-index.tar@, whereas fallback to the newest @00-index.tar@.
@@ -79,6 +87,16 @@ lookupHackagePath = do
 -- | Read and parse hackage index tarball.
 loadHackageDB :: FilePath -> IO HackageDB
 loadHackageDB = readTarball Nothing
+
+-- | Read the Hackage index tarball without applying preferred-version ranges.
+loadRawHackageDB :: FilePath -> IO RawHackageDB
+loadRawHackageDB = Unparsed.readTarball Nothing
+
+-- | Read Hackage once and expose both preferred and raw views.
+loadHackageDBs :: FilePath -> IO (HackageDB, RawHackageDB)
+loadHackageDBs path = do
+  raw <- loadRawHackageDB path
+  pure (Parsed.parseDB raw, raw)
 
 -- | Insert a 'GenericPackageDescription' into 'HackageDB'.
 insertDB :: GenericPackageDescription -> HackageDB -> HackageDB
@@ -132,6 +150,23 @@ getCabal name version = do
   case Map.lookup name db of
     (Just m) -> case Map.lookup version m of
       Just vdata -> return $ vdata & cabalFile
+      Nothing -> throw $ VersionNotFound name version
+    Nothing -> throw $ PkgNotFound name
+
+-- | Get a specific cabal file without applying preferred-version ranges.
+--
+-- Upgrade candidates should use 'getCabal' so deprecated Hackage versions stay
+-- hidden. Reverse dependency checks need this exact lookup because [extra] can
+-- temporarily contain a version that Hackage later deprecated.
+getCabalIncludingDeprecated :: Members [RawHackageEnv, WithMyErr] r => PackageName -> Version -> Sem r GenericPackageDescription
+getCabalIncludingDeprecated name version = do
+  db <- ask @RawHackageDB
+  case Map.lookup name db of
+    Just packageData -> case Map.lookup version (Unparsed.versions packageData) of
+      Just vdata ->
+        case parseGenericPackageDescriptionMaybe (Unparsed.cabalFile vdata) of
+          Just cabal -> pure cabal
+          Nothing -> throw $ CabalNoParse name version
       Nothing -> throw $ VersionNotFound name version
     Nothing -> throw $ PkgNotFound name
 
