@@ -5,7 +5,7 @@ The changelog is available [on GitHub][2].
 
 ## Unreleased
 
-- Accept multiple targets with optional per-target versions in `arch-hs-rdepcheck`, combining results by reverse dependency and totaling failure counts
+- Accept multiple targets with optional per-target versions in `arch-hs-rdepcheck`, checking their candidate metadata as one upgrade set, combining results by reverse dependency, and totaling failure counts
 
 ## 0.15
 

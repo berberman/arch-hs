@@ -12,6 +12,7 @@ import Distribution.ArchHs.Exception
 import Distribution.ArchHs.ExtraDB (versionInExtra)
 import Distribution.ArchHs.Hackage (RawHackageDB)
 import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Name (toHackageName)
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.RDepCheck
 import Distribution.ArchHs.Types
@@ -40,18 +41,30 @@ checkTargets ::
   [(PackageName, Maybe Version)] ->
   Sem r FailureCounts
 checkTargets revision0 targets = do
+  let candidates = Map.fromList [(target, version) | (target, Just version) <- targets, length targets > 1]
   results <- forM targets $ \(target, mVersion) -> do
-    latest <- indexResults <$> reverseDependencyRangesWithSkips target
-    original <- indexResults <$> local @RawHackageDB (const revision0) (reverseDependencyRangesWithSkips target)
+    latest <- indexResults <$> reverseDependencyRangesWithCandidates candidates target
+    original <- indexResults <$> local @RawHackageDB (const revision0) (reverseDependencyRangesWithCandidates candidates target)
+    installed <- if Map.null candidates then pure latest else indexResults <$> reverseDependencyRangesWithSkips target
+    installedOriginal <- if Map.null candidates then pure original else indexResults <$> local @RawHackageDB (const revision0) (reverseDependencyRangesWithSkips target)
     versions <- forM mVersion $ \candidate -> do
       rawVersion <- versionInExtra target
       case simpleParsec rawVersion of
         Just current -> pure (current, candidate)
         Nothing -> throw $ VersionNoParse rawVersion
+    let oldSources baseline name =
+          if Map.member (toHackageName name) candidates
+            then Just $ case (versions, Map.lookup name baseline) of
+              (Just (current, _), Just (Right dep)) -> fst <$> versionFailures (Just current) (reverseDepRanges dep)
+              _ -> []
+            else Nothing
+        originalResult name = Map.findWithDefault (Left $ PkgNotFound name) name original
+        noRanges (Right dep) = null $ reverseDepRanges dep
+        noRanges (Left _) = False
     pure $
       Map.mapWithKey
-        (\name latestResult -> [(target, versions, latestResult, Map.findWithDefault (Left $ PkgNotFound name) name original)])
-        latest
+        (\name latestResult -> [(target, versions, latestResult, originalResult name, (oldSources installed name, oldSources installedOriginal name))])
+        (Map.filterWithKey (\name result -> not $ Map.member (toHackageName name) candidates && noRanges result && noRanges (originalResult name)) latest)
   failures <- forM (Map.toList $ Map.unionsWith (<>) results) $ \(name, deps) -> do
     let checked =
           [ if length targets == 1
@@ -59,8 +72,8 @@ checkTargets revision0 targets = do
               else
                 checkReverseDepRevisionsWithHeader
                   (annCyan $ "Target:" <+> viaPretty target <> maybe mempty ((space <>) . viaPretty . snd) versions)
-                  versions latest original
-            | (target, versions, latest, original) <- deps
+                  oldSources versions latest original
+            | (target, versions, latest, original, oldSources) <- deps
           ]
         doc =
           if length targets == 1
@@ -109,27 +122,28 @@ checkReverseDepRevisions versions name latest original =
   case (latest, original) of
     (Left a, Left b) | show a == show b ->
       (annYellow $ "Skip" <+> pretty (unArchLinuxName name) <> colon <+> viaShow a, FailureCounts 0 0)
-    _ -> checkReverseDepRevisionsWithHeader (reverseDepHeader name) versions latest original
+    _ -> checkReverseDepRevisionsWithHeader (reverseDepHeader name) (Nothing, Nothing) versions latest original
 
 checkReverseDepRevisionsWithHeader ::
   Doc AnsiStyle ->
+  (Maybe [DepSrc], Maybe [DepSrc]) ->
   Maybe (Version, Version) ->
   Either MyException ReverseDep ->
   Either MyException ReverseDep ->
   (Doc AnsiStyle, FailureCounts)
-checkReverseDepRevisionsWithHeader header versions latest original
-  | sameResult latest original =
+checkReverseDepRevisionsWithHeader header (latestOld, originalOld) versions latest original
+  | sameResult latest original && latestOld == originalOld =
       case latest of
         Right dep ->
-          let (docs, counts) = checkRanges versions $ reverseDepRanges dep
+          let (docs, counts) = checkRangesWithOldFailures latestOld versions $ reverseDepRanges dep
            in (vsep $ header : docs, counts)
         Left err -> (vsep [header, indent 2 $ annYellow $ "unchecked:" <+> viaShow err], FailureCounts 0 0)
   | otherwise =
       ( vsep $
           header
-            : revisionDocs annCyan "latest revision" latest
-              <> revisionDocs annBlue "revision 0" original,
-        snd $ resultDetails latest
+            : revisionDocs annCyan "latest revision" latestOld latest
+              <> revisionDocs annBlue "revision 0" originalOld original,
+        snd $ resultDetails latestOld latest
       )
   where
     sameResult (Right a) (Right b) =
@@ -138,11 +152,11 @@ checkReverseDepRevisionsWithHeader header versions latest original
     sameResult (Left a) (Left b) = show a == show b
     sameResult _ _ = False
 
-    resultDetails (Right dep) = checkRanges versions $ reverseDepRanges dep
-    resultDetails (Left err) = ([indent 2 $ annYellow $ "unchecked:" <+> viaShow err], FailureCounts 0 0)
+    resultDetails oldSources (Right dep) = checkRangesWithOldFailures oldSources versions $ reverseDepRanges dep
+    resultDetails _ (Left err) = ([indent 2 $ annYellow $ "unchecked:" <+> viaShow err], FailureCounts 0 0)
 
-    revisionDocs style label result =
-      let (docs, counts) = resultDetails result
+    revisionDocs style label oldSources result =
+      let (docs, counts) = resultDetails oldSources result
           status = case (versions, result) of
             (Just _, Right _) -> space <> parens (prettyFailureCounts counts)
             _ -> mempty
@@ -152,8 +166,12 @@ reverseDepHeader :: ArchLinuxName -> Doc AnsiStyle
 reverseDepHeader name = annMagneta $ "Reverse dependency" <> colon <+> annBold (pretty $ unArchLinuxName name)
 
 checkRanges :: Maybe (Version, Version) -> [(DepSrc, VersionRange)] -> ([Doc AnsiStyle], FailureCounts)
-checkRanges versions ranges =
-  ( rangeDocs versions ranges <> errors,
+checkRanges = checkRangesWithOldFailures Nothing
+
+-- A coordinated upgrade compares failures with the installed dependent's ranges.
+checkRangesWithOldFailures :: Maybe [DepSrc] -> Maybe (Version, Version) -> [(DepSrc, VersionRange)] -> ([Doc AnsiStyle], FailureCounts)
+checkRangesWithOldFailures oldSources versions ranges =
+  ( rangeDocs oldSources versions ranges <> errors,
     FailureCounts (length newRanges) (length oldRanges)
   )
   where
@@ -161,7 +179,7 @@ checkRanges versions ranges =
       case versions of
         Nothing -> ([], [])
         Just (current, candidate) ->
-          partition (withinRange current . snd) $ versionFailures (Just candidate) ranges
+          partition (\(src, range) -> maybe (withinRange current range) (notElem src) oldSources) $ versionFailures (Just candidate) ranges
     errors =
       case versions of
         Nothing -> []
@@ -190,18 +208,18 @@ prettyFailureCounts FailureCounts {..} =
     <> comma
       <+> (if oldFailures == 0 then annGreen else annYellow) ("rdep-old=" <> pretty oldFailures)
 
-rangeDocs :: Maybe (Version, Version) -> [(DepSrc, VersionRange)] -> [Doc AnsiStyle]
-rangeDocs versions result =
-  [ indent 2 $ pretty s <> colon <+> rangeColor r (viaPretty r)
+rangeDocs :: Maybe [DepSrc] -> Maybe (Version, Version) -> [(DepSrc, VersionRange)] -> [Doc AnsiStyle]
+rangeDocs oldSources versions result =
+  [ indent 2 $ pretty s <> colon <+> rangeColor s r (viaPretty r)
     | (s, r) <- result
   ]
   where
-    rangeColor range =
+    rangeColor src range =
       case versions of
         Nothing -> annBlue
         Just (current, candidate)
           | withinRange candidate range -> annGreen
-          | withinRange current range -> annRed
+          | maybe (withinRange current range) (notElem src) oldSources -> annRed
           | otherwise -> annYellow
 
 versionErrors :: (Doc AnsiStyle -> Doc AnsiStyle) -> Doc AnsiStyle -> Version -> [(DepSrc, VersionRange)] -> [Doc AnsiStyle]

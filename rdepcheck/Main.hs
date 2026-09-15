@@ -37,6 +37,7 @@ main = printHandledIOException $
               (desc, _) <- reverseDependencyPackages extra target,
               Just version <- [simpleParsec $ _version desc]
           ]
+            <> [(target, version) | (target, Just version) <- optTargets, length optTargets > 1]
     (hackage, revision0) <- loadRawHackageRevisionsFromOptions optHackage packages
 
     printInfo "Start running..."

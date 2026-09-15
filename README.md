@@ -553,6 +553,8 @@ $ arch-hs-rdepcheck aeson 3.0 text
 
 Results are combined by reverse dependency: each dependent package appears once, with the ranges and revision comparisons labeled by target. The final counts combine all targets, and newly unmet ranges for any target cause a non-zero exit status.
 
+Candidate versions form one upgrade set. When a target depends on another target, its candidate version's Cabal metadata supplies the ranges, including newly added dependencies. Targets without a candidate version and other reverse dependencies keep their [extra] versions. Existing failures are identified using the installed dependent's ranges; revision comparisons use the corresponding revisions of the candidate and installed versions.
+
 When revisions differ, each revision's counts accompany its ranges:
 
 ```

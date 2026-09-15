@@ -67,6 +67,67 @@ main = hspec $ do
           _ -> pure ()
 
   describe "combined reverse dependency results" $ do
+    forM_
+      [ ("accepts coordinated upgrades", Just "<2", Just ">=2", RDepCheck.FailureCounts 0 0),
+        ("rejects incompatible candidates", Just "<2", Just "<2", RDepCheck.FailureCounts 1 0),
+        ("checks newly added dependencies", Nothing, Just "<2", RDepCheck.FailureCounts 1 0),
+        ("does not classify newly introduced failures as old", Just "<2", Just ">=3", RDepCheck.FailureCounts 1 0),
+        ("retains existing failure classification", Just "<1", Just "<1", RDepCheck.FailureCounts 0 1),
+        ("drops removed dependencies", Just "<2", Nothing, RDepCheck.FailureCounts 0 0)
+      ] $ \(label, installedRange, candidateRange, expected) ->
+        it label $ do
+          let (_, _, baseExtra, target) = syncDepCheckDBs [] [("shared", [Run], "<2")]
+              shared = mkPackageName "shared"
+              extra = case installedRange of
+                Just _ -> baseExtra
+                Nothing -> Map.adjust (\desc -> desc {_depends = []}) (toArchLinuxName shared) baseExtra
+              cabal name version range = B8.pack $ unlines $
+                ["cabal-version: 1.24", "name: " <> name, "version: " <> version, "build-type: Simple"]
+                  <> maybe [] (\r -> ["library", "  build-depends: Diff " <> r]) range
+              entries =
+                [ ("Diff/2.0/Diff.cabal", cabal "Diff" "2.0" Nothing),
+                  ("shared/1.0/shared.cabal", cabal "shared" "1.0" installedRange),
+                  ("shared/2.0/shared.cabal", cabal "shared" "2.0" candidateRange)
+                ]
+          withIndexEntries entries $ \path -> do
+            (latest, original) <- loadRawHackageRevisions [(target, parseVersion "2.0"), (shared, parseVersion "1.0"), (shared, parseVersion "2.0")] path
+            (result, _) <- captureStdout $ runRdepTargets extra latest original [(target, Just $ parseVersion "2.0"), (shared, Just $ parseVersion "2.0")]
+            case result of
+              Right counts -> counts `shouldBe` expected
+              Left err -> expectationFailure $ show err
+            -- Omitting a candidate keeps that dependent at its installed version.
+            (installedResult, _) <- captureStdout $ runRdepTargets extra latest original [(target, Just $ parseVersion "2.0"), (shared, Nothing)]
+            let installedFailures = case installedRange of
+                  Nothing -> RDepCheck.FailureCounts 0 0
+                  Just "<1" -> RDepCheck.FailureCounts 0 1
+                  Just _ -> RDepCheck.FailureCounts 1 0
+            case installedResult of
+              Right counts -> counts `shouldBe` installedFailures
+              Left err -> expectationFailure $ show err
+
+    it "compares candidate revisions and counts only the latest candidate's failures" $ do
+      let (_, _, extra, target) = syncDepCheckDBs [] [("shared", [Run], "<2")]
+          shared = mkPackageName "shared"
+          cabal name version range = B8.pack $ unlines $
+            ["cabal-version: 1.24", "name: " <> name, "version: " <> version, "build-type: Simple"]
+              <> maybe [] (\r -> ["library", "  build-depends: Diff " <> r]) range
+          entries =
+            [ ("Diff/2.0/Diff.cabal", cabal "Diff" "2.0" Nothing),
+              ("shared/1.0/shared.cabal", cabal "shared" "1.0" $ Just "<2"),
+              ("shared/2.0/shared.cabal", cabal "shared" "2.0" $ Just "<2"),
+              ("shared/2.0/shared.cabal", cabal "shared" "2.0" $ Just ">=2")
+            ]
+      withIndexEntries entries $ \path -> do
+        (latest, original) <- loadRawHackageRevisions [(target, parseVersion "2.0"), (shared, parseVersion "1.0"), (shared, parseVersion "2.0")] path
+        (result, output) <- captureStdout $ runRdepTargets extra latest original [(target, Just $ parseVersion "2.0"), (shared, Just $ parseVersion "2.0")]
+        case result of
+          Right counts -> counts `shouldBe` RDepCheck.FailureCounts 0 0
+          Left err -> expectationFailure $ show err
+        output `shouldContain` "latest revision"
+        output `shouldContain` "revision 0"
+        output `shouldContain` ">=2"
+        output `shouldContain` "<2"
+
     it "prints a shared dependent once and totals each target's failures" $ do
       let (_, _, baseExtra, target) = syncDepCheckDBs [] [("shared", [Run], "<2")]
           other = mkPackageName "other"
@@ -75,8 +136,9 @@ main = hspec $ do
           extra = Map.adjust (\desc -> desc {_depends = _depends desc <> [PkgDependent otherArch Nothing]}) shared $
             Map.insert otherArch ((baseExtra Map.! toArchLinuxName target) {_name = otherArch}) baseExtra
           cabal = B8.pack $ unlines ["cabal-version: 1.24", "name: shared", "version: 1.0", "build-type: Simple", "library", "  build-depends: Diff <2, other <1"]
-      withIndexEntries [("shared/1.0/shared.cabal", cabal)] $ \path -> do
-        (latest, original) <- loadRawHackageRevisions [(mkPackageName "shared", parseVersion "1.0")] path
+          candidate name = B8.pack $ unlines ["cabal-version: 1.24", "name: " <> name, "version: 2.0", "build-type: Simple"]
+      withIndexEntries [("shared/1.0/shared.cabal", cabal), ("Diff/2.0/Diff.cabal", candidate "Diff"), ("other/2.0/other.cabal", candidate "other")] $ \path -> do
+        (latest, original) <- loadRawHackageRevisions [(mkPackageName "shared", parseVersion "1.0"), (target, parseVersion "2.0"), (other, parseVersion "2.0")] path
         (result, output) <- captureStdout $ runRdepTargets extra latest original [(target, Just $ parseVersion "2.0"), (other, Just $ parseVersion "2.0")]
         case result of
           Right counts -> counts `shouldBe` RDepCheck.FailureCounts 1 1

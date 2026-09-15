@@ -12,6 +12,7 @@ module Distribution.ArchHs.RDepCheck
     reverseDependencyPackages,
     reverseDependencyRanges,
     reverseDependencyRangesWithSkips,
+    reverseDependencyRangesWithCandidates,
     versionFailures,
   )
 where
@@ -87,20 +88,44 @@ reverseDependencyRangesWithSkips ::
     r =>
   PackageName ->
   Sem r ([ReverseDep], [SkippedReverseDep])
-reverseDependencyRangesWithSkips target = do
+reverseDependencyRangesWithSkips = reverseDependencyRangesWithCandidates Map.empty
+
+-- Candidate packages can add dependency edges absent from the repository DB.
+reverseDependencyRangesWithCandidates ::
+  Members
+    [ ExtraEnv,
+      RawHackageEnv,
+      KnownGHCVersion,
+      FlagAssignmentsEnv,
+      Trace,
+      DependencyRecord,
+      WithMyErr,
+      Embed IO
+    ]
+    r =>
+  Map.Map PackageName Version ->
+  PackageName ->
+  Sem r ([ReverseDep], [SkippedReverseDep])
+reverseDependencyRangesWithCandidates candidates target = do
   exists <- isInExtra target
   unless exists $ throw $ PkgNotFound target
   reverseDeps <- flip reverseDependencyPackages target <$> ask @ExtraDB
+  let packages =
+        [ (_name, simpleParsec _version, src)
+          | (PkgDesc {..}, src) <- reverseDeps,
+            Map.notMember (toHackageName _name) candidates
+        ]
+          <> [(toArchLinuxName name, Just version, [Make, Check, Run]) | (name, version) <- Map.toList candidates, name /= target]
   results <-
-    forM reverseDeps $ \(PkgDesc {..}, src) -> do
+    forM packages $ \(name, version, src) -> do
       eCabal <-
         try @MyException $
-          getCabalIncludingDeprecated (toHackageName _name) =<< case simpleParsec _version of
+          getCabalIncludingDeprecated (toHackageName name) =<< case version of
             Just v -> pure v
-            _ -> throw $ VersionNoParse _version
+            _ -> throw . VersionNoParse =<< versionInExtra (toHackageName name)
       case eCabal of
-        Right cabal -> Right . ReverseDep _name <$> getDepVersion cabal target src
-        Left e -> pure . Left $ SkippedReverseDep _name e
+        Right cabal -> Right . ReverseDep name <$> getDepVersion cabal target src
+        Left e -> pure . Left $ SkippedReverseDep name e
   pure $ case partitionEithers results of
     (skipped, reverseDeps') -> (reverseDeps', skipped)
 
