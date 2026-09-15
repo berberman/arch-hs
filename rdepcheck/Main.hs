@@ -3,7 +3,6 @@
 
 module Main (main) where
 
-import Args
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
 import Distribution.ArchHs.Core
@@ -18,6 +17,7 @@ import Distribution.ArchHs.Types
 import GHC.IO.Encoding (setLocaleEncoding)
 import GHC.IO.Encoding.UTF8 (utf8)
 import RDepCheck
+import RDepCheck.Args
 
 main :: IO ()
 main = printHandledIOException $
@@ -33,13 +33,14 @@ main = printHandledIOException $
     extra <- loadExtraDBFromOptions optExtraDB
     let packages =
           [ (toHackageName $ _name desc, version)
-            | (desc, _) <- reverseDependencyPackages extra optPackageName,
+            | (target, _) <- optTargets,
+              (desc, _) <- reverseDependencyPackages extra target,
               Just version <- [simpleParsec $ _version desc]
           ]
     (hackage, revision0) <- loadRawHackageRevisionsFromOptions optHackage packages
 
     printInfo "Start running..."
-    runCheck hackage extra optFlags (subsumeGHCVersion $ check revision0 optCheckVersion optPackageName) & printRdepcheckResult
+    runCheck hackage extra optFlags (subsumeGHCVersion $ checkTargets revision0 optTargets) & printRdepcheckResult
 
 runCheck ::
   RawHackageDB ->

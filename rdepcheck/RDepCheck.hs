@@ -3,7 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
-module RDepCheck (FailureCounts (..), check, checkReverseDep, checkReverseDepRevisions, printRdepcheckResult) where
+module RDepCheck (FailureCounts (..), check, checkTargets, checkReverseDep, checkReverseDepRevisions, printRdepcheckResult) where
 
 import Control.Monad (forM)
 import Data.List (partition)
@@ -24,6 +24,52 @@ data FailureCounts = FailureCounts
   }
   deriving stock (Eq, Show)
 
+checkTargets ::
+  Members
+    [ ExtraEnv,
+      RawHackageEnv,
+      KnownGHCVersion,
+      FlagAssignmentsEnv,
+      Trace,
+      DependencyRecord,
+      WithMyErr,
+      Embed IO
+    ]
+    r =>
+  RawHackageDB ->
+  [(PackageName, Maybe Version)] ->
+  Sem r FailureCounts
+checkTargets revision0 targets = do
+  results <- forM targets $ \(target, mVersion) -> do
+    latest <- indexResults <$> reverseDependencyRangesWithSkips target
+    original <- indexResults <$> local @RawHackageDB (const revision0) (reverseDependencyRangesWithSkips target)
+    versions <- forM mVersion $ \candidate -> do
+      rawVersion <- versionInExtra target
+      case simpleParsec rawVersion of
+        Just current -> pure (current, candidate)
+        Nothing -> throw $ VersionNoParse rawVersion
+    pure $
+      Map.mapWithKey
+        (\name latestResult -> [(target, versions, latestResult, Map.findWithDefault (Left $ PkgNotFound name) name original)])
+        latest
+  failures <- forM (Map.toList $ Map.unionsWith (<>) results) $ \(name, deps) -> do
+    let checked =
+          [ if length targets == 1
+              then checkReverseDepRevisions versions name latest original
+              else
+                checkReverseDepRevisionsWithHeader
+                  (annCyan $ "Target:" <+> viaPretty target <> maybe mempty ((space <>) . viaPretty . snd) versions)
+                  versions latest original
+            | (target, versions, latest, original) <- deps
+          ]
+        doc =
+          if length targets == 1
+            then vsep $ fst <$> checked
+            else vsep $ reverseDepHeader name : (indent 2 . fst <$> checked)
+    embed $ putDoc $ doc <> line
+    pure $ FailureCounts (sum $ newFailures . snd <$> checked) (sum $ oldFailures . snd <$> checked)
+  pure $ FailureCounts (sum $ newFailures <$> failures) (sum $ oldFailures <$> failures)
+
 check ::
   Members
     [ ExtraEnv,
@@ -40,20 +86,7 @@ check ::
   Maybe Version ->
   PackageName ->
   Sem r FailureCounts
-check revision0 mVersion target = do
-  latest <- indexResults <$> reverseDependencyRangesWithSkips target
-  original <- indexResults <$> local @RawHackageDB (const revision0) (reverseDependencyRangesWithSkips target)
-  versions <- forM mVersion $ \candidate -> do
-    rawVersion <- versionInExtra target
-    case simpleParsec rawVersion of
-      Just current -> pure (current, candidate)
-      Nothing -> throw $ VersionNoParse rawVersion
-  failures <- forM (Map.toList latest) $ \(name, latestResult) -> do
-    let originalResult = Map.findWithDefault (Left $ PkgNotFound name) name original
-        (doc, counts) = checkReverseDepRevisions versions name latestResult originalResult
-    embed $ putDoc $ doc <> line
-    pure counts
-  pure $ FailureCounts (sum $ newFailures <$> failures) (sum $ oldFailures <$> failures)
+check revision0 mVersion target = checkTargets revision0 [(target, mVersion)]
 
 indexResults :: ([ReverseDep], [SkippedReverseDep]) -> Map.Map ArchLinuxName (Either MyException ReverseDep)
 indexResults (checked, skipped) =
@@ -72,14 +105,28 @@ checkReverseDepRevisions ::
   Either MyException ReverseDep ->
   Either MyException ReverseDep ->
   (Doc AnsiStyle, FailureCounts)
-checkReverseDepRevisions versions name latest original
+checkReverseDepRevisions versions name latest original =
+  case (latest, original) of
+    (Left a, Left b) | show a == show b ->
+      (annYellow $ "Skip" <+> pretty (unArchLinuxName name) <> colon <+> viaShow a, FailureCounts 0 0)
+    _ -> checkReverseDepRevisionsWithHeader (reverseDepHeader name) versions latest original
+
+checkReverseDepRevisionsWithHeader ::
+  Doc AnsiStyle ->
+  Maybe (Version, Version) ->
+  Either MyException ReverseDep ->
+  Either MyException ReverseDep ->
+  (Doc AnsiStyle, FailureCounts)
+checkReverseDepRevisionsWithHeader header versions latest original
   | sameResult latest original =
       case latest of
-        Right dep -> checkReverseDep versions dep
-        Left err -> (annYellow $ "Skip" <+> pretty (unArchLinuxName name) <> colon <+> viaShow err, FailureCounts 0 0)
+        Right dep ->
+          let (docs, counts) = checkRanges versions $ reverseDepRanges dep
+           in (vsep $ header : docs, counts)
+        Left err -> (vsep [header, indent 2 $ annYellow $ "unchecked:" <+> viaShow err], FailureCounts 0 0)
   | otherwise =
       ( vsep $
-          reverseDepHeader name
+          header
             : revisionDocs annCyan "latest revision" latest
               <> revisionDocs annBlue "revision 0" original,
         snd $ resultDetails latest

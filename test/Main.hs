@@ -9,7 +9,7 @@ import Control.Exception (bracket, try)
 import Control.Monad (forM_, void)
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Conduit.Tar as Tar
-import Data.List (intercalate, isPrefixOf, sortOn)
+import Data.List (intercalate, isInfixOf, isPrefixOf, sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe, mapMaybe)
 import Diff (inRange)
@@ -17,6 +17,7 @@ import Distribution.ArchHs.Exception
 import Distribution.ArchHs.ExtraDB (defaultExtraDBPath, loadExtraDB)
 import Distribution.ArchHs.Hackage (getCabalIncludingDeprecated, getNewerVersions, loadRawHackageRevisions)
 import Distribution.ArchHs.Name (isGHCLibs, isHaskellPackage, toArchLinuxName, toHackageName)
+import Distribution.ArchHs.Options (ParserResult (..), defaultPrefs, execParserPure, info)
 import Distribution.ArchHs.PP (AnsiStyle, Doc)
 import Distribution.ArchHs.RDepCheck (DepSrc (..), ReverseDep (..))
 import Distribution.ArchHs.Types
@@ -28,21 +29,64 @@ import Distribution.Parsec (simpleParsec)
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.Version (Version)
 import Distribution.Types.VersionRange (VersionRange, anyVersion)
+import GHC.IO.Handle (hDuplicate, hDuplicateTo)
 import Polysemy (run, runM)
 import Polysemy.Error (runError)
 import Polysemy.Reader (runReader)
 import Polysemy.State (evalState)
 import Polysemy.Trace (ignoreTrace)
 import qualified RDepCheck
+import qualified RDepCheck.Args as RDepArgs
 import Submit.CSV
 import System.Directory (doesFileExist, getTemporaryDirectory, removeFile)
 import System.Exit (ExitCode (..))
-import System.IO (hClose, openBinaryTempFile)
+import System.IO (hClose, hFlush, openBinaryTempFile, stdout)
 import Test.Hspec
 import Utils (linkedHaskellPackageDescs)
 
 main :: IO ()
 main = hspec $ do
+  describe "reverse dependency target arguments" $ do
+    forM_
+      [ (["aeson"], [("aeson", Nothing)]),
+        (["aeson", "3.0"], [("aeson", Just "3.0")]),
+        (["aeson", "text"], [("aeson", Nothing), ("text", Nothing)]),
+        (["aeson", "3.0", "text", "2.1"], [("aeson", Just "3.0"), ("text", Just "2.1")]),
+        (["aeson", "text", "2.1"], [("aeson", Nothing), ("text", Just "2.1")]),
+        (["aeson", "3.0", "text"], [("aeson", Just "3.0"), ("text", Nothing)])
+      ] $ \(args, expected) ->
+        it ("parses " <> unwords args) $
+          case execParserPure defaultPrefs (info RDepArgs.cmdOptions mempty) args of
+            Success (Right opts) ->
+              RDepArgs.optTargets opts `shouldBe` [(mkPackageName name, parseVersion <$> version) | (name, version) <- expected]
+            _ -> expectationFailure "expected valid targets"
+    forM_ [[], ["3.0"], ["aeson", "3.0", "2.1"], ["aeson", "3..0"]] $ \args ->
+      it ("rejects " <> show args) $
+        case execParserPure defaultPrefs (info RDepArgs.cmdOptions mempty) args of
+          Success (Right _) -> expectationFailure "expected invalid targets"
+          _ -> pure ()
+
+  describe "combined reverse dependency results" $ do
+    it "prints a shared dependent once and totals each target's failures" $ do
+      let (_, _, baseExtra, target) = syncDepCheckDBs [] [("shared", [Run], "<2")]
+          other = mkPackageName "other"
+          otherArch = toArchLinuxName other
+          shared = toArchLinuxName $ mkPackageName "shared"
+          extra = Map.adjust (\desc -> desc {_depends = _depends desc <> [PkgDependent otherArch Nothing]}) shared $
+            Map.insert otherArch ((baseExtra Map.! toArchLinuxName target) {_name = otherArch}) baseExtra
+          cabal = B8.pack $ unlines ["cabal-version: 1.24", "name: shared", "version: 1.0", "build-type: Simple", "library", "  build-depends: Diff <2, other <1"]
+      withIndexEntries [("shared/1.0/shared.cabal", cabal)] $ \path -> do
+        (latest, original) <- loadRawHackageRevisions [(mkPackageName "shared", parseVersion "1.0")] path
+        (result, output) <- captureStdout $ runRdepTargets extra latest original [(target, Just $ parseVersion "2.0"), (other, Just $ parseVersion "2.0")]
+        case result of
+          Right counts -> counts `shouldBe` RDepCheck.FailureCounts 1 1
+          Left err -> expectationFailure $ show err
+        length (filter (isInfixOf "Reverse dependency:") $ lines output) `shouldBe` 1
+        output `shouldContain` "Target: Diff 2.0"
+        output `shouldContain` "Target: other 2.0"
+        output `shouldContain` "rdep:"
+        output `shouldContain` "rdep-old:"
+
   describe "live pacman extra database" $ do
     it "loads current extra.db and finds parseable Haskell package metadata" $ do
       extra <- loadLiveExtraDB
@@ -496,6 +540,10 @@ runRdepCheck extra raw = runRdepCheckRevisions extra raw raw
 
 runRdepCheckRevisions :: ExtraDB -> RawHackage.HackageDB -> RawHackage.HackageDB -> Maybe Version -> PackageName -> IO (Either MyException RDepCheck.FailureCounts)
 runRdepCheckRevisions extra latest original version name =
+  runRdepTargets extra latest original [(name, version)]
+
+runRdepTargets :: ExtraDB -> RawHackage.HackageDB -> RawHackage.HackageDB -> [(PackageName, Maybe Version)] -> IO (Either MyException RDepCheck.FailureCounts)
+runRdepTargets extra latest original targets =
   runM
     . runError @MyException
     . evalState (Map.empty :: Map.Map PackageName [VersionRange])
@@ -504,7 +552,18 @@ runRdepCheckRevisions extra latest original version name =
     . runReader (parseVersion "9.6.6")
     . runReader latest
     . runReader extra
-    $ RDepCheck.check original version name
+    $ RDepCheck.checkTargets original targets
+
+captureStdout :: IO a -> IO (a, String)
+captureStdout action = do
+  tmp <- getTemporaryDirectory
+  bracket (openBinaryTempFile tmp "arch-hs-output") (\(path, handle) -> hClose handle >> removeFile path) $ \(path, handle) -> do
+    result <- bracket (hDuplicate stdout) (\saved -> hFlush stdout >> hDuplicateTo saved stdout >> hClose saved) $ \_ -> do
+      hDuplicateTo handle stdout
+      action
+    hClose handle
+    output <- B8.readFile path
+    pure (result, B8.unpack output)
 
 revisionComparison :: Maybe Version -> String -> String -> (Doc AnsiStyle, RDepCheck.FailureCounts)
 revisionComparison candidate latest original =

@@ -543,6 +543,16 @@ Reverse dependency range check(s) failed: rdep=60, rdep-old=8
 
 This example assumes the current [extra] version is 2.2.3.0. If only existing failures remain, the command prints a warning such as `Existing reverse dependency range failure(s): rdep=0, rdep-old=8` and exits successfully. Ranges satisfied by the candidate are not counted, even if they reject the current version.
 
+Pass multiple targets to check them together. Each target can have its own optional candidate version:
+
+```
+$ arch-hs-rdepcheck aeson text
+$ arch-hs-rdepcheck aeson 3.0 text 2.1
+$ arch-hs-rdepcheck aeson 3.0 text
+```
+
+Results are combined by reverse dependency: each dependent package appears once, with the ranges and revision comparisons labeled by target. The final counts combine all targets, and newly unmet ranges for any target cause a non-zero exit status.
+
 When revisions differ, each revision's counts accompany its ranges:
 
 ```

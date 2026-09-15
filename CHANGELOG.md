@@ -3,6 +3,10 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## Unreleased
+
+- Accept multiple targets with optional per-target versions in `arch-hs-rdepcheck`, combining results by reverse dependency and totaling failure counts
+
 ## 0.15
 
 - Handle unsupported Cabal formats in `arch-hs-sync` using Hackage index metadata for version checks and marking unparseable `--depcheck` candidates as unchecked
