@@ -12,6 +12,7 @@ module Distribution.ArchHs.Hackage
     loadRawHackageDB,
     loadRawHackageRevisions,
     loadHackageDBs,
+    loadHackageDBsWithRevisions,
     insertDB,
     parseCabalFile,
     getLatestCabal,
@@ -32,6 +33,7 @@ import qualified Data.ByteString as BS
 import qualified Data.Conduit.Tar as Tar
 import Data.List (maximumBy)
 import qualified Data.Map as Map
+import qualified Data.Map.Strict as StrictMap
 import Data.Maybe (catMaybes, fromJust)
 import Data.Ord (comparing)
 import Distribution.ArchHs.Exception
@@ -39,6 +41,7 @@ import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (getPkgName, getPkgVersion)
 import Distribution.Hackage.DB (HackageDB, VersionData (VersionData, cabalFile), readTarball, tarballHashes)
+import qualified Distribution.Hackage.DB.Builder as Build
 import Distribution.Hackage.DB.Path (cabalStateDir)
 import qualified Distribution.Hackage.DB.Parsed as Parsed
 import qualified Distribution.Hackage.DB.Unparsed as Unparsed
@@ -136,6 +139,42 @@ loadHackageDBs :: FilePath -> IO (HackageDB, RawHackageDB)
 loadHackageDBs path = do
   raw <- loadRawHackageDB path
   pure (Parsed.parseDB raw, raw)
+
+-- Keep both fields strict so a long index does not accumulate update thunks.
+data RevisionIndex = RevisionIndex !RawHackageDB !(Map.Map (PackageName, Version) BS.ByteString)
+
+-- | Read preferred versions, latest cabal files, and revision 0 in one pass.
+-- Delegate metadata handling to hackage-db; revision 0 changes only cabal files.
+loadHackageDBsWithRevisions :: FilePath -> IO (HackageDB, RawHackageDB, RawHackageDB)
+loadHackageDBsWithRevisions path = do
+  entries <- Build.readTarball path
+  RevisionIndex latest originals <- Build.parseTarball revisionBuilder Nothing entries (RevisionIndex Map.empty Map.empty)
+  let original = StrictMap.mapWithKey
+        (\name packageData -> packageData
+          { Unparsed.versions = StrictMap.mapWithKey
+              (\version details -> details
+                { Unparsed.cabalFile = Map.findWithDefault (Unparsed.cabalFile details) (name, version) originals
+                })
+              (Unparsed.versions packageData)
+          })
+        latest
+  -- Release the temporary first-revision index before planning starts.
+  original `seq` pure (Parsed.parseDB latest, latest, original)
+
+revisionBuilder :: Build.Builder IO RevisionIndex
+revisionBuilder = Build.Builder
+  { Build.insertPreferredVersions = \name time bytes (RevisionIndex latest originals) -> do
+      latest' <- Build.insertPreferredVersions Unparsed.builder name time bytes latest
+      pure $ RevisionIndex latest' originals,
+    Build.insertCabalFile = \name version time bytes (RevisionIndex latest originals) -> do
+      latest' <- Build.insertCabalFile Unparsed.builder name version time bytes latest
+      let first = Unparsed.cabalFile $ Unparsed.versions (latest' Map.! name) Map.! version
+          originals' = StrictMap.insertWith (\_ previous -> previous) (name, version) first originals
+      pure $ RevisionIndex latest' originals',
+    Build.insertMetaFile = \name version time bytes (RevisionIndex latest originals) -> do
+      latest' <- Build.insertMetaFile Unparsed.builder name version time bytes latest
+      pure $ RevisionIndex latest' originals
+  }
 
 -- | Insert a 'GenericPackageDescription' into 'HackageDB'.
 insertDB :: GenericPackageDescription -> HackageDB -> HackageDB

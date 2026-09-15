@@ -5,6 +5,10 @@ The changelog is available [on GitHub][2].
 
 ## Unreleased
 
+- Compare latest Cabal revisions with revision 0 in `arch-hs-plan`, showing differences for the selected update set while keeping planning decisions based on the latest revisions
+
+- Add `arch-hs-plan` to check coordinated updates against dependencies and reverse dependencies, with optional search that automatically expands to blocking packages using the fewest incremental release steps
+
 - Accept multiple targets with optional per-target versions in `arch-hs-rdepcheck`, checking their candidate metadata as one upgrade set, combining results by reverse dependency, and totaling failure counts
 
 ## 0.15

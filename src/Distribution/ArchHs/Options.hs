@@ -29,6 +29,7 @@ module Distribution.ArchHs.Options
     -- * Readers
     optPackageNameReader,
     optVersionReader,
+    parsePackageTargets,
     module Options.Applicative.Simple,
   )
 where
@@ -41,6 +42,17 @@ import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Options.Applicative.Simple
+
+-- Each package may be followed by a candidate version.
+parsePackageTargets :: [String] -> Either String [(PackageName, Maybe Version)]
+parsePackageTargets [] = Right []
+parsePackageTargets (target : rest) =
+  case simpleParsec target of
+    Nothing -> Left $ "Invalid target package name: " <> target
+    Just name -> case rest of
+      version : remaining | Just candidate <- simpleParsec version ->
+        ((name, Just candidate) :) <$> parsePackageTargets remaining
+      _ -> ((name, Nothing) :) <$> parsePackageTargets rest
 
 -----------------------------------------------------------------------------
 
@@ -149,6 +161,7 @@ data HackageDBOptions = HackageDBOptions
   { loadHackageDBFromOptions :: IO HackageDB,
     loadRawHackageDBFromOptions :: IO RawHackageDB,
     loadHackageDBsFromOptions :: IO (HackageDB, RawHackageDB),
+    loadHackageDBsWithRevisionsFromOptions :: IO (HackageDB, RawHackageDB, RawHackageDB),
     loadRawHackageRevisionsFromOptions :: [(PackageName, Version)] -> IO (RawHackageDB, RawHackageDB)
   }
 
@@ -177,6 +190,7 @@ hackageDBOptionsParser =
         { loadHackageDBFromOptions = withHackagePath s loadHackageDB,
           loadRawHackageDBFromOptions = withHackagePath s loadRawHackageDB,
           loadHackageDBsFromOptions = withHackagePath s loadHackageDBs,
+          loadHackageDBsWithRevisionsFromOptions = withHackagePath s loadHackageDBsWithRevisions,
           loadRawHackageRevisionsFromOptions = \packages -> withHackagePath s (loadRawHackageRevisions packages)
         }
 

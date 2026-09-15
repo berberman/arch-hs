@@ -569,6 +569,38 @@ Reverse dependency: haskell-example
 
 The final totals and exit status use the latest revision; revision 0 is shown for comparison. If only one revision can be parsed, its ranges are still shown and the other revision is labeled `unchecked` with the lookup error.
 
+## Planning coordinated updates
+
+`arch-hs-plan` checks a proposed update set against both its Cabal dependencies and the reverse dependencies that stay in [extra]:
+
+```
+$ arch-hs-plan aeson 2.2.3.0 scientific 0.3.8.0
+$ arch-hs-plan aeson scientific
+```
+
+Without `--solve`, explicit versions are checked exactly. When a version is omitted, the command selects the next newer preferred Hackage release. Every target uses its candidate metadata and the proposed versions of other targets. Packages outside the target set retain their installed versions. Library, executable, test, setup, and Haskell build-tool dependencies are included, using the installed GHC and the usual `-f PACKAGE:FLAG:true|false` assignments.
+
+Add `--solve` to search for a compatible combination:
+
+```
+$ arch-hs-plan --solve aeson scientific
+$ arch-hs-plan --solve aeson 2.2.3.0 scientific
+```
+
+In solve mode, explicit versions are minimums. The search starts at those minimums (or the next newer preferred release for an unversioned target) and advances through preferred releases in ascending order. When a dependency or reverse dependency blocks the plan, the solver can automatically add that package to the update set. It then checks the added package's dependencies and reverse dependencies, expanding recursively as needed. A missing Haskell dependency available on Hackage can also be added as a new package.
+
+The solver minimizes the **total number of release steps beyond the starting set**. Adding a package at its next preferred release costs one step; each further release costs another. For a new package, its earliest preferred release costs one step. Alternative combinations keep their own update sets, so an added package does not force unrelated branches to update it. If one step for A avoids three steps for B, the one-step solution is chosen. Equal-cost solutions are ordered deterministically by package name and version. Explicit minimums may name deprecated versions; automatically selected versions respect Hackage's preferred-version ranges. No package is downgraded.
+
+The output lists installed and proposed versions, marking automatically included packages with `(added by solver)`. It also shows the number of candidate sets checked and any blocking dependency or reverse dependency ranges. If no working set can be found, it reports the remaining conflicts and exits unsuccessfully.
+
+Plans with version changes also print a commit message listing all updated packages and versions on one comma-separated line, including packages added by the solver. Blocked plans include this message too, so their updates can be tried manually.
+
+The planner compares the latest Cabal revision with revision 0 for the chosen packages and their reverse dependencies, showing differing ranges and results. Version selection and the final status use the latest revision; revision 0 is shown for comparison.
+
+Existing repository incompatibilities are yellow `dep-old` or `rdep-old` warnings and do not block a plan. Missing metadata for existing reverse dependencies is reported as an unchecked warning. Newly introduced incompatibilities and missing or unparseable candidate metadata still block the plan.
+
+The planner reads the latest revisions from the local Hackage index and accepts the usual `--extra` and `--hackage` paths. It does not build or install packages, validate non-Haskell system dependencies or ABI compatibility, or determine a build order. GHC and its bundled libraries remain fixed. Refresh the local databases before planning against newer repository or Hackage metadata.
+
 ## Sync
 
 For Hackage distribution maintainers, `arch-hs-sync check` compares Haskell package versions in [extra] with Hackage:
@@ -635,7 +667,7 @@ Pass `--alpm` to load pacman databases through libalpm explicitly:
 arch-hs --alpm -o ~/test gi-gdk
 ```
 
-For commands that load only `extra.db`, such as `arch-hs-diff`, `arch-hs-sync`, and `arch-hs-rdepcheck`, `--alpm` applies to `extra.db`.
+For commands that load only `extra.db`, such as `arch-hs-diff`, `arch-hs-sync`, `arch-hs-rdepcheck`, and `arch-hs-plan`, `--alpm` applies to `extra.db`.
 For `arch-hs`, `--alpm` applies to both `extra.db` and files dbs.
 When `--alpm` is used, explicit `--extra` and `--files` paths are ignored.
 

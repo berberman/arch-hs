@@ -15,7 +15,7 @@ import Data.Maybe (listToMaybe, mapMaybe)
 import Diff (inRange)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.ExtraDB (defaultExtraDBPath, loadExtraDB)
-import Distribution.ArchHs.Hackage (getCabalIncludingDeprecated, getNewerVersions, loadRawHackageRevisions)
+import Distribution.ArchHs.Hackage (getCabalIncludingDeprecated, getNewerVersions, loadHackageDBsWithRevisions, loadRawHackageDB, loadRawHackageRevisions)
 import Distribution.ArchHs.Name (isGHCLibs, isHaskellPackage, toArchLinuxName, toHackageName)
 import Distribution.ArchHs.Options (ParserResult (..), defaultPrefs, execParserPure, info)
 import Distribution.ArchHs.PP (AnsiStyle, Doc)
@@ -30,6 +30,7 @@ import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName
 import Distribution.Types.Version (Version)
 import Distribution.Types.VersionRange (VersionRange, anyVersion)
 import GHC.IO.Handle (hDuplicate, hDuplicateTo)
+import qualified PlanSpec
 import Polysemy (run, runM)
 import Polysemy.Error (runError)
 import Polysemy.Reader (runReader)
@@ -46,6 +47,7 @@ import Utils (linkedHaskellPackageDescs)
 
 main :: IO ()
 main = hspec $ do
+  PlanSpec.spec
   describe "reverse dependency target arguments" $ do
     forM_
       [ (["aeson"], [("aeson", Nothing)]),
@@ -333,6 +335,45 @@ main = hspec $ do
         $ \(counts, expected) -> do
           result <- try @ExitCode $ RDepCheck.printRdepcheckResult $ pure $ Right counts
           result `shouldBe` expected
+
+  describe "Hackage index revision loading" $ do
+    it "retains first cabal files while preserving latest metadata and preferred versions" $ do
+      let name = mkPackageName "sample"
+          version = parseVersion "1.0"
+          original = B8.pack $ unlines ["cabal-version: 1.24", "name: sample", "version: 1.0", "library", "  build-depends: base <5"]
+          latest = B8.pack $ unlines ["cabal-version: 1.24", "name: sample", "version: 1.0", "library", "  build-depends: base <6"]
+          unchanged = B8.pack $ unlines ["cabal-version: 1.24", "name: sample", "version: 2.0"]
+          entries =
+            [ ("sample/1.0/package.json", B8.pack "{}"),
+              ("sample/1.0/sample.cabal", original),
+              ("sample/preferred-versions", B8.pack "sample >=2"),
+              ("sample/2.0/sample.cabal", unchanged),
+              ("sample/1.0/sample.cabal", latest),
+              ("sample/1.0/package.json", B8.pack "{ }"),
+              ("sample/preferred-versions", B8.pack "sample <2"),
+              ("metadata-only/1.0/package.json", B8.pack "{}")
+            ]
+          getVersion raw release = RawHackage.versions (raw Map.! name) Map.! release
+      withIndexEntries entries $ \path -> do
+        expected <- loadRawHackageDB path
+        (preferred, raw, revision0) <- loadHackageDBsWithRevisions path
+        raw `shouldBe` expected
+        Map.keys (preferred Map.! name) `shouldBe` [version]
+        RawHackage.cabalFile (getVersion raw version) `shouldBe` latest
+        RawHackage.cabalFile (getVersion revision0 version) `shouldBe` original
+        RawHackage.metaFile (getVersion revision0 version) `shouldBe` B8.pack "{ }"
+        RawHackage.preferredVersions (revision0 Map.! name) `shouldBe` B8.pack "sample <2"
+        getVersion revision0 (parseVersion "2.0") `shouldBe` getVersion raw (parseVersion "2.0")
+        revision0 Map.! mkPackageName "metadata-only" `shouldBe` raw Map.! mkPackageName "metadata-only"
+
+    it "does not mistake an empty revision 0 for an unseen cabal file" $ do
+      let name = mkPackageName "sample"
+          version = parseVersion "1.0"
+          latest = B8.pack $ unlines ["cabal-version: 1.24", "name: sample", "version: 1.0"]
+      withIndexEntries [("sample/1.0/sample.cabal", B8.empty), ("sample/1.0/sample.cabal", latest)] $ \path -> do
+        (_, raw, revision0) <- loadHackageDBsWithRevisions path
+        RawHackage.cabalFile (RawHackage.versions (raw Map.! name) Map.! version) `shouldBe` latest
+        RawHackage.cabalFile (RawHackage.versions (revision0 Map.! name) Map.! version) `shouldBe` B8.empty
 
   describe "reverse dependency revision comparisons" $ do
     it "loads the first and last index entries for exact versions, including deprecated releases" $ do

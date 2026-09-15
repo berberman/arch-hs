@@ -27,17 +27,7 @@ cmdOptions =
     <*> some (strArgument (metavar "TARGET [VERSION]..."))
   where
     makeOptions flags extra hackage targets =
-      Options flags extra hackage <$> parseTargets targets
-
-parseTargets :: [String] -> Either String [(PackageName, Maybe Version)]
-parseTargets [] = Right []
-parseTargets (target : rest) =
-  case simpleParsec target of
-    Nothing -> Left $ "Invalid target package name: " <> target
-    Just name -> case rest of
-      version : remaining | Just candidate <- simpleParsec version ->
-        ((name, Just candidate) :) <$> parseTargets remaining
-      _ -> ((name, Nothing) :) <$> parseTargets rest
+      Options flags extra hackage <$> parsePackageTargets targets
 
 runArgsParser :: IO Options
 runArgsParser = do

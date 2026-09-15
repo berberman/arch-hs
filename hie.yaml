@@ -10,3 +10,5 @@ cradle:
       component: "arch-hs:exe:arch-hs-rdepcheck"
     - path: "./src"
       component: "arch-hs"
+    - path: "./plan"
+      component: "arch-hs:exe:arch-hs-plan"

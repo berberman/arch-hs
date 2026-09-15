@@ -1,0 +1,38 @@
+module Plan.Args (Options (..), cmdOptions, runArgsParser) where
+
+import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Options
+import Distribution.ArchHs.Types
+import Distribution.ArchHs.Utils (archHsVersion)
+import System.Exit (die)
+
+data Options = Options
+  { optFlags :: FlagAssignments,
+    optExtraDB :: ExtraDBOptions,
+    optHackage :: HackageDBOptions,
+    optSolve :: Bool,
+    optTargets :: [(PackageName, Maybe Version)]
+  }
+
+cmdOptions :: Parser (Either String Options)
+cmdOptions =
+  makeOptions
+    <$> optFlagAssignmentParser
+    <*> extraDBOptionsParser
+    <*> hackageDBOptionsParser
+    <*> switch (long "solve" <> help "Expand to blocking dependencies and reverse dependencies, minimizing release steps; supplied versions are minimums")
+    <*> some (strArgument (metavar "TARGET [VERSION]..."))
+  where
+    makeOptions flags extra hackage solve targets =
+      Options flags extra hackage solve <$> parsePackageTargets targets
+
+runArgsParser :: IO Options
+runArgsParser = do
+  (result, ()) <-
+    simpleOptions
+      archHsVersion
+      "arch-hs-plan - plan coordinated Haskell package updates"
+      "Check candidate dependencies and repository reverse dependencies as one update set. An omitted VERSION selects the next preferred Hackage release. With --solve, automatically add blocking dependencies and reverse dependencies and try successively newer preferred releases, minimizing total release steps. Without --solve, packages outside TARGETs stay at repository versions. Uses latest local Cabal revisions and the installed GHC; this checks metadata compatibility, not builds."
+      cmdOptions
+      empty
+  either die pure result

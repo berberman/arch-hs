@@ -168,6 +168,17 @@ executable arch-hs-rdepcheck
   build-depends:  arch-hs
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
 
+executable arch-hs-plan
+  import:         common-options
+  hs-source-dirs: plan
+  main-is:        Main.hs
+  other-modules:
+    Plan
+    Plan.Args
+
+  build-depends:  arch-hs
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+
 test-suite arch-hs-tests
   import:          common-options
   type:            exitcode-stdio-1.0
@@ -176,11 +187,15 @@ test-suite arch-hs-tests
     diff
     rdepcheck
     sync
+    plan
 
   main-is:         Main.hs
   other-modules:
     Check
     Diff
+    Plan
+    Plan.Args
+    PlanSpec
     RDepCheck
     RDepCheck.Args
     Submit.CSV
