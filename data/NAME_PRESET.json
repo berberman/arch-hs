@@ -22,6 +22,7 @@
   "dhall-json": "dhall-json",
   "dhall-lsp-server": "dhall-lsp-server",
   "dhall-yaml": "dhall-yaml",
+  "elm-compiler": "elm-compiler",
   "git-annex": "git-annex",
   "git-repair": "git-repair",
   "gitit": "gitit",
