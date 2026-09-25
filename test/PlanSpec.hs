@@ -79,6 +79,18 @@ spec = describe "coordinated update planner" $ do
       output `shouldContain` "dep-old: alpha requires bravo <2"
       output `shouldContain` "dep: alpha requires bravo <2"
 
+    it "shows revision-added upper bounds already exceeded by existing dependencies as warnings" $ do
+      let specs range =
+            [("alpha", ["bravo"], [("1.0", lib ["bravo >=0"]), ("1.1", lib ["bravo " <> range]), ("2.0", [])]), ("bravo", [], [])]
+      result <- runRevisionPlan True [("alpha", Nothing)] (specs "<1") (specs ">=0")
+      assertWorking result [("alpha", "1.1")]
+      length (Plan.planWarnings result) `shouldBe` 1
+      length (Plan.planRevisionNotes result) `shouldBe` 1
+      let output = show $ Plan.prettyPlanResult result
+      output `shouldContain` "latest revision: <1"
+      output `shouldContain` "dep-old: alpha requires bravo <1"
+      output `shouldContain` "revision 0: >=0 (ok)"
+
     it "does not duplicate semantically equivalent ranges" $ do
       let specs range = [("alpha", [], [("2.0", lib ["bravo " <> range])]), ("bravo", [], [])]
       result <- runRevisionPlan False [("alpha", Just "2.0")] (specs "<3") (specs ">=0 && <3")
@@ -130,6 +142,71 @@ spec = describe "coordinated update planner" $ do
     assertWorking result [("alpha", "2.0")]
     length (Plan.planWarnings result) `shouldBe` 1
     show (Plan.prettyPlanResult result) `shouldContain` "dep-old: alpha requires bravo <1"
+
+  forM_ ["<1", "<=0.9", "==0.9", ">=0.8 && <1", "<0.5 || ==0.9"] $ \range ->
+    it ("does not skip an incremental release for an already exceeded upper bound " <> range) $ do
+      result <- runPlan True [("alpha", Nothing)]
+        [ ("alpha", ["bravo"], [("1.0", lib ["bravo >=0"]), ("1.1", lib ["bravo " <> range]), ("2.0", lib ["bravo >=1"])]),
+          ("bravo", [], [])
+        ]
+      assertWorking result [("alpha", "1.1")]
+      length (Plan.planWarnings result) `shouldBe` 1
+      show (Plan.prettyPlanResult result) `shouldContain` "dep-old: alpha requires bravo"
+
+  it "keeps Stack 2.11.1 despite revised upper bounds already exceeded by repository dependencies" $ do
+    let dependencies =
+          [("casa-client", "0.0.4", ">=0", "<0.0.2"),
+           ("hpack", "0.38.0", ">=0", "<0.35.3"),
+           ("http-client-tls", "0.3.6.4", ">=0", "<0.3.6.2"),
+           ("http-download", "0.2.1.0", ">=0", "<0.2.1.0"),
+           ("optparse-applicative", "0.18.1.0", ">=0.17.0.0", "==0.17.0.0")]
+        (extra, raw) = fixture $
+          ("stack", [package | (package, _, _, _) <- dependencies],
+            [("2.9.3.1", lib [package <> " " <> range | (package, _, range, _) <- dependencies]),
+             ("2.11.1", lib [package <> " " <> range | (package, _, _, range) <- dependencies]),
+             ("2.15.7", lib [package <> " >=" <> release | (package, release, _, _) <- dependencies])])
+            : [(package, [], [(release, [])]) | (package, release, _, _) <- dependencies]
+        installed = Map.fromList $ (toArchLinuxName $ name "stack", "2.9.3.1")
+          : [(toArchLinuxName $ name package, release) | (package, release, _, _) <- dependencies]
+        repository = Map.mapWithKey (\package desc -> desc {_version = installed Map.! package, _rawVersion = installed Map.! package <> "-1"}) extra
+    result <- requireResult =<< runDB True [("stack", Nothing)] repository raw
+    assertWorking result [("stack", "2.11.1")]
+    length (Plan.planWarnings result) `shouldBe` length dependencies
+    Plan.plansTried result `shouldBe` 1
+
+  forM_ [">=2", "<1 || >=2", ">=2 && <1"] $ \range ->
+    it ("still blocks newly unmet lower bounds and exclusions " <> range) $ do
+      result <- runPlan False [("alpha", Just "2.0")]
+        [("alpha", ["bravo"], [("1.0", lib ["bravo >=0"]), ("2.0", lib ["bravo " <> range])]), ("bravo", [], [])]
+      assertBlocked result "dep: alpha requires bravo"
+      length (Plan.planWarnings result) `shouldBe` 0
+
+  it "still blocks already exceeded upper bounds on new dependencies" $ do
+    result <- runPlan False [("alpha", Just "2.0")]
+      [("alpha", [], [("2.0", lib ["bravo <1"])]), ("bravo", [], [])]
+    assertBlocked result "dep: alpha requires bravo <1"
+    length (Plan.planWarnings result) `shouldBe` 0
+
+  it "still blocks upper bounds newly exceeded by a dependency update" $ do
+    result <- runPlan False [("alpha", Just "2.0"), ("bravo", Just "2.0")]
+      [("alpha", ["bravo"], [("1.0", lib ["bravo >=0"]), ("2.0", lib ["bravo <2"])]), ("bravo", [], [("2.0", [])])]
+    assertBlocked result "dep: alpha requires bravo <2"
+    length (Plan.planWarnings result) `shouldBe` 0
+
+  it "does not infer existing dependencies when the installed metadata is unparseable" $ do
+    result <- runPlan False [("alpha", Just "2.0")]
+      [("alpha", ["bravo"], [("1.0", ["this is not valid cabal metadata"]), ("2.0", lib ["bravo <1"])]), ("bravo", [], [])]
+    assertBlocked result "dep: alpha requires bravo <1"
+    length (Plan.planWarnings result) `shouldBe` 0
+
+  it "does not propagate already exceeded upper bounds of added packages" $ do
+    result <- runPlan True [("alpha", Just "2.0")]
+      [ ("alpha", [], [("2.0", lib ["bravo ==2.0"])]),
+        ("bravo", ["charlie"], [("1.0", lib ["charlie >=0"]), ("2.0", lib ["charlie <1"])]),
+        ("charlie", [], [])
+      ]
+    assertWorking result [("alpha", "2.0"), ("bravo", "2.0")]
+    show (Plan.prettyPlanResult result) `shouldContain` "dep-old: bravo requires charlie <1"
 
   it "does not propagate existing transitive mismatches as hard requirements" $ do
     result <- runPlan True [("alpha", Just "2.0")]

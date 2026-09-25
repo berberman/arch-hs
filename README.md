@@ -599,6 +599,8 @@ The planner compares the latest Cabal revision with revision 0 for the chosen pa
 
 Existing repository incompatibilities are yellow `dep-old` or `rdep-old` warnings and do not block a plan. Missing metadata for existing reverse dependencies is reported as an unchecked warning. Newly introduced incompatibilities and missing or unparseable candidate metadata still block the plan.
 
+For dependencies already used by the installed package in the same dependency category, candidate upper bounds already exceeded by the repository version are also warnings, even if the installed package's metadata omitted those bounds. This keeps incremental releases available instead of skipping ahead solely to accommodate an already newer dependency. New dependencies, newly unmet lower bounds, and dependency updates that newly cross an upper bound still block the plan. Warnings do not establish build compatibility.
+
 The planner reads the latest revisions from the local Hackage index and accepts the usual `--extra` and `--hackage` paths. It does not build or install packages, validate non-Haskell system dependencies or ABI compatibility, or determine a build order. GHC and its bundled libraries remain fixed. Refresh the local databases before planning against newer repository or Hackage metadata.
 
 ## Sync

@@ -75,8 +75,9 @@ currentVersion name = do
 
 data DependencyCache = DependencyCache
   { cachedDependencies :: Map.Map (PackageName, Version) (Either MyException (VersionedList, VersionedList)),
-    cachedExistingFailures :: Map.Map PackageName (Set.Set (DepSrc, PackageName))
+    cachedExistingDependencies :: Map.Map PackageName ExistingDependencies
   }
+type ExistingDependencies = Map.Map (DepSrc, PackageName) (VersionRange, Maybe Version)
 type ReverseChecks = [(PackageName, [ReverseDep], [SkippedReverseDep])]
 
 data SearchCache = SearchCache
@@ -312,7 +313,7 @@ repairChoices movable indices problems cache = foldM repair ([], cache) problems
     acceptsCurrent _ _ _ _ [] dependencies = pure (False, dependencies)
     acceptsCurrent required owner dependency actual (candidate : rest) dependencies = do
       (parsed, dependencies') <- loadDependencies owner candidate dependencies
-      (existing, dependencies'') <- existingDependencyFailures owner dependencies'
+      (existing, dependencies'') <- existingDependencies owner dependencies'
       case parsed of
         -- Unknown metadata must not strengthen a lower bound.
         Left _ -> pure (True, dependencies'')
@@ -332,7 +333,7 @@ requestedRanges :: PlanEffects r => Map.Map PackageName [Version] -> DependencyC
 requestedRanges choices cache = foldM collect (Map.empty, cache) (Map.toList choices)
   where
     collect (required, known) (name, releases) = do
-      (existing, known') <- existingDependencyFailures name known
+      (existing, known') <- existingDependencies name known
       (common, known'') <- foldM
         (\(previous, parsed) release -> do
           (result, parsed') <- loadDependencies name release parsed
@@ -396,7 +397,7 @@ propagateRanges includeReverse requested initial = go (Map.keysSet $ searchRequi
 
 compatibleReleases :: PlanEffects r => PackageName -> [Version] -> SearchCache -> Sem r ([Version], SearchCache)
 compatibleReleases name releases cache = do
-  (existing, known) <- existingDependencyFailures name (searchDependencies cache)
+  (existing, known) <- existingDependencies name (searchDependencies cache)
   (compatible, dependencies) <- foldM
     (\(accepted, parsed) version -> do
       (result, parsed') <- loadDependencies name version parsed
@@ -505,7 +506,7 @@ checkSet installed selected reverseChecks cache = do
     checkCandidates [] known = pure ([], [], known)
     checkCandidates ((name, version) : rest) known = do
       (dependencies, known') <- loadDependencies name version known
-      (existing, known'') <- existingDependencyFailures name known'
+      (existing, known'') <- existingDependencies name known'
       problems <- case dependencies of
         Left err -> pure [(False, UncheckedCandidate name version err)]
         Right parts -> concat <$> forM (tagDependencies parts) (\(src, dependency, range) -> do
@@ -517,7 +518,7 @@ checkSet installed selected reverseChecks cache = do
                 Right current -> pure $ Just current
                 Left (PkgNotFound _) -> pure Nothing
                 Left err -> throw err
-          pure [(Set.member (src, dependency) existing, DependencyProblem name dependency range actual) | maybe True (not . (`withinRange` range)) actual])
+          pure [(existingDependencyFailure existing src dependency range, DependencyProblem name dependency range actual) | maybe True (not . (`withinRange` range)) actual])
       let (warnings, failures) = partition fst problems
       (others, otherWarnings, finalCache) <- checkCandidates rest known''
       pure ((snd <$> failures) <> others, (snd <$> warnings) <> otherWarnings, finalCache)
@@ -541,30 +542,39 @@ tagDependencies :: (VersionedList, VersionedList) -> [(DepSrc, PackageName, Vers
 tagDependencies (depends, makeDepends) =
   [(src, name, range) | (src, deps) <- [(Run, depends), (Make, makeDepends)], (name, range) <- deps]
 
-requiredDependencies :: Set.Set (DepSrc, PackageName) -> (VersionedList, VersionedList) -> VersionedList
+requiredDependencies :: ExistingDependencies -> (VersionedList, VersionedList) -> VersionedList
 requiredDependencies existing parts =
-  [(name, range) | (src, name, range) <- tagDependencies parts, Set.notMember (src, name) existing]
+  [(name, range) | (src, name, range) <- tagDependencies parts, not $ existingDependencyFailure existing src name range]
+
+existingDependencyFailure :: ExistingDependencies -> DepSrc -> PackageName -> VersionRange -> Bool
+existingDependencyFailure existing src dependency range = case Map.lookup (src, dependency) existing of
+  Just (baseline, Just installed) ->
+    not (withinRange installed baseline)
+      || not (null $ asVersionIntervals range)
+        && null (asVersionIntervals $ intersectVersionRanges range $ orLaterVersion installed)
+  Just (_, Nothing) -> True
+  Nothing -> False
 
 -- Compare with the installed owner's metadata and installed dependency
 -- versions, never with candidates being explored in the current branch.
-existingDependencyFailures :: PlanEffects r => PackageName -> DependencyCache -> Sem r (Set.Set (DepSrc, PackageName), DependencyCache)
-existingDependencyFailures name cache = case Map.lookup name (cachedExistingFailures cache) of
+existingDependencies :: PlanEffects r => PackageName -> DependencyCache -> Sem r (ExistingDependencies, DependencyCache)
+existingDependencies name cache = case Map.lookup name (cachedExistingDependencies cache) of
   Just existing -> pure (existing, cache)
   Nothing -> do
     current <- try @MyException $ currentVersion name
     (baseline, known) <- case current of
       Right version -> loadDependencies name version cache
       Left err -> pure (Left err, cache)
-    failures <- case baseline of
+    dependencies <- case baseline of
       Left _ -> pure []
       Right parts -> concat <$> forM (tagDependencies parts) (\(src, dependency, range) -> do
         installed <- try @MyException $ currentVersion dependency
         pure $ case installed of
-          Right version | not $ withinRange version range -> [(src, dependency)]
-          Left (PkgNotFound _) -> [(src, dependency)]
+          Right version -> [((src, dependency), (range, Just version))]
+          Left (PkgNotFound _) -> [((src, dependency), (range, Nothing))]
           _ -> [])
-    let existing = Set.fromList failures
-    pure (existing, known {cachedExistingFailures = Map.insert name existing (cachedExistingFailures known)})
+    let existing = Map.fromListWith (\(range, installed) (other, _) -> (intersectVersionRanges range other, installed)) dependencies
+    pure (existing, known {cachedExistingDependencies = Map.insert name existing (cachedExistingDependencies known)})
 
 localDependencyRecord :: Member DependencyRecord r => Sem r a -> Sem r a
 localDependencyRecord action = do
@@ -609,7 +619,7 @@ inspectRevision plan owner version cache = do
               | (src, dependency, range) <- tagDependencies parts,
                 candidate || Map.member dependency (planVersions plan)
             ]
-      (existing, known') <- if candidate then existingDependencyFailures owner known else pure (Set.empty, known)
+      (existing, known') <- if candidate then existingDependencies owner known else pure (Map.empty, known)
       checked <- forM (Map.toList ranges) $ \(key@(src, dependency), range) -> do
         actual <- case Map.lookup dependency (planVersions plan) of
           Just selected -> pure $ Right $ Just selected
@@ -620,7 +630,7 @@ inspectRevision plan owner version cache = do
               Left (PkgNotFound _) -> Right Nothing
               Left err -> Left err
         let old = if candidate
-              then Set.member (src, dependency) existing
+              then existingDependencyFailure existing src dependency range
               else maybe False (not . (`withinRange` range)) (Map.lookup dependency $ planInstalled plan)
             (status, doc) = case actual of
               Left err -> ("unchecked: " <> show err, annYellow (viaPretty range) <> line <> indent 2 (annYellow $ "unchecked:" <+> viaShow err))

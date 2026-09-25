@@ -5,6 +5,8 @@ The changelog is available [on GitHub][2].
 
 ## Unreleased
 
+- Keep incremental `arch-hs-plan` updates when existing dependencies already exceed candidate upper bounds, reporting warnings instead of forcing later releases while retaining checks for new dependencies and newly unmet bounds
+
 - Compare latest Cabal revisions with revision 0 in `arch-hs-plan`, showing differences for the selected update set while keeping planning decisions based on the latest revisions
 
 - Add `arch-hs-plan` to check coordinated updates against dependencies and reverse dependencies, with optional search that automatically expands to blocking packages using the fewest incremental release steps
