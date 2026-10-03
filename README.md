@@ -628,6 +628,8 @@ haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has ne
 
 Only non-deprecated Hackage versions newer than the [extra] version are reported. Version checks use Hackage index metadata, so they also report packages whose `.cabal` format is newer than the Cabal library used to build `arch-hs`.
 
+GHC and its bundled libraries and tools, including `hsc2hs`, are excluded by default because they are updated with the compiler rather than independently. This includes packages listed in the repository `provides` metadata for `ghc` and `ghc-libs`. Pass `--show-ghc-libs` to include them.
+
 Pass `--depcheck` to check whether each newer Hackage version is currently upgradable with the packages already in [extra]. A version is shown as `ok` only when both its dependency ranges are satisfied by [extra] and all current reverse dependency ranges accept that version:
 
 ```

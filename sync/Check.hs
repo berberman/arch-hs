@@ -7,6 +7,7 @@ module Check (check, checkNewerVersions, prettyNewerVersions) where
 import Control.Monad (forM)
 import Data.List (partition)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Distribution.ArchHs.DepCheck
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
@@ -47,6 +48,13 @@ check ::
   Bool ->
   Sem r ()
 check includeGHC runDepCheck verbose = do
+  extra <- ask @ExtraDB
+  let providedByGHC = Set.fromList
+        [ name
+          | provider <- ["ghc", "ghc-libs"],
+            Just desc <- [Map.lookup (ArchLinuxName provider) extra],
+            PkgDependent name _ <- _provides desc
+        ]
   linked <- linkedHaskellPackageDescs
   checked <-
     traverse
@@ -54,7 +62,7 @@ check includeGHC runDepCheck verbose = do
           let rawArchVersion = _version desc
           case simpleParsec rawArchVersion of
             Just archVersion
-              | includeGHC || not (isGHCLibs hackageName) -> do
+              | includeGHC || (not (isGHCLibs hackageName) && Set.notMember archName providedByGHC) -> do
                   hackageVersions <- getNewerVersions hackageName archVersion
                   if null hackageVersions
                     then pure ([], [])

@@ -229,13 +229,36 @@ main = hspec $ do
 
     it "finishes a version check with an unsupported latest cabal file" $ do
       let (preferred, _, extra, _) = unsupportedHackageDBs
-      result <- runSyncCheck extra preferred Map.empty False
+      result <- runSyncCheck extra preferred Map.empty False False
       show result `shouldBe` "Right ()"
 
     it "continues dependency checking past an unsupported cabal file" $ do
       let (preferred, raw, extra, _) = unsupportedHackageDBs
-      result <- runSyncCheck extra preferred raw True
+      result <- runSyncCheck extra preferred raw False True
       show result `shouldBe` "Right ()"
+
+  describe "sync GHC-provided packages" $ do
+    forM_ [False, True] $ \depCheck -> do
+      it ("excludes bundled tools and libraries by default, depcheck=" <> show depCheck) $ do
+        let (hackage, raw, extra) = syncGHCDBs
+        (result, output) <- captureStdout $ runSyncCheck extra hackage raw False depCheck
+        show result `shouldBe` "Right ()"
+        forM_ ["haskell-hsc2hs", "haskell-haddock", "haskell-bundled-library", "haskell-base"] $ \package ->
+          output `shouldNotContain` package
+        output `shouldContain` "haskell-standalone"
+
+      it ("includes bundled tools and libraries with show-ghc-libs, depcheck=" <> show depCheck) $ do
+        let (hackage, raw, extra) = syncGHCDBs
+        (result, output) <- captureStdout $ runSyncCheck extra hackage raw True depCheck
+        show result `shouldBe` "Right ()"
+        forM_ ["haskell-hsc2hs", "haskell-haddock", "haskell-bundled-library", "haskell-base", "haskell-standalone"] $ \package ->
+          output `shouldContain` package
+
+      it ("still checks hsc2hs when it is not provided by GHC, depcheck=" <> show depCheck) $ do
+        let (hackage, raw, extra) = syncGHCDBs
+        (result, output) <- captureStdout $ runSyncCheck (Map.delete (ArchLinuxName "ghc") extra) hackage raw False depCheck
+        show result `shouldBe` "Right ()"
+        output `shouldContain` "haskell-hsc2hs"
 
   describe "sync reverse dependency failure classification" $ do
     it "counts newly broken and already unmet ranges separately" $ do
@@ -625,8 +648,45 @@ unsupportedHackageDBs =
           _checkDepends = []
         }
 
-runSyncCheck :: ExtraDB -> Hackage.HackageDB -> RawHackage.HackageDB -> Bool -> IO (Either MyException ())
-runSyncCheck extra hackage raw depCheck =
+syncGHCDBs :: (Hackage.HackageDB, RawHackage.HackageDB, ExtraDB)
+syncGHCDBs = (Hackage.parseDB raw, raw, extra)
+  where
+    packages = ["hsc2hs", "haddock", "bundled-library", "base", "standalone"]
+    raw = Map.fromList
+      [ ( mkPackageName package,
+          RawHackage.PackageData B8.empty $ Map.singleton (parseVersion "1.1") $
+            RawHackage.VersionData
+              (B8.pack $ unlines ["cabal-version: 1.12", "name: " <> package, "version: 1.1", "build-type: Simple"])
+              B8.empty
+        )
+        | package <- packages
+      ]
+    extra = Map.fromList $
+      [ (archName, desc archName []) | package <- packages, let archName = toArchLinuxName $ mkPackageName package ]
+        <> [ ( archName,
+               desc archName [PkgDependent (toArchLinuxName $ mkPackageName package) (Just "1.0") | package <- bundled]
+             )
+             | (provider, bundled) <- [("ghc", ["hsc2hs", "haddock"]), ("ghc-libs", ["bundled-library"])],
+               let archName = ArchLinuxName provider
+           ]
+    desc package provides =
+      PkgDesc
+        { _name = package,
+          _version = "1.0",
+          _rawVersion = "1.0-1",
+          _desc = "GHC-provided package fixture",
+          _url = Nothing,
+          _provides = provides,
+          _optDepends = [],
+          _replaces = [],
+          _conflicts = [],
+          _depends = [],
+          _makeDepends = [],
+          _checkDepends = []
+        }
+
+runSyncCheck :: ExtraDB -> Hackage.HackageDB -> RawHackage.HackageDB -> Bool -> Bool -> IO (Either MyException ())
+runSyncCheck extra hackage raw includeGHC depCheck =
   runM
     . runError @MyException
     . evalState (Map.empty :: Map.Map PackageName [VersionRange])
@@ -636,7 +696,7 @@ runSyncCheck extra hackage raw depCheck =
     . runReader raw
     . runReader hackage
     . runReader extra
-    $ Sync.check False depCheck True
+    $ Sync.check includeGHC depCheck True
 
 runRdepCheck :: ExtraDB -> RawHackage.HackageDB -> Maybe Version -> PackageName -> IO (Either MyException RDepCheck.FailureCounts)
 runRdepCheck extra raw = runRdepCheckRevisions extra raw raw

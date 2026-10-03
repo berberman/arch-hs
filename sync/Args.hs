@@ -57,7 +57,7 @@ data CheckOptions = CheckOptions
 checkOptionsParser :: Parser CheckOptions
 checkOptionsParser =
   CheckOptions
-    <$> switch (long "show-ghc-libs" <> help "Include GHC and GHC libs")
+    <$> switch (long "show-ghc-libs" <> help "Include GHC and its bundled libraries and tools")
     <*> switch (long "depcheck" <> help "Check whether newer Hackage versions are currently upgradable")
     <*> switch (long "verbose" <> help "Show failing dependency and reverse dependency ranges for --depcheck candidates")
 
