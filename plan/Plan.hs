@@ -702,7 +702,10 @@ prettyPlanResult result@PlanResult {..} =
       <> (prettyWarning <$> planWarnings)
       <> [line <> vsep planSearchNotes | not $ null planSearchNotes]
       <> [line <> vsep planRevisionNotes | not $ null planRevisionNotes]
-      <> [line <> "Commit message:" <> line <> pretty (intercalate ", " updates) | not $ null updates]
+      <> [ line <> "Commit message:" <> line <> pretty (intercalate ", " updates)
+             <> line <> line <> ("genrebuild -H" <+> hsep (pretty . unArchLinuxName . toArchLinuxName <$> Map.keys planVersions))
+           | not $ null updates
+         ]
   where
     updates =
       [ unPackageName name <> " " <> prettyShow version

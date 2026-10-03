@@ -41,6 +41,30 @@ spec = describe "coordinated update planner" $ do
         Success (Right _) -> expectationFailure "expected malformed arguments to fail"
         _ -> pure ()
 
+  describe "rebuild command" $ do
+    it "prints a copyable command after the commit message using Arch package bases" $ do
+      result <- runPlan False [("zeta", Just "2.0"), ("Alpha", Just "2.0")]
+        [("zeta", [], [("2.0", [])]), ("Alpha", [], [("2.0", [])])]
+      let output = show $ Plan.prettyPlanResult result
+      output `shouldContain` "Commit message:\nAlpha 2.0, zeta 2.0\n\ngenrebuild -H haskell-alpha haskell-zeta"
+      last (lines output) `shouldBe` "genrebuild -H haskell-alpha haskell-zeta"
+
+    it "respects package name presets without adding a haskell prefix" $ do
+      result <- runPlan False [("stack", Just "2.0"), ("elm-compiler", Just "2.0")]
+        [("stack", [], [("2.0", [])]), ("elm-compiler", [], [("2.0", [])])]
+      last (lines $ show $ Plan.prettyPlanResult result) `shouldBe` "genrebuild -H elm-compiler stack"
+
+    it "includes requested packages whose versions are unchanged" $ do
+      result <- runPlan False [("alpha", Just "2.0"), ("bravo", Just "1.0")]
+        [("alpha", [], [("2.0", [])]), ("bravo", [], [])]
+      show (Plan.prettyPlanResult result) `shouldContain` "Commit message:\nalpha 2.0\n\ngenrebuild -H haskell-alpha haskell-bravo"
+
+    it "omits the command when there is no commit message" $ do
+      result <- runPlan False [("alpha", Just "1.0")] [("alpha", [], [])]
+      let output = show $ Plan.prettyPlanResult result
+      output `shouldNotContain` "Commit message:"
+      output `shouldNotContain` "genrebuild"
+
   describe "revision comparisons" $ do
     it "shows original candidate failures without changing a successful latest plan" $ do
       let specs range = [("alpha", [], [("2.0", lib ["bravo " <> range])]), ("bravo", [], [("2.0", [])])]
@@ -51,7 +75,8 @@ spec = describe "coordinated update planner" $ do
       output `shouldContain` "latest revision: <3 (ok)"
       output `shouldContain` "revision 0: <2"
       output `shouldContain` "dep: alpha requires bravo <2"
-      last (lines output) `shouldBe` "alpha 2.0, bravo 2.0"
+      output `shouldContain` "Commit message:\nalpha 2.0, bravo 2.0\n\ngenrebuild -H haskell-alpha haskell-bravo"
+      last (lines output) `shouldBe` "genrebuild -H haskell-alpha haskell-bravo"
 
     it "keeps latest candidate failures blocking even when revision 0 accepts the set" $ do
       let specs range = [("alpha", [], [("2.0", lib ["bravo " <> range])]), ("bravo", [], [("2.0", [])])]
@@ -293,6 +318,7 @@ spec = describe "coordinated update planner" $ do
     assertWorking result [("alpha", "2.0"), ("bravo", "2.0")]
     Plan.planRequested result `shouldBe` Map.keysSet (Map.singleton (name "alpha") ())
     show (Plan.prettyPlanResult result) `shouldContain` "bravo 1.0 -> 2.0 (added by solver)"
+    last (lines $ show $ Plan.prettyPlanResult result) `shouldBe` "genrebuild -H haskell-alpha haskell-bravo"
 
   it "automatically updates a blocking reverse dependency" $ do
     result <- runPlan True [("alpha", Just "2.0")]
@@ -310,6 +336,7 @@ spec = describe "coordinated update planner" $ do
     assertBlocked result "rdep: haskell-zblocker"
     Plan.planVersions result `shouldBe` Map.fromList [(name "alpha", version "2.0"), (name "consumer", version "2.0")]
     show (Plan.prettyPlanResult result) `shouldNotContain` "rdep: haskell-consumer"
+    last (lines $ show $ Plan.prettyPlanResult result) `shouldBe` "genrebuild -H haskell-alpha haskell-consumer"
 
   it "resolves other blockers even when the first blocker has futile upgrades" $ do
     result <- runPlan True [("alpha", Just "2.0")]
