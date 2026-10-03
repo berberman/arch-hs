@@ -3,15 +3,23 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
-## Unreleased
-
-- Keep incremental `arch-hs-plan` updates when existing dependencies already exceed candidate upper bounds, reporting warnings instead of forcing later releases while retaining checks for new dependencies and newly unmet bounds
-
-- Compare latest Cabal revisions with revision 0 in `arch-hs-plan`, showing differences for the selected update set while keeping planning decisions based on the latest revisions
+## 0.16
 
 - Add `arch-hs-plan` to check coordinated updates against dependencies and reverse dependencies, with optional search that automatically expands to blocking packages using the fewest incremental release steps
 
+- Plan GHC toolchain updates using upstream bundled-library metadata without requiring a built Arch package, selecting the next stable release by default and rechecking repository packages with the proposed compiler
+
+- Keep incremental `arch-hs-plan` updates when existing dependencies already exceed candidate upper bounds, reporting warnings instead of forcing later releases while retaining checks for new dependencies and newly unmet bounds
+
+- Compare latest Cabal revisions with revision 0 in `arch-hs-plan`, showing only changed check outcomes while keeping planning decisions based on the latest revisions
+
+- Print a combined commit message and a copyable `genrebuild -H` command using Arch package bases for planned updates, and hide unchanged bundled-library versions from GHC summaries
+
 - Accept multiple targets with optional per-target versions in `arch-hs-rdepcheck`, checking their candidate metadata as one upgrade set, combining results by reverse dependency, and totaling failure counts
+
+- Exclude GHC-provided tools such as `hsc2hs` from `arch-hs-sync check` by default, while retaining `--show-ghc-libs` to include them explicitly
+
+- Add `elm-compiler` to the package name preset
 
 ## 0.15
 
