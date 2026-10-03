@@ -24,7 +24,7 @@ jobs:
           haskell-hspec haskell-microlens haskell-microlens-th haskell-neat-interpolation \
           haskell-optparse-simple haskell-polysemy haskell-req haskell-split \
           haskell-tar-conduit haskell-diff haskell-prettyprinter haskell-prettyprinter-ansi-terminal \
-          haskell-arch-web
+          haskell-arch-web haskell-yaml
 
     - name: Build and test without ALPM
       run: |
