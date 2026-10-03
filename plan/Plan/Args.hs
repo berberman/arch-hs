@@ -32,7 +32,7 @@ runArgsParser = do
     simpleOptions
       archHsVersion
       "arch-hs-plan - plan coordinated Haskell package updates"
-      "Check candidate dependencies and repository reverse dependencies as one update set. An omitted VERSION selects the next preferred Hackage release. With --solve, automatically add blocking dependencies and reverse dependencies and try successively newer preferred releases, minimizing total release steps. Without --solve, packages outside TARGETs stay at repository versions. Uses latest local Cabal revisions and the installed GHC; this checks metadata compatibility, not builds."
+      "Check candidate dependencies and repository reverse dependencies as one update set. An omitted VERSION selects the next preferred Hackage release, or the next stable upstream release for ghc. With --solve, automatically add blocking dependencies and reverse dependencies and try successively newer releases, minimizing total release steps. Without --solve, packages outside TARGETs stay at repository versions. Requesting ghc loads upstream bundled-library metadata and rechecks repository Haskell packages with the proposed compiler; otherwise the installed toolchain stays fixed. Uses latest local Cabal revisions; this checks metadata compatibility, not builds."
       cmdOptions
       empty
   either die pure result

@@ -580,6 +580,20 @@ $ arch-hs-plan aeson scientific
 
 Without `--solve`, explicit versions are checked exactly. When a version is omitted, the command selects the next newer preferred Hackage release. Every target uses its candidate metadata and the proposed versions of other targets. Packages outside the target set retain their installed versions. Library, executable, test, setup, and Haskell build-tool dependencies are included, using the installed GHC and the usual `-f PACKAGE:FLAG:true|false` assignments.
 
+GHC can also be requested as a toolchain update:
+
+```sh
+$ arch-hs-plan ghc
+$ arch-hs-plan --solve ghc
+$ arch-hs-plan --solve ghc 9.8.1 aeson
+```
+
+For `ghc`, an omitted version selects the next stable upstream release after the repository compiler, not the latest release. Explicit versions are exact without `--solve` and minimums with it, just like other targets. The solver counts compiler release steps alongside package release steps when minimizing the update.
+
+GHC plans fetch [Stackage's upstream GHC bundled-library snapshots](https://github.com/commercialhaskell/stackage-content/blob/master/stack/global-hints.yaml); no built Arch GHC package is needed. Each candidate compiler fixes its entire Unix library bundle, including newly bundled and removed libraries. Missing or invalid compiler metadata is an error rather than a reason to guess library versions. Bundled libraries cannot be requested or upgraded independently. The snapshots do not specify versions of compiler-provided executables such as `hsc2hs`; dependencies on these tools are explicitly reported as unchecked, rather than assuming the tools were removed or retaining their old versions.
+
+The planner rechecks every repository Haskell package with the proposed compiler and bundled versions, including `impl(ghc ...)` conditionals. Existing-failure comparisons still use the repository compiler and dependency versions, so newly activated incompatibilities block the plan. With `--solve`, blocking packages can be updated automatically. Only changed bundled versions, including added or removed libraries, are shown separately; unchanged versions and empty bundled summaries are hidden. Bundled libraries do not become individual package updates in the commit message or rebuild command. GHC rebuild commands include `--ignore ghc-static` to override `genrebuild -H`'s default exclusion of `ghc`.
+
 Add `--solve` to search for a compatible combination:
 
 ```
@@ -595,13 +609,13 @@ The output lists installed and proposed versions, marking automatically included
 
 Plans with version changes also print a commit message listing all updated packages and versions on one comma-separated line, including packages added by the solver. A copyable `genrebuild -H <pkgbases...>` command follows, using the corresponding Arch package bases of all packages in the plan and respecting package name presets. Blocked plans include both too, so their updates can be tried manually.
 
-The planner compares the latest Cabal revision with revision 0 for the chosen packages and their reverse dependencies, showing differing ranges and results. Version selection and the final status use the latest revision; revision 0 is shown for comparison.
+The planner compares the latest Cabal revision with revision 0 for the chosen packages and their reverse dependencies, showing only dependencies whose check outcomes change. Range-only differences are hidden when both revisions pass, block, warn, or remain unchecked; adding or removing an already-satisfied dependency is also hidden. Changes between those outcomes, including whether a revision can be checked, remain visible. Version selection and the final status use the latest revision; revision 0 is shown for comparison.
 
 Existing repository incompatibilities are yellow `dep-old` or `rdep-old` warnings and do not block a plan. Missing metadata for existing reverse dependencies is reported as an unchecked warning. Newly introduced incompatibilities and missing or unparseable candidate metadata still block the plan.
 
 For dependencies already used by the installed package in the same dependency category, candidate upper bounds already exceeded by the repository version are also warnings, even if the installed package's metadata omitted those bounds. This keeps incremental releases available instead of skipping ahead solely to accommodate an already newer dependency. New dependencies, newly unmet lower bounds, and dependency updates that newly cross an upper bound still block the plan. Warnings do not establish build compatibility.
 
-The planner reads the latest revisions from the local Hackage index and accepts the usual `--extra` and `--hackage` paths. It does not build or install packages, validate non-Haskell system dependencies or ABI compatibility, or determine a build order. GHC and its bundled libraries remain fixed. Refresh the local databases before planning against newer repository or Hackage metadata.
+The planner reads the latest revisions from the local Hackage index and accepts the usual `--extra` and `--hackage` paths. It does not build or install packages, validate non-Haskell system dependencies or ABI compatibility, or determine a build order. GHC and its bundled libraries remain fixed unless `ghc` is explicitly requested. Only GHC plans fetch upstream metadata; ordinary package plans remain local. A GHC plan checks ecosystem metadata compatibility, not compiler bootstrap requirements or Arch-specific changes to the upstream bundle. Refresh the local databases before planning against newer repository or Hackage metadata.
 
 ## Sync
 

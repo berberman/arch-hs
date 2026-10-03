@@ -16,12 +16,18 @@ import GHC.IO.Encoding (setLocaleEncoding)
 import GHC.IO.Encoding.UTF8 (utf8)
 import Plan
 import Plan.Args
-import System.Exit (exitFailure)
+import Plan.Toolchain (loadGHCReleases)
+import System.Exit (die, exitFailure)
 
 main :: IO ()
 main = Exception.handle @Exception.IOException (\err -> printError (viaShow err) >> exitFailure) $ do
   setLocaleEncoding utf8
   Options {..} <- runArgsParser
+  releases <- if any ((== "ghc") . fst) optTargets
+    then do
+      printInfo "Loading upstream GHC bundled-library metadata..."
+      either die pure =<< loadGHCReleases
+    else pure Map.empty
   extra <- loadExtraDBFromOptions optExtraDB
   (hackage, raw, original) <- loadHackageDBsWithRevisionsFromOptions optHackage
   unless (Map.null optFlags) $ printInfo $ "Assigned flags:" <> line <> prettyFlagAssignments optFlags
@@ -38,7 +44,7 @@ main = Exception.handle @Exception.IOException (\err -> printError (viaShow err)
       . runReader extra
       . subsumeGHCVersion
       $ do
-        planned <- planUpdates optSolve optTargets
+        planned <- planUpdates releases optSolve optTargets
         traverse (comparePlanRevisions original) planned
   case result of
     Left err -> printError (viaShow err) >> exitFailure

@@ -9,6 +9,7 @@ module Plan (PlanResult (..), PlanProblem (..), planUpdates, planIsReady, pretty
 import Control.Monad (foldM, forM)
 import Data.List (foldl', partition, sortOn)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Ord (Down (..))
 import qualified Data.Set as Set
 import Distribution.ArchHs.DepCheck (VersionedList, directDependencies)
@@ -16,11 +17,13 @@ import Distribution.ArchHs.Exception
 import Distribution.ArchHs.ExtraDB (versionInExtra)
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Local (ghcLibList)
 import Distribution.ArchHs.Name (isGHCLibs, isHaskellPackage, toArchLinuxName, toHackageName)
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.RDepCheck
 import Distribution.ArchHs.Types
 import Distribution.Version (asVersionIntervals, simplifyVersionRange)
+import Plan.Toolchain
 
 type PlanEffects r =
   Members
@@ -32,6 +35,7 @@ data PlanProblem
   | ReverseDependencyProblem ArchLinuxName PackageName DepSrc VersionRange Version
   | UncheckedCandidate PackageName Version MyException
   | UncheckedReverseDependency ArchLinuxName [PackageName] MyException
+  | UncheckedCompilerTool PackageName PackageName VersionRange
   | UnavailableDependency PackageName VersionRange (Maybe Version)
 
 data PlanResult = PlanResult
@@ -41,44 +45,101 @@ data PlanResult = PlanResult
     planProblems :: [PlanProblem],
     planWarnings :: [PlanProblem],
     plansTried :: Int,
+    planToolchain :: Maybe Toolchain,
     planRevisionNotes :: [Doc AnsiStyle],
     planSearchNotes :: [Doc AnsiStyle]
   }
 
 -- Exact requests are checked as given; solving can advance from each minimum.
-planUpdates :: PlanEffects r => Bool -> [(PackageName, Maybe Version)] -> Sem r (Either String PlanResult)
-planUpdates solve targets
+planUpdates :: PlanEffects r => GHCReleases -> Bool -> [(PackageName, Maybe Version)] -> Sem r (Either String PlanResult)
+planUpdates releases solve targets
   | null targets = pure $ Left "At least one target is required."
   | length names /= Set.size (Set.fromList names) = pure $ Left "Each target must be specified only once."
-  | any isGHCLibs names = pure $ Left "GHC and its bundled libraries cannot be updated independently; this planner uses the installed toolchain."
+  | any (\name -> name /= "ghc" && isGHCLibs name) names = pure $ Left "GHC bundled libraries cannot be updated independently; request ghc to update the toolchain."
   | otherwise = do
       installed <- Map.fromList <$> forM names (\name -> (name,) <$> currentVersion name)
       choices <- forM targets $ \(name, requested) -> do
-        newer <- if solve || requested == Nothing then getNewerVersions name (installed Map.! name) else pure []
+        newer <- if not solve && requested /= Nothing then pure [] else
+          if name == "ghc"
+            then pure [release | release <- Map.keys releases, stableGHCRelease release, release > installed Map.! name]
+            else getNewerVersions name (installed Map.! name)
         pure $ case requested of
           Just version
             | version < installed Map.! name -> Left $ "Downgrades are not supported: " <> unPackageName name
+            | name == "ghc", Map.notMember version releases -> Left $ "No upstream bundled-library metadata for GHC " <> prettyShow version
             | otherwise -> Right (name, version : [v | solve, v <- newer, v > version])
           Nothing -> case newer of
-            [] -> Left $ "No newer preferred version is available for " <> unPackageName name
+            [] -> Left $ if name == "ghc" then "No newer stable GHC release is available in upstream metadata." else "No newer preferred version is available for " <> unPackageName name
             first : rest -> Right (name, first : [v | solve, v <- rest])
       case sequence choices of
         Left err -> pure $ Left err
-        Right options -> Right <$> search solve installed (Map.fromList options)
+        Right options -> do
+          initial <- selectToolchain releases (Map.fromList [(name, first) | (name, first : _) <- options]) emptyDependencies
+          let bundled = Set.unions [Map.keysSet packages | release <- fromMaybe [] $ lookup "ghc" options, Just packages <- [Map.lookup release releases]]
+          if any (\name -> name /= "ghc" && (Set.member name bundled || fixedPackage initial name)) names
+            then pure $ Left "Bundled libraries and compiler tools cannot be updated independently of the requested GHC releases."
+            else Right <$> search releases solve installed (Map.fromList options)
   where
     names = fst <$> targets
 
 currentVersion :: Members '[ExtraEnv, WithMyErr] r => PackageName -> Sem r Version
 currentVersion name = do
-  raw <- versionInExtra name
+  raw <- versionInExtra $ if name == "ghc" then ArchLinuxName "ghc" else toArchLinuxName name
   maybe (throw $ VersionNoParse raw) pure $ simpleParsec raw
 
 data DependencyCache = DependencyCache
-  { cachedDependencies :: Map.Map (PackageName, Version) (Either MyException (VersionedList, VersionedList)),
-    cachedExistingDependencies :: Map.Map PackageName ExistingDependencies
+  { cachedDependencies :: Map.Map (Version, PackageName, Version) (Either MyException (VersionedList, VersionedList)),
+    cachedExistingDependencies :: Map.Map PackageName ExistingDependencies,
+    cachedToolchain :: Maybe Toolchain
   }
 type ExistingDependencies = Map.Map (DepSrc, PackageName) (VersionRange, Maybe Version)
 type ReverseChecks = [(PackageName, [ReverseDep], [SkippedReverseDep])]
+
+emptyDependencies :: DependencyCache
+emptyDependencies = DependencyCache Map.empty Map.empty Nothing
+
+selectToolchain :: PlanEffects r => GHCReleases -> Map.Map PackageName Version -> DependencyCache -> Sem r DependencyCache
+selectToolchain releases selected cache = case Map.lookup "ghc" selected of
+  Nothing -> pure cache
+  Just release -> do
+    compiler <- ask @Version
+    extra <- ask @ExtraDB
+    let packages = releases Map.! release
+        libraryNames = Map.fromList [(toArchLinuxName name, name) | name <- ghcLibList <> concatMap Map.keys (Map.elems releases)]
+        provided =
+          [ _pdName dependency
+            | name <- ["ghc", "ghc-libs"],
+              Just desc <- [Map.lookup (ArchLinuxName name) extra],
+              dependency <- _provides desc,
+              isHaskellPackage $ _pdName dependency
+          ]
+        libraries = Set.fromList [name | providedName <- provided, Just name <- [Map.lookup providedName libraryNames]]
+        tools = Set.fromList [toHackageName name | name <- provided, Map.notMember name libraryNames]
+        names = Set.unions [libraries, Set.fromList ghcLibList, Map.keysSet packages, Map.keysSet $ Map.findWithDefault Map.empty compiler releases]
+    installed <- fmap (Map.fromList . catMaybes) $ forM (Set.toList names) $ \name -> do
+      found <- try @MyException $ currentVersion name
+      case found of
+        Right version -> pure $ Just (name, version)
+        Left (PkgNotFound _) -> pure $ (name,) <$> (Map.lookup compiler releases >>= Map.lookup name)
+        Left err -> throw err
+    pure cache {cachedToolchain = Just $ Toolchain release packages installed tools}
+
+fixedPackage :: DependencyCache -> PackageName -> Bool
+fixedPackage cache name = maybe (isGHCLibs name) (`toolchainContains` name) $ cachedToolchain cache
+
+unknownCompilerTool :: DependencyCache -> PackageName -> Bool
+unknownCompilerTool cache name = maybe False (Set.member name . toolchainTools) $ cachedToolchain cache
+
+availableVersion :: PlanEffects r => DependencyCache -> Map.Map PackageName Version -> PackageName -> Sem r (Maybe Version)
+availableVersion cache selected name
+  | Just toolchain <- cachedToolchain cache, toolchainContains toolchain name = pure $ Map.lookup name $ toolchainPackages toolchain
+  | Just version <- Map.lookup name selected = pure $ Just version
+  | otherwise = do
+      found <- try @MyException $ currentVersion name
+      case found of
+        Right version -> pure $ Just version
+        Left (PkgNotFound _) -> pure Nothing
+        Left err -> throw err
 
 data SearchCache = SearchCache
   { searchInstalled :: Map.Map PackageName Version,
@@ -124,11 +185,12 @@ externalChecks targets reversePackages cache = do
 
 search ::
   PlanEffects r =>
+  GHCReleases ->
   Bool ->
   Map.Map PackageName Version ->
   Map.Map PackageName [Version] ->
   Sem r PlanResult
-search solve installed choices = do
+search releases solve installed choices = do
   extra <- ask @ExtraDB
   let reversePackages = Map.fromListWith Set.union
         [ (_pdName dependency, Set.singleton $ _name desc)
@@ -136,11 +198,11 @@ search solve installed choices = do
             isHaskellPackage $ _name desc,
             dependency <- _depends desc <> _makeDepends desc <> _checkDepends desc
         ]
-  (requiredRanges, dependencies) <- requestedRanges choices (DependencyCache Map.empty Map.empty)
+  (requiredRanges, dependencies) <- if updatingGHC then pure (Map.empty, emptyDependencies) else requestedRanges choices emptyDependencies
   let initial = SearchCache installed choices dependencies Map.empty reversePackages Map.empty requiredRanges Map.empty
-  (conflict, directCache) <- if solve then propagateRanges False (Map.keysSet choices) initial else pure (Nothing, initial)
+  (conflict, directCache) <- if solve && not updatingGHC then propagateRanges False (Map.keysSet choices) initial else pure (Nothing, initial)
   cache <- case conflict of
-    Nothing | solve -> snd <$> propagateRanges True (Map.keysSet choices) directCache
+    Nothing | solve && not updatingGHC -> snd <$> propagateRanges True (Map.keysSet choices) directCache
     _ -> pure directCache
   case conflict of
     Nothing -> go
@@ -151,8 +213,9 @@ search solve installed choices = do
       let selected = versions choices start
       (reverseChecks, known) <- externalChecks (Map.keys selected) reversePackages (searchDependencies cache)
       (problems, warnings, _) <- checkSet installed selected reverseChecks known
-      pure $ PlanResult installed selected (Map.keysSet choices) (problem : problems) warnings 1 [] []
+      pure $ PlanResult installed selected (Map.keysSet choices) (problem : problems) warnings 1 Nothing [] []
   where
+    updatingGHC = Map.member "ghc" choices
     start = Map.map (const 0) choices
     versions catalog indices = Map.mapWithKey (\name index -> catalog Map.! name !! index) indices
 
@@ -164,9 +227,10 @@ search solve installed choices = do
         Just (((estimate, Down cost, _), Just (result, neighbors)), remaining) ->
           continue estimate cost remaining visited cache tried best result neighbors
         Just (((estimate, Down cost, indices), Nothing), remaining) -> do
-          let selected = versions (searchChoices cache) indices
+          toolchainDependencies <- selectToolchain releases (versions (searchChoices cache) indices) (searchDependencies cache)
+          let selected = Map.filterWithKey (\name _ -> name == "ghc" || not (fixedPackage toolchainDependencies name)) $ versions (searchChoices cache) indices
               targets = Map.keysSet selected
-          (reverseChecks, dependencies) <- case Map.lookup targets (searchReverseChecks cache) of
+          (reverseChecks, dependencies) <- if updatingGHC then pure ([], toolchainDependencies) else case Map.lookup targets (searchReverseChecks cache) of
             Just cached -> pure (cached, searchDependencies cache)
             Nothing -> externalChecks (Map.keys selected) (searchReversePackages cache) (searchDependencies cache)
           (problems, warnings, dependencies') <- checkSet (searchInstalled cache) selected reverseChecks dependencies
@@ -181,6 +245,7 @@ search solve installed choices = do
                   planProblems = problems,
                   planWarnings = warnings,
                   plansTried = tried + 1,
+                  planToolchain = cachedToolchain dependencies',
                   planRevisionNotes = [],
                   planSearchNotes = []
                 }
@@ -195,9 +260,14 @@ search solve installed choices = do
             -- cannot produce a working plan and can grow exponentially.
             _ | not $ Map.null $ searchConflicts cache' -> finish (tried + 1) cache' result
             _ -> do
-              (neighbors, cache'') <- foldM (advance indices) ([], cache') (nub $ concatMap problemTargets problems)
+              (neighbors, cache'') <- foldM (advance indices) ([], cache') (nub $ ["ghc" | updatingGHC] <> concatMap problemTargets problems)
               let movable = Set.fromList $ fst <$> neighbors
-              (repairs, cache''') <- repairChoices movable indices problems cache''
+              (repairs, cache''') <- if updatingGHC
+                then pure
+                  ( filter (not . Set.null) [Set.intersection movable $ Set.fromList $ "ghc" : problemTargets problem | problem <- problems],
+                    cache''
+                  )
+                else repairChoices movable indices problems cache''
               let lowerBound = max (requiredSteps indices cache''') (remainingSteps movable repairs)
                   priority = max estimate (cost + lowerBound)
                   -- Every complete solution must repair this clause. Keep all
@@ -235,17 +305,19 @@ search solve installed choices = do
                 (foldr Set.insert visited unseen)
                 cache tried best
 
-    advance indices (neighbors, cache) name =
-      case Map.lookup name indices of
-        Just index -> pure
-          ( [(name, Map.adjust (+ 1) name indices) | index + 1 < length (searchChoices cache Map.! name)] <> neighbors,
-            cache
-          )
-        Nothing
-          | not solve || isGHCLibs name -> pure (neighbors, cache)
-          | otherwise -> do
-              cache' <- discoverVersions name cache
-              pure ([(name, Map.insert name 0 indices) | not $ null $ searchChoices cache' Map.! name] <> neighbors, cache')
+    advance indices (neighbors, cache) name
+      | name /= "ghc" && fixedPackage (searchDependencies cache) name = pure (neighbors, cache)
+      | otherwise =
+          case Map.lookup name indices of
+            Just index -> pure
+              ( [(name, Map.adjust (+ 1) name indices) | index + 1 < length (searchChoices cache Map.! name)] <> neighbors,
+                cache
+              )
+            Nothing
+              | not solve || isGHCLibs name -> pure (neighbors, cache)
+              | otherwise -> do
+                  cache' <- discoverVersions name cache
+                  pure ([(name, Map.insert name 0 indices) | not $ null $ searchChoices cache' Map.! name] <> neighbors, cache')
 
 -- Disjoint repair choices each require at least one separate release step.
 -- Shared dependencies are deliberately counted only once, so the estimate
@@ -471,6 +543,7 @@ problemTargets = \case
   ReverseDependencyProblem owner dependency _ _ _ -> [toHackageName owner, dependency]
   UncheckedCandidate name _ _ -> [name]
   UncheckedReverseDependency owner _ _ -> [toHackageName owner]
+  UncheckedCompilerTool _ _ _ -> []
   UnavailableDependency _ _ _ -> []
 
 checkSet ::
@@ -481,7 +554,23 @@ checkSet ::
   DependencyCache ->
   Sem r ([PlanProblem], [PlanProblem], DependencyCache)
 checkSet installed selected reverseChecks cache = do
-  (directProblems, directWarnings, cache') <- checkCandidates (Map.toList selected) cache
+  (directProblems, directWarnings, candidateCache) <- checkCandidates False (filter ((/= "ghc") . fst) $ Map.toList selected) cache
+  (repositoryProblems, repositoryWarnings, cache') <- case cachedToolchain candidateCache of
+    Nothing -> pure ([], [], candidateCache)
+    Just toolchain -> do
+      extra <- ask @ExtraDB
+      let fixed = toolchainArchPackages toolchain
+          owners =
+            [ (name, _version desc)
+              | desc <- Map.elems extra,
+                isHaskellPackage $ _name desc,
+                let name = toHackageName $ _name desc,
+                Map.notMember name selected,
+                Set.notMember (_name desc) fixed
+            ]
+          unreadable = [UncheckedReverseDependency (toArchLinuxName name) ["ghc"] (VersionNoParse raw) | (name, raw) <- owners, Nothing <- [simpleParsec @Version raw]]
+      (problems, warnings, known) <- checkCandidates True [(name, version) | (name, raw) <- owners, Just version <- [simpleParsec raw]] candidateCache
+      pure (problems, unreadable <> warnings, known)
   let reverseProblems = concat
         [ [ ReverseDependencyProblem (reverseDepName dep) target src range (selected Map.! target)
             | dep <- deps,
@@ -501,26 +590,26 @@ checkSet installed selected reverseChecks cache = do
       alreadyBroken (ReverseDependencyProblem _ target _ range _) =
         maybe False (not . (`withinRange` range)) $ Map.lookup target installed
       alreadyBroken _ = False
-  pure (directProblems <> introduced, directWarnings <> existing <> unverified, cache')
+  pure (directProblems <> repositoryProblems <> introduced, directWarnings <> repositoryWarnings <> existing <> unverified, cache')
   where
-    checkCandidates [] known = pure ([], [], known)
-    checkCandidates ((name, version) : rest) known = do
+    checkCandidates _ [] known = pure ([], [], known)
+    checkCandidates repository ((name, version) : rest) known = do
       (dependencies, known') <- loadDependencies name version known
       (existing, known'') <- existingDependencies name known'
+      compiler <- ask @Version
+      let previous = Map.lookup (compiler, name, version) (cachedDependencies known'') >>= either (const Nothing) Just
       problems <- case dependencies of
-        Left err -> pure [(False, UncheckedCandidate name version err)]
+        Left err -> pure [if repository then (True, UncheckedReverseDependency (toArchLinuxName name) ["ghc"] err) else (False, UncheckedCandidate name version err)]
         Right parts -> concat <$> forM (tagDependencies parts) (\(src, dependency, range) -> do
-          actual <- case Map.lookup dependency selected of
-            Just candidate -> pure $ Just candidate
-            Nothing -> do
-              found <- try @MyException $ currentVersion dependency
-              case found of
-                Right current -> pure $ Just current
-                Left (PkgNotFound _) -> pure Nothing
-                Left err -> throw err
-          pure [(existingDependencyFailure existing src dependency range, DependencyProblem name dependency range actual) | maybe True (not . (`withinRange` range)) actual])
+          actual <- availableVersion known'' selected dependency
+          let problem = case (repository, actual) of
+                (True, Just candidate) -> ReverseDependencyProblem (toArchLinuxName name) dependency src range candidate
+                _ -> DependencyProblem name dependency range actual
+          pure $ if unknownCompilerTool known'' dependency
+            then [(True, UncheckedCompilerTool name dependency range)]
+            else [(dependencyWasBroken previous known'' existing src dependency range, problem) | maybe True (not . (`withinRange` range)) actual])
       let (warnings, failures) = partition fst problems
-      (others, otherWarnings, finalCache) <- checkCandidates rest known''
+      (others, otherWarnings, finalCache) <- checkCandidates repository rest known''
       pure ((snd <$> failures) <> others, (snd <$> warnings) <> otherWarnings, finalCache)
 
 loadDependencies ::
@@ -529,14 +618,21 @@ loadDependencies ::
   Version ->
   DependencyCache ->
   Sem r (Either MyException (VersionedList, VersionedList), DependencyCache)
-loadDependencies name version known = case Map.lookup (name, version) (cachedDependencies known) of
+loadDependencies name version known = do
+  installedCompiler <- ask @Version
+  let compiler = maybe installedCompiler toolchainVersion $ cachedToolchain known
+  (dependencies, cache) <- loadDependenciesWith compiler name version known
+  baselineCache <- if compiler == installedCompiler then pure cache else snd <$> loadDependenciesWith installedCompiler name version cache
+  pure (dependencies, baselineCache)
+
+loadDependenciesWith :: PlanEffects r => Version -> PackageName -> Version -> DependencyCache -> Sem r (Either MyException (VersionedList, VersionedList), DependencyCache)
+loadDependenciesWith compiler name version known = case Map.lookup (compiler, name, version) (cachedDependencies known) of
   Just cached -> pure (cached, known)
   Nothing -> do
     dependencies <- try @MyException $ do
       cabal <- getCabalIncludingDeprecated name version
-      -- Candidate exploration must not accumulate dependency records.
-      localDependencyRecord $ directDependencies cabal
-    pure (dependencies, known {cachedDependencies = Map.insert (name, version) dependencies (cachedDependencies known)})
+      local @Version (const compiler) $ localDependencyRecord $ directDependencies cabal
+    pure (dependencies, known {cachedDependencies = Map.insert (compiler, name, version) dependencies (cachedDependencies known)})
 
 tagDependencies :: (VersionedList, VersionedList) -> [(DepSrc, PackageName, VersionRange)]
 tagDependencies (depends, makeDepends) =
@@ -555,6 +651,17 @@ existingDependencyFailure existing src dependency range = case Map.lookup (src, 
   Just (_, Nothing) -> True
   Nothing -> False
 
+dependencyWasBroken :: Maybe (VersionedList, VersionedList) -> DependencyCache -> ExistingDependencies -> DepSrc -> PackageName -> VersionRange -> Bool
+dependencyWasBroken previous cache existing src dependency range = case cachedToolchain cache of
+  Nothing -> existingDependencyFailure existing src dependency range
+  Just _
+    | any (\(source, name, oldRange) -> source == src && name == dependency && asVersionIntervals oldRange == asVersionIntervals range)
+        (maybe [] tagDependencies previous) -> existingDependencyFailure existing src dependency range
+    | otherwise -> case Map.lookup (src, dependency) existing of
+        Just (baseline, Just installed) -> not $ withinRange installed baseline
+        Just (_, Nothing) -> True
+        Nothing -> False
+
 -- Compare with the installed owner's metadata and installed dependency
 -- versions, never with candidates being explored in the current branch.
 existingDependencies :: PlanEffects r => PackageName -> DependencyCache -> Sem r (ExistingDependencies, DependencyCache)
@@ -562,8 +669,9 @@ existingDependencies name cache = case Map.lookup name (cachedExistingDependenci
   Just existing -> pure (existing, cache)
   Nothing -> do
     current <- try @MyException $ currentVersion name
+    compiler <- ask @Version
     (baseline, known) <- case current of
-      Right version -> loadDependencies name version cache
+      Right version -> loadDependenciesWith compiler name version cache
       Left err -> pure (Left err, cache)
     dependencies <- case baseline of
       Left _ -> pure []
@@ -571,7 +679,7 @@ existingDependencies name cache = case Map.lookup name (cachedExistingDependenci
         installed <- try @MyException $ currentVersion dependency
         pure $ case installed of
           Right version -> [((src, dependency), (range, Just version))]
-          Left (PkgNotFound _) -> [((src, dependency), (range, Nothing))]
+          Left (PkgNotFound _) -> [((src, dependency), (range, cachedToolchain known >>= Map.lookup dependency . toolchainInstalled))]
           _ -> [])
     let existing = Map.fromListWith (\(range, installed) (other, _) -> (intersectVersionRanges range other, installed)) dependencies
     pure (existing, known {cachedExistingDependencies = Map.insert name existing (cachedExistingDependencies known)})
@@ -585,12 +693,15 @@ localDependencyRecord action = do
   pure result
 
 revisionOwners :: ExtraDB -> PlanResult -> [(PackageName, Version)]
-revisionOwners extra plan = Map.toList $ Map.union (planVersions plan) $ Map.fromList
+revisionOwners extra plan = filter (\(name, _) -> name /= "ghc" || not (isJust $ planToolchain plan)) $ Map.toList $ Map.union (planVersions plan) $ Map.fromList
   [ (toHackageName $ _name desc, version)
-    | target <- Map.keys (planVersions plan),
-      (desc, _) <- reverseDependencyPackages extra target,
+    | desc <- owners,
       Just version <- [simpleParsec $ _version desc]
   ]
+  where
+    owners = case planToolchain plan of
+      Nothing -> [desc | target <- Map.keys (planVersions plan), (desc, _) <- reverseDependencyPackages extra target]
+      Just toolchain -> [desc | desc <- Map.elems extra, isHaskellPackage $ _name desc, Set.notMember (_name desc) $ toolchainArchPackages toolchain]
 
 type RevisionRanges = Map.Map (DepSrc, PackageName) (VersionRange, String, Doc AnsiStyle)
 type RevisionView = Either MyException RevisionRanges
@@ -598,7 +709,7 @@ type RevisionView = Either MyException RevisionRanges
 comparePlanRevisions :: PlanEffects r => RawHackageDB -> PlanResult -> Sem r PlanResult
 comparePlanRevisions original plan = do
   extra <- ask @ExtraDB
-  let emptyCache = DependencyCache Map.empty Map.empty
+  let emptyCache = emptyDependencies {cachedToolchain = planToolchain plan}
   (notes, _, _) <- foldM compareOwner ([], emptyCache, emptyCache) (revisionOwners extra plan)
   pure plan {planRevisionNotes = reverse notes}
   where
@@ -610,6 +721,7 @@ comparePlanRevisions original plan = do
 inspectRevision :: PlanEffects r => PlanResult -> PackageName -> Version -> DependencyCache -> Sem r (RevisionView, DependencyCache)
 inspectRevision plan owner version cache = do
   (parsed, known) <- loadDependencies owner version cache
+  compiler <- ask @Version
   case parsed of
     Left err -> pure (Left err, known)
     Right parts -> do
@@ -617,44 +729,40 @@ inspectRevision plan owner version cache = do
           ranges = Map.fromListWith intersectVersionRanges
             [ ((src, dependency), range)
               | (src, dependency, range) <- tagDependencies parts,
-                candidate || Map.member dependency (planVersions plan)
+                candidate || isJust (planToolchain plan) || Map.member dependency (planVersions plan)
             ]
-      (existing, known') <- if candidate then existingDependencies owner known else pure (Map.empty, known)
+      (existing, known') <- if candidate || isJust (planToolchain plan) then existingDependencies owner known else pure (Map.empty, known)
+      let previous = Map.lookup (compiler, owner, version) (cachedDependencies known') >>= either (const Nothing) Just
       checked <- forM (Map.toList ranges) $ \(key@(src, dependency), range) -> do
-        actual <- case Map.lookup dependency (planVersions plan) of
-          Just selected -> pure $ Right $ Just selected
-          Nothing -> do
-            installed <- try @MyException $ currentVersion dependency
-            pure $ case installed of
-              Right selected -> Right $ Just selected
-              Left (PkgNotFound _) -> Right Nothing
-              Left err -> Left err
-        let old = if candidate
-              then existingDependencyFailure existing src dependency range
+        actual <- try @MyException $ availableVersion known' (planVersions plan) dependency
+        let old = if candidate || isJust (planToolchain plan)
+              then dependencyWasBroken previous known' existing src dependency range
               else maybe False (not . (`withinRange` range)) (Map.lookup dependency $ planInstalled plan)
-            (status, doc) = case actual of
-              Left err -> ("unchecked: " <> show err, annYellow (viaPretty range) <> line <> indent 2 (annYellow $ "unchecked:" <+> viaShow err))
-              Right selected
-                | maybe False (`withinRange` range) selected -> ("ok", annGreen $ viaPretty range <+> parens "ok")
-                | otherwise ->
-                    let problem = case (candidate, selected) of
-                          (False, Just chosen) -> ReverseDependencyProblem (toArchLinuxName owner) dependency src range chosen
-                          _ -> DependencyProblem owner dependency range selected
-                        label = (if candidate then "dep" else "rdep") <> if old then "-old" else ""
-                        style = if old then annYellow else annRed
-                        details = if old then prettyWarning problem else prettyProblem problem
-                     in (label, style (viaPretty range) <> line <> indent 2 details)
+            (status, doc)
+              | unknownCompilerTool known' dependency = ("unchecked tool", prettyWarning $ UncheckedCompilerTool owner dependency range)
+              | otherwise = case actual of
+                  Left err -> ("unchecked", annYellow (viaPretty range) <> line <> indent 2 (annYellow $ "unchecked:" <+> viaShow err))
+                  Right selected
+                    | maybe False (`withinRange` range) selected -> ("ok", annGreen $ viaPretty range <+> parens "ok")
+                    | otherwise ->
+                        let problem = case (candidate, selected) of
+                              (False, Just chosen) -> ReverseDependencyProblem (toArchLinuxName owner) dependency src range chosen
+                              _ -> DependencyProblem owner dependency range selected
+                            label = (if candidate then "dep" else "rdep") <> if old then "-old" else ""
+                            style = if old then annYellow else annRed
+                            details = if old then prettyWarning problem else prettyProblem problem
+                         in (label, style (viaPretty range) <> line <> indent 2 details)
         pure (key, (range, status, doc))
       pure (Right $ Map.fromList checked, known')
 
 revisionDifference :: PackageName -> Version -> RevisionView -> RevisionView -> Maybe (Doc AnsiStyle)
 revisionDifference owner version latest original = case (latest, original) of
-  (Left a, Left b) | show a == show b -> Nothing
+  (Left _, Left _) -> Nothing
   (Right a, Right b) ->
     let changed =
           [ (key, Map.lookup key a, Map.lookup key b)
             | key <- Set.toList $ Set.union (Map.keysSet a) (Map.keysSet b),
-              not $ sameRange (Map.lookup key a) (Map.lookup key b)
+              outcome (Map.lookup key a) /= outcome (Map.lookup key b)
           ]
      in if null changed then Nothing else Just $ vsep $
           header :
@@ -672,9 +780,7 @@ revisionDifference owner version latest original = case (latest, original) of
     ]
   where
     header = annMagneta $ "Revision comparison:" <+> viaPretty owner <+> viaPretty version
-    sameRange Nothing Nothing = True
-    sameRange (Just (a, statusA, _)) (Just (b, statusB, _)) = asVersionIntervals a == asVersionIntervals b && statusA == statusB
-    sameRange _ _ = False
+    outcome = maybe "ok" (\(_, status, _) -> status)
     revisionLine style label details = style label <> colon <+> maybe "not required" (\(_, _, doc) -> doc) details
     completeRevision style label result = style label <> colon <> line <> indent 2 (case result of
       Left err -> annYellow $ "unchecked:" <+> viaShow err
@@ -698,12 +804,29 @@ prettyPlanResult result@PlanResult {..} =
         ],
       "Candidate sets checked:" <+> pretty plansTried
     ]
+      <> [ line <> "Bundled with GHC" <+> viaPretty (toolchainVersion toolchain) <> colon <> line
+             <> indent 2 (vsep
+               [ viaPretty name <+> maybe "not in repo" viaPretty installed
+                   <+> "->" <+> maybe "not bundled" viaPretty proposed
+                 | (name, installed, proposed) <- changes
+               ])
+           | Just toolchain <- [planToolchain],
+             let changes =
+                   [ (name, installed, proposed)
+                     | name <- Set.toList $ Set.delete "ghc" $ Set.union (Map.keysSet $ toolchainInstalled toolchain) (Map.keysSet $ toolchainPackages toolchain),
+                       let installed = Map.lookup name $ toolchainInstalled toolchain,
+                       let proposed = Map.lookup name $ toolchainPackages toolchain,
+                       installed /= proposed
+                   ],
+             not $ null changes
+         ]
       <> (prettyProblem <$> planProblems)
       <> (prettyWarning <$> planWarnings)
       <> [line <> vsep planSearchNotes | not $ null planSearchNotes]
       <> [line <> vsep planRevisionNotes | not $ null planRevisionNotes]
       <> [ line <> "Commit message:" <> line <> pretty (intercalate ", " updates)
-             <> line <> line <> ("genrebuild -H" <+> hsep (pretty . unArchLinuxName . toArchLinuxName <$> Map.keys planVersions))
+             <> line <> line <> ("genrebuild -H" <> (if isJust planToolchain then " --ignore ghc-static" else mempty)
+               <+> hsep [if name == "ghc" then "ghc" else pretty $ unArchLinuxName $ toArchLinuxName name | name <- Map.keys planVersions])
            | not $ null updates
          ]
   where
@@ -718,6 +841,7 @@ prettyPlanResult result@PlanResult {..} =
       | not $ null planWarnings = annYellow "Update plan ready (with warnings)"
       | otherwise = annGreen "Update plan ready"
     unchecked (UncheckedReverseDependency _ _ _) = True
+    unchecked (UncheckedCompilerTool _ _ _) = True
     unchecked _ = False
 
 prettyProblem :: PlanProblem -> Doc AnsiStyle
@@ -730,6 +854,9 @@ prettyProblem = \case
     annYellow "unchecked:" <+> viaPretty name <+> viaPretty version <> colon <+> viaShow err
   UncheckedReverseDependency name targets err ->
     annYellow "unchecked rdep:" <+> pretty (unArchLinuxName name) <+> "for" <+> hsep (punctuate comma $ viaPretty <$> targets) <> colon <+> viaShow err
+  UncheckedCompilerTool owner tool range ->
+    annYellow "unchecked compiler tool:" <+> viaPretty owner <+> "requires" <+> viaPretty tool <+> viaPretty range
+      <> comma <+> "upstream bundled-library metadata does not specify its version"
   UnavailableDependency name range (Just current) | isGHCLibs name ->
     annRed "dep:" <+> viaPretty name <+> "is fixed at" <+> viaPretty current <+> "by the installed GHC"
       <> comma <+> "but the required range is" <+> viaPretty range

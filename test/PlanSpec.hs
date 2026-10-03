@@ -4,6 +4,7 @@ module PlanSpec (spec) where
 
 import Control.Monad (forM_)
 import qualified Data.ByteString.Char8 as B8
+import Data.Either (isLeft)
 import Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 import Distribution.ArchHs.Exception
@@ -19,6 +20,7 @@ import Distribution.Types.Version (Version)
 import Distribution.Types.VersionRange (VersionRange)
 import qualified Plan
 import qualified Plan.Args as Args
+import qualified Plan.Toolchain as Toolchain
 import Polysemy (runM)
 import Polysemy.Error (runError)
 import Polysemy.Reader (runReader)
@@ -120,6 +122,53 @@ spec = describe "coordinated update planner" $ do
       let specs range = [("alpha", [], [("2.0", lib ["bravo " <> range])]), ("bravo", [], [])]
       result <- runRevisionPlan False [("alpha", Just "2.0")] (specs "<3") (specs ">=0 && <3")
       assertWorking result [("alpha", "2.0")]
+      length (Plan.planRevisionNotes result) `shouldBe` 0
+
+    forM_
+      [ ("passing", "<3", "<4", True),
+        ("blocking", ">=3", ">=4", False),
+        ("warning", "<1", "<0.5", True)
+      ] $ \(outcome, latest, original, ready) ->
+        it ("hides different candidate ranges with the same " <> outcome <> " outcome") $ do
+          let specs range =
+                [("alpha", ["bravo"], [("1.0", lib ["bravo >=0"]), ("2.0", lib ["bravo " <> range])]), ("bravo", [], [("2.0", [])])]
+          result <- runRevisionPlan False [("alpha", Just "2.0"), ("bravo", Just "2.0")] (specs latest) (specs original)
+          Plan.planIsReady result `shouldBe` ready
+          length (Plan.planRevisionNotes result) `shouldBe` 0
+          show (Plan.prettyPlanResult result) `shouldNotContain` "Revision comparison:"
+
+    forM_ [("<3", "<4", True), ("<2", "<1.5", False)] $ \(latest, original, ready) ->
+      it ("hides reverse-dependency ranges with unchanged outcomes: " <> latest <> " / " <> original) $ do
+        let specs range = [("alpha", [], [("2.0", [])]), ("consumer", ["alpha"], [("1.0", lib ["alpha " <> range])])]
+        result <- runRevisionPlan False [("alpha", Just "2.0")] (specs latest) (specs original)
+        Plan.planIsReady result `shouldBe` ready
+        length (Plan.planRevisionNotes result) `shouldBe` 0
+
+    forM_ [False, True] $ \added ->
+      it ("hides passing dependencies " <> if added then "added by a revision" else "removed by a revision") $ do
+        let absent = [("alpha", [], [("2.0", [])]), ("bravo", [], [])]
+            present = [("alpha", [], [("2.0", lib ["bravo >=1"])]), ("bravo", [], [])]
+            (latest, original) = if added then (present, absent) else (absent, present)
+        result <- runRevisionPlan False [("alpha", Just "2.0")] latest original
+        assertWorking result [("alpha", "2.0")]
+        length (Plan.planRevisionNotes result) `shouldBe` 0
+
+    it "shows only outcome-changing dependencies in a mixed comparison" $ do
+      let specs bravo charlie =
+            [("alpha", [], [("2.0", lib ["bravo " <> bravo, "charlie " <> charlie])]), ("bravo", [], [("2.0", [])]), ("charlie", [], [("2.0", [])])]
+      result <- runRevisionPlan False [("alpha", Just "2.0"), ("bravo", Just "2.0"), ("charlie", Just "2.0")]
+        (specs "<3" "<3") (specs "<2" "<4")
+      assertWorking result [("alpha", "2.0"), ("bravo", "2.0"), ("charlie", "2.0")]
+      let output = show $ Plan.prettyPlanResult result
+      output `shouldContain` "Revision comparison: alpha 2.0"
+      output `shouldContain` "Depends: bravo"
+      output `shouldNotContain` "Depends: charlie"
+
+    it "hides comparisons when neither revision can be checked" $ do
+      let latest = [("alpha", [], [("2.0", ["cabal-version: 99.0"])])]
+          original = [("alpha", [], [])]
+      result <- runRevisionPlan False [("alpha", Just "2.0")] latest original
+      assertBlocked result "unchecked: alpha 2.0"
       length (Plan.planRevisionNotes result) `shouldBe` 0
 
     it "shows dependencies removed by a revision" $ do
@@ -670,7 +719,7 @@ spec = describe "coordinated update planner" $ do
     [ ([("alpha", Nothing), ("alpha", Just "2.0")], "only once"),
       ([("alpha", Just "0.5")], "Downgrades"),
       ([("alpha", Nothing)], "No newer"),
-      ([("ghc", Nothing)], "toolchain")
+      ([("base", Nothing)], "toolchain")
     ] $ \(targets, message) ->
       it ("rejects invalid plan request: " <> message) $ do
         let (extra, raw) = fixture [("alpha", [], [])]
@@ -678,6 +727,206 @@ spec = describe "coordinated update planner" $ do
         case result of
           Right (Left err) -> err `shouldContain` message
           _ -> expectationFailure "expected invalid plan request to be rejected"
+
+  describe "GHC toolchains" $ do
+    it "parses upstream snapshots and excludes Windows-only libraries" $ do
+      let metadata = B8.pack $ unlines
+            [ "ghc-9.6.7:", "  ghc: 9.6.7", "  base: '2.0'", "  ghc-prim: '1.0'",
+              "  template-haskell: '1.0'", "  Win32: '2.0'", "ghcjs-0.2:", "  base: '1.0'"
+            ]
+      Toolchain.parseGHCReleases metadata `shouldBe` Right (Map.take 1 toolchainReleases)
+
+    forM_
+      [ "{}", "ghc-9.6.7: [", "ghc-invalid: {}", "ghc-9.6.7: {}",
+        "ghc-9.6.7: {ghc: 9.8.1}", "ghc-9.6.7: {ghc: 9.6.7, base: invalid}"
+      ] $ \metadata ->
+        it ("rejects unusable upstream metadata: " <> metadata) $
+          Toolchain.parseGHCReleases (B8.pack metadata) `shouldSatisfy` isLeft
+
+    it "distinguishes stable releases from development snapshots" $ do
+      filter Toolchain.stableGHCRelease (version <$> ["9.6.7", "9.7.1", "9.8.1", "9.4.0.20220721", "9.8.0"])
+        `shouldBe` (version <$> ["9.6.7", "9.8.1"])
+
+    it "selects the next compiler and keeps bundled libraries out of package updates" $ do
+      result <- runToolchainPlan False [("ghc", Nothing)] []
+      assertWorking result [("ghc", "9.6.7")]
+      let output = show $ Plan.prettyPlanResult result
+      output `shouldContain` "Bundled with GHC 9.6.7:"
+      output `shouldContain` "base 1.0 -> 2.0"
+      output `shouldNotContain` "ghc-prim 1.0 -> 1.0"
+      output `shouldNotContain` "template-haskell 1.0 -> 1.0"
+      output `shouldContain` "Commit message:\nghc 9.6.7\n\ngenrebuild -H --ignore ghc-static ghc"
+
+    it "hides the bundled summary when all library versions are unchanged" $ do
+      let releases = Map.adjust (Map.insert (name "base") (version "1.0")) (version "9.6.7") toolchainReleases
+          (extra, raw) = toolchainFixture []
+      result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty False [("ghc", Nothing)] extra raw
+      assertWorking result [("ghc", "9.6.7")]
+      let output = show $ Plan.prettyPlanResult result
+      output `shouldNotContain` "Bundled with GHC"
+      output `shouldContain` "ghc 9.6.6 -> 9.6.7"
+
+    it "shows newly bundled libraries absent from the repository" $ do
+      let releases = Map.adjust (Map.insert (name "os-string") (version "2.0")) (version "9.6.7") toolchainReleases
+          (extra, raw) = toolchainFixture []
+      result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty False [("ghc", Nothing)] extra raw
+      assertWorking result [("ghc", "9.6.7")]
+      show (Plan.prettyPlanResult result) `shouldContain` "os-string not in repo -> 2.0"
+
+    it "advances GHC incrementally when the next bundle is incompatible" $ do
+      result <- runToolchainPlan True [("ghc", Nothing)]
+        [("consumer", [], [("1.0", lib ["base ==1.0 || >=3"])])]
+      assertWorking result [("ghc", "9.8.1")]
+
+    it "checks explicit GHC versions exactly and treats them as minimums with solve" $ do
+      let specs = [("consumer", [], [("1.0", lib ["base ==1.0 || >=4"])])]
+      exact <- runToolchainPlan False [("ghc", Just "9.8.1")] specs
+      assertBlocked exact "rdep: haskell-consumer Depends requires base"
+      Plan.planVersions exact `shouldBe` Map.singleton (name "ghc") (version "9.8.1")
+      solved <- runToolchainPlan True [("ghc", Just "9.8.1")] specs
+      assertWorking solved [("ghc", "9.8.2")]
+
+    it "updates blocking packages without jumping to a later compiler" $ do
+      result <- runToolchainPlan True [("ghc", Nothing)]
+        [("consumer", [], [("1.0", lib ["base <2"]), ("1.1", lib ["base <3"]), ("2.0", lib ["base >=3"])])]
+      assertWorking result [("ghc", "9.6.7"), ("consumer", "1.1")]
+
+    it "minimizes release steps across compiler and package updates" $ do
+      result <- runToolchainPlan True [("ghc", Nothing)]
+        [ ("consumer", [], [("1.0", lib ["base ==1.0 || >=3"]), ("1.1", lib ["base >=2", "helper >=2"])]),
+          ("helper", [], [("2.0", [])])
+        ]
+      assertWorking result [("ghc", "9.8.1")]
+
+    it "reevaluates compiler conditionals even without a repository GHC dependency" $ do
+      result <- runToolchainPlan True [("ghc", Nothing)]
+        [ ("consumer", [], [("1.0", ["library", "  if impl(ghc >=9.6.7)", "    build-depends: helper >=2", "  else", "    build-depends: helper >=1"])]),
+          ("helper", [], [("2.0", [])])
+        ]
+      assertWorking result [("ghc", "9.6.7"), ("helper", "2.0")]
+
+    it "does not reuse dependency caches across compiler versions" $ do
+      result <- runToolchainPlan True [("ghc", Nothing)]
+        [("consumer", [], [("1.0", ["library", "  if impl(ghc >=9.6.7 && <9.8)", "    build-depends: missing >=1"])])]
+      assertWorking result [("ghc", "9.8.1")]
+
+    it "blocks upper bounds newly activated by the compiler" $ do
+      result <- runToolchainPlan False [("ghc", Nothing)]
+        [ ("consumer", [], [("1.0", ["library", "  if impl(ghc >=9.6.7)", "    build-depends: helper <1", "  else", "    build-depends: helper >=1"])]),
+          ("helper", [], [])
+        ]
+      assertBlocked result "rdep: haskell-consumer Depends requires helper <1"
+      length (Plan.planWarnings result) `shouldBe` 0
+
+    it "retains failures already present under the installed compiler as warnings" $ do
+      result <- runToolchainPlan False [("ghc", Nothing)]
+        [("consumer", [], [("1.0", lib ["base <1"])])]
+      assertWorking result [("ghc", "9.6.7")]
+      show (Plan.prettyPlanResult result) `shouldContain` "rdep-old: haskell-consumer"
+
+    it "retains incremental updates for exceeded bounds unchanged by the compiler" $ do
+      result <- runToolchainPlan True [("ghc", Nothing), ("alpha", Nothing)]
+        [ ("alpha", ["bravo"], [("1.0", lib ["bravo >=0"]), ("1.1", lib ["bravo <1"]), ("1.2", lib ["bravo >=0"])]),
+          ("bravo", [], [])
+        ]
+      assertWorking result [("ghc", "9.6.7"), ("alpha", "1.1")]
+      show (Plan.prettyPlanResult result) `shouldContain` "dep-old: alpha requires bravo <1"
+
+    it "never updates a bundled library independently to repair a GHC plan" $ do
+      let (extra, raw) = toolchainFixture [("consumer", [], [("1.0", lib ["base ==1.0 || >=3"])])]
+      result <- requireResult =<< runDBWithToolchains (Map.take 1 toolchainReleases) Nothing Map.empty True [("ghc", Nothing)] extra raw
+      assertBlocked result "rdep: haskell-consumer"
+      Plan.planVersions result `shouldBe` Map.singleton (name "ghc") (version "9.6.7")
+
+    it "does not retain libraries removed from the compiler bundle" $ do
+      result <- runToolchainPlan False [("ghc", Nothing)]
+        [("consumer", [], [("1.0", lib ["libiserv >=1"])]), ("libiserv", [], [])]
+      assertBlocked result "dep: consumer requires libiserv >=1, missing"
+      show (Plan.prettyPlanResult result) `shouldContain` "libiserv 1.0 -> not bundled"
+
+    it "uses the old upstream bundle for baseline libraries missing from repository provides" $ do
+      let baseline = Map.fromList [(name package, version release) | (package, release) <- [("ghc", "9.6.6"), ("base", "1.0"), ("rts", "1.0")]]
+          releases = Map.insert (version "9.6.6") baseline $ Map.adjust (Map.insert (name "rts") (version "2.0")) (version "9.6.7") toolchainReleases
+          (extra, raw) = toolchainFixture [("consumer", [], [("1.0", lib ["rts <2"])])]
+      result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty False [("ghc", Nothing)] extra raw
+      assertBlocked result "rdep: haskell-consumer Depends requires rts <2"
+      length (Plan.planWarnings result) `shouldBe` 0
+
+    it "uses newly bundled library versions instead of standalone repository versions" $ do
+      let releases = Map.adjust (Map.insert (name "os-string") (version "2.0")) (version "9.6.7") toolchainReleases
+          (extra, raw) = toolchainFixture [("consumer", [], [("1.0", lib ["os-string <2"])]), ("os-string", [], [])]
+      result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty False [("ghc", Nothing)] extra raw
+      assertBlocked result "rdep: haskell-consumer Depends requires os-string <2"
+
+    it "reports compiler-provided tools as unchecked instead of removed libraries" $ do
+      let (extra, raw) = toolchainFixture [("consumer", [], [("1.0", lib ["hsc2hs >=2"])]), ("hsc2hs", [], [])]
+          provided = Map.adjust (\desc -> desc {_provides = [PkgDependent (toArchLinuxName $ name "hsc2hs") (Just "1.0")]}) (ArchLinuxName "ghc") extra
+      result <- requireResult =<< runDBWithToolchains toolchainReleases Nothing Map.empty True [("ghc", Nothing)] provided raw
+      assertUnchecked result "unchecked compiler tool: consumer requires hsc2hs >=2"
+      Plan.planVersions result `shouldBe` Map.singleton (name "ghc") (version "9.6.7")
+      show (Plan.prettyPlanResult result) `shouldNotContain` "hsc2hs 1.0 -> not bundled"
+      requested <- runDBWithToolchains toolchainReleases Nothing Map.empty True [("ghc", Nothing), ("hsc2hs", Just "1.0")] provided raw
+      case requested of
+        Right (Left err) -> err `shouldContain` "compiler tools cannot be updated independently"
+        _ -> expectationFailure "expected an independent compiler-tool request to be rejected"
+
+    it "normalizes provided library aliases to upstream Hackage capitalization" $ do
+      let releases = Map.adjust (Map.insert (name "Cabal-syntax") (version "1.0")) (version "9.6.7") toolchainReleases
+          (extra, raw) = toolchainFixture [("Cabal-syntax", [], [])]
+          provided = Map.adjust (\desc -> desc {_provides = [PkgDependent (ArchLinuxName "haskell-cabal-syntax") (Just "1.0")]}) (ArchLinuxName "ghc") extra
+      result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty False [("ghc", Nothing)] provided raw
+      assertWorking result [("ghc", "9.6.7")]
+      let output = show $ Plan.prettyPlanResult result
+      output `shouldNotContain` "Cabal-syntax 1.0 -> 1.0"
+      output `shouldNotContain` "cabal-syntax 1.0 -> not bundled"
+      length (Plan.planWarnings result) `shouldBe` 0
+
+    it "reports unavailable repository metadata as unchecked rather than passing silently" $ do
+      result <- runToolchainPlan False [("ghc", Nothing)] [("consumer", [], [("1.0", ["cabal-version: 99.0"])])]
+      assertUnchecked result "unchecked rdep: haskell-consumer"
+
+    it "uses the target compiler and bundle in revision comparisons" $ do
+      let specs bound = [("consumer", [], [("1.0", ["library", "  if impl(ghc >=9.6.7)", "    build-depends: base " <> bound])])]
+          (extra, raw) = toolchainFixture $ specs "<3"
+          (_, original) = toolchainFixture $ specs "<2"
+      result <- requireResult =<< runDBWithToolchains toolchainReleases (Just original) Map.empty False [("ghc", Nothing)] extra raw
+      assertWorking result [("ghc", "9.6.7")]
+      let output = show $ Plan.prettyPlanResult result
+      output `shouldContain` "Revision comparison: consumer 1.0"
+      output `shouldContain` "latest revision: <3 (ok)"
+      output `shouldContain` "rdep: haskell-consumer Depends requires base <2"
+
+    forM_
+      [ ([("ghc", Just "9.8.3")], "No upstream bundled-library metadata"),
+        ([("ghc", Just "9.4.8")], "Downgrades"),
+        ([("ghc", Nothing), ("base", Just "2.0")], "cannot be updated independently")
+      ] $ \(targets, message) ->
+        it ("rejects invalid GHC requests: " <> message) $ do
+          let (extra, raw) = toolchainFixture []
+          result <- runDBWithToolchains toolchainReleases Nothing Map.empty True targets extra raw
+          case result of
+            Right (Left err) -> err `shouldContain` message
+            _ -> expectationFailure "expected an invalid GHC request"
+
+toolchainReleases :: Toolchain.GHCReleases
+toolchainReleases = Map.fromList
+  [ (version compiler, Map.fromList [(name package, version release) | (package, release) <- [("ghc", compiler), ("base", base), ("ghc-prim", "1.0"), ("template-haskell", "1.0")]])
+    | (compiler, base) <- [("9.6.7", "2.0"), ("9.8.1", "3.0"), ("9.8.2", "4.0")]
+  ]
+
+toolchainFixture :: Fixture -> (ExtraDB, RawHackage.HackageDB)
+toolchainFixture specs =
+  let bundled = ["ghc", "base", "ghc-prim", "template-haskell"]
+      (extra, raw) = fixture ([(package, [], []) | package <- bundled] <> specs)
+      compiler = (extra Map.! toArchLinuxName (name "ghc")) {_name = ArchLinuxName "ghc", _version = "9.6.6", _rawVersion = "9.6.6-1"}
+   in ( Map.insert (ArchLinuxName "ghc") compiler $ Map.delete (toArchLinuxName $ name "ghc") extra,
+        Map.filterWithKey (\package _ -> package `notElem` (name <$> bundled)) raw
+      )
+
+runToolchainPlan :: Bool -> [(String, Maybe String)] -> Fixture -> IO Plan.PlanResult
+runToolchainPlan solve targets specs = do
+  let (extra, raw) = toolchainFixture specs
+  requireResult =<< runDBWithToolchains toolchainReleases Nothing Map.empty solve targets extra raw
 
 incrementalFixture :: Fixture
 incrementalFixture =
@@ -743,7 +992,10 @@ runDBWithFlags :: FlagAssignments -> Bool -> [(String, Maybe String)] -> ExtraDB
 runDBWithFlags = runDBWithRevisions Nothing
 
 runDBWithRevisions :: Maybe RawHackage.HackageDB -> FlagAssignments -> Bool -> [(String, Maybe String)] -> ExtraDB -> RawHackage.HackageDB -> IO (Either MyException (Either String Plan.PlanResult))
-runDBWithRevisions original flags solve targets extra raw =
+runDBWithRevisions = runDBWithToolchains Map.empty
+
+runDBWithToolchains :: Toolchain.GHCReleases -> Maybe RawHackage.HackageDB -> FlagAssignments -> Bool -> [(String, Maybe String)] -> ExtraDB -> RawHackage.HackageDB -> IO (Either MyException (Either String Plan.PlanResult))
+runDBWithToolchains releases original flags solve targets extra raw =
   runM
     . runError @MyException
     . evalState (Map.empty :: Map.Map PackageName [VersionRange])
@@ -754,7 +1006,7 @@ runDBWithRevisions original flags solve targets extra raw =
     . runReader (Hackage.parseDB raw)
     . runReader extra
     $ do
-      planned <- Plan.planUpdates solve [(name package, version <$> candidate) | (package, candidate) <- targets]
+      planned <- Plan.planUpdates releases solve [(name package, version <$> candidate) | (package, candidate) <- targets]
       case original of
         Nothing -> pure planned
         Just revision0 -> traverse (Plan.comparePlanRevisions revision0) planned

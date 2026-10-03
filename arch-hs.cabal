@@ -175,8 +175,11 @@ executable arch-hs-plan
   other-modules:
     Plan
     Plan.Args
+    Plan.Toolchain
 
-  build-depends:  arch-hs
+  build-depends:
+    , arch-hs
+    , yaml >=0.11 && <0.12
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
 
 test-suite arch-hs-tests
@@ -195,6 +198,7 @@ test-suite arch-hs-tests
     Diff
     Plan
     Plan.Args
+    Plan.Toolchain
     PlanSpec
     RDepCheck
     RDepCheck.Args
@@ -204,5 +208,6 @@ test-suite arch-hs-tests
   build-depends:
     , arch-hs
     , hspec
+    , yaml >=0.11 && <0.12
 
   ghc-options:     -threaded -rtsopts -with-rtsopts=-N
