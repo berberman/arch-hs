@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -52,7 +53,11 @@ data PkgBuild = PkgBuild
 
 -- | Map 'LicenseId' to 'ArchLicense'. License not provided by system will be mapped to @custom:...@.
 mapLicense :: LicenseId -> Arch.License
+#if MIN_VERSION_Cabal_syntax(3,16,0)
+mapLicense N_0BSD = Arch.N_0BSD
+#else
 mapLicense NullBSD = Arch.N_0BSD
+#endif
 mapLicense AAL = Arch.AAL
 mapLicense Abstyles = Arch.Abstyles
 mapLicense Adobe_2006 = Arch.Adobe_2006
