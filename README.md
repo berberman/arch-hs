@@ -349,15 +349,20 @@ Similar to `--trace`, but the log will be written into a file.
 
 ### Uusi
 
+`arch-hs` automatically detects updated bounds in revisions and includes them using the `uusi` command where necessary.
+
+If none are detected, the behaviour can be overridden manually via the `--uusi` flag:
+
 ```
 $ arch-hs -o ~/test --uusi TARGET
 ```
 
-With `--uusi`, `arch-hs` will generate following snippet for each package:
+With `--uusi`, `arch-hs` will generate the following snippet for each package:
 
 ```bash
 prepare() {
-  uusi $_hkgname-$pkgver/$_hkgname.cabal
+  cd $_hkgname-$pkgver
+  uusi
 }
 ```
 
