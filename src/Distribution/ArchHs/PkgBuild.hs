@@ -546,7 +546,7 @@ check =
   [text|
   check() {
     cd $$_hkgname-$$pkgver
-    runhaskell Setup test
+    runhaskell Setup test --show-details=direct
   }
 |]
 
@@ -566,7 +566,7 @@ uusi =
   }
 |]
 
--- | A fixed template of haskell package in archlinux. See <https://wiki.archlinux.org/index.php/Haskell_package_guidelines Haskell package guidelines> .
+-- | A fixed template of haskell package in archlinux. See <https://manual.archlinux.page/package-guidelines/haskell/ Haskell package guidelines>.
 felixTemplate :: Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text
 felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends sha256sums licenseF uusiF checkF flags =
   [text|
@@ -595,7 +595,7 @@ felixTemplate hkgname pkgname pkgver pkgdesc url license depends makedepends sha
       --ghc-option=-optl-Wl\,-z\,relro\,-z\,now \
       --ghc-option='-pie' $flags
 
-    runhaskell Setup build
+    runhaskell Setup build $$MAKEFLAGS
     runhaskell Setup register --gen-script
     runhaskell Setup unregister --gen-script
     sed -i -r -e "s|ghc-pkg.*update[^ ]* |&'--force' |" register.sh
