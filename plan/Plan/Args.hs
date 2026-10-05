@@ -11,6 +11,7 @@ data Options = Options
     optExtraDB :: ExtraDBOptions,
     optHackage :: HackageDBOptions,
     optSolve :: Bool,
+    optDebug :: Bool,
     optTargets :: [(PackageName, Maybe Version)]
   }
 
@@ -21,10 +22,11 @@ cmdOptions =
     <*> extraDBOptionsParser
     <*> hackageDBOptionsParser
     <*> switch (long "solve" <> help "Expand to blocking dependencies and reverse dependencies, minimizing release steps; supplied versions are minimums")
+    <*> switch (long "debug" <> help "Show solver progress and metadata checks on stderr")
     <*> some (strArgument (metavar "TARGET [VERSION]..."))
   where
-    makeOptions flags extra hackage solve targets =
-      Options flags extra hackage solve <$> parsePackageTargets targets
+    makeOptions flags extra hackage solve debug targets =
+      Options flags extra hackage solve debug <$> parsePackageTargets targets
 
 runArgsParser :: IO Options
 runArgsParser = do

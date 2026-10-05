@@ -2,11 +2,13 @@
 
 module PlanSpec (spec) where
 
+import Control.Exception (bracket)
 import Control.Monad (forM_)
 import qualified Data.ByteString.Char8 as B8
 import Data.Either (isLeft)
 import Data.List (intercalate)
 import qualified Data.Map.Strict as Map
+import qualified Data.IntMap.Strict as IntMap
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Name (toArchLinuxName)
 import Distribution.ArchHs.Options (ParserResult (..), defaultPrefs, execParserPure, info)
@@ -21,21 +23,95 @@ import Distribution.Types.VersionRange (VersionRange)
 import qualified Plan
 import qualified Plan.Args as Args
 import qualified Plan.Toolchain as Toolchain
+import qualified Plan.Solver as Solver
+import Plan.Trace (runPlanTrace, tracePlan)
 import Polysemy (runM)
 import Polysemy.Error (runError)
 import Polysemy.Reader (runReader)
 import Polysemy.State (evalState)
-import Polysemy.Trace (ignoreTrace)
+import Polysemy.Trace (ignoreTrace, trace)
+import System.Directory (getTemporaryDirectory, removeFile)
+import System.IO (hClose, openBinaryTempFile)
+import System.Timeout (timeout)
 import Test.Hspec
 
 spec :: Spec
 spec = describe "coordinated update planner" $ do
+  it "matches exhaustive finite-domain optimization on varied constraint graphs" $
+    forM_ [0 :: Int .. 63] $ \seed -> do
+      let names = ["alpha", "bravo", "charlie"]
+          domains = Map.fromList
+            [(package, IntMap.fromList [(value, ((seed + position * 7 + value * 3) `mod` 4, value)) | value <- [0 .. 2]])
+              | (position, package) <- zip [0 :: Int ..] names]
+          edges = Map.fromList
+            [((left, right), IntMap.fromList
+              [(own, IntMap.fromList [(other, ((seed + position * 3 + own * 5 + other * 7 + own * other) `mod` 4, 0)) | other <- [0 .. 2]]) | own <- [0 .. 2]])
+              | (position, (left, right)) <- zip [0 :: Int ..] [("alpha", "bravo"), ("alpha", "charlie"), ("bravo", "charlie")],
+                (seed + position) `mod` 4 /= 0]
+          model = Solver.Model (seed `mod` 2, seed `mod` 3) domains edges
+          assignments = [Map.fromList $ zip names values | values <- sequence $ replicate 3 [0 .. 2]]
+          add (failures, steps) (otherFailures, otherSteps) = (failures + otherFailures, steps + otherSteps)
+          score assignment = foldl add (Solver.modelConstant model) $
+            [values IntMap.! (assignment Map.! package) | (package, values) <- Map.toList domains] <>
+            [table IntMap.! (assignment Map.! left) IntMap.! (assignment Map.! right) | ((left, right), table) <- Map.toList edges]
+      (actual, selected, _) <- Solver.optimize (const $ pure ()) model
+      actual `shouldBe` minimum (score <$> assignments)
+      score selected `shouldBe` actual
+      forM_ [(fst actual, snd actual - 1), actual, (fst actual, snd actual + 1)] $ \limit -> do
+        (bounded, _) <- Solver.optimizeBelow (const $ pure ()) (Just limit) model
+        case bounded of
+          Nothing -> actual `shouldSatisfy` (>= limit)
+          Just (boundedScore, boundedSelection) -> do
+            boundedScore `shouldBe` actual
+            boundedScore `shouldSatisfy` (< limit)
+            score boundedSelection `shouldBe` actual
+
+  it "reduces large independent domains in one optimization pass" $ do
+    let domains = Map.fromList
+          [(package, IntMap.fromList [(0, (2, 0)), (1, (0, 1))]) | package <- [1 :: Int .. 4096]]
+        model = Solver.Model (1, 0) domains Map.empty
+    result <- timeout 5000000 $ Solver.optimize (const $ pure ()) model
+    case result of
+      Nothing -> expectationFailure "independent domain reduction took too long"
+      Just (score, selected, _) -> do
+        score `shouldBe` (1, 4096)
+        selected `shouldBe` Map.map (const 1) domains
+
+  it "collapses releases with equivalent dependency outcomes before branching" $ do
+    let packages = ["alpha", "bravo", "charlie"]
+        domains = Map.fromList
+          [(package, IntMap.fromList [(value, (0, value `div` 3)) | value <- [0 .. 29]]) | package <- packages]
+        edges = Map.fromList
+          [((left, right), IntMap.fromList
+            [(own, IntMap.fromList [(other, (if own `mod` 3 == (other + shift) `mod` 3 then 0 else 1, 0)) | other <- [0 .. 29]]) | own <- [0 .. 29]])
+            | (left, right, shift) <- [("alpha", "bravo", 1), ("alpha", "charlie", 2), ("bravo", "charlie", 1)]]
+    (score, selected, branches) <- Solver.optimize (const $ pure ()) $ Solver.Model (0, 0) domains edges
+    score `shouldBe` (0, 0)
+    Map.elems selected `shouldSatisfy` all (< 3)
+    branches `shouldSatisfy` (<= 4)
+
   it "parses solve mode with per-package minimum versions" $
     case execParserPure defaultPrefs (info Args.cmdOptions mempty) ["--solve", "alpha", "2.0", "bravo"] of
       Success (Right options) -> do
         Args.optSolve options `shouldBe` True
+        Args.optDebug options `shouldBe` False
         Args.optTargets options `shouldBe` [(name "alpha", Just $ version "2.0"), (name "bravo", Nothing)]
       _ -> expectationFailure "expected planner arguments to parse"
+
+  it "parses opt-in solver diagnostics" $
+    case execParserPure defaultPrefs (info Args.cmdOptions mempty) ["--debug", "--solve", "alpha"] of
+      Success (Right options) -> do
+        Args.optDebug options `shouldBe` True
+        Args.optSolve options `shouldBe` True
+      _ -> expectationFailure "expected debug arguments to parse"
+
+  it "keeps diagnostics silent by default" $ do
+    output <- capturePlanTrace False
+    output `shouldBe` ""
+
+  it "prints planner diagnostics without internal dependency traces" $ do
+    output <- capturePlanTrace True
+    output `shouldBe` "[plan] Checking candidate...\n"
 
   forM_ [[], ["2.0"], ["alpha", "2..0"]] $ \args ->
     it ("rejects malformed arguments " <> show args) $
@@ -311,7 +387,7 @@ spec = describe "coordinated update planner" $ do
     assertBlocked result "dep: alpha requires bravo <2"
     length (Plan.planWarnings result) `shouldBe` 0
 
-  it "detects impossible transitive bounds before enumerating independent updates" $ do
+  it "keeps independent updates despite impossible transitive bounds" $ do
     let plugins = ["plugin" <> show i | i <- [1 :: Int .. 12]]
     result <- runPlan True [("alpha", Just "2.0")]
       ([ ("alpha", [], [(v, lib (["bravo ==" <> v] <> [package <> " ==" <> v | package <- plugins])) | v <- ["2.0", "3.0"]]),
@@ -319,10 +395,72 @@ spec = describe "coordinated update planner" $ do
          ("charlie", [], [("2.0", [])])
        ] <> [(package, [], [(v, []) | v <- ["2.0", "3.0"]]) | package <- plugins])
     assertBlocked result "no installed or newer preferred version of charlie satisfies"
-    Plan.plansTried result `shouldBe` 1
+    Plan.planVersions result `shouldBe` Map.fromList [(name package, version "2.0") | package <- "alpha" : plugins]
+    length (Plan.planProblems result) `shouldBe` 1
+    Plan.plansTried result `shouldSatisfy` (<= 40)
+
+  forM_
+    [ ("test", ["test-suite checks", "  type: exitcode-stdio-1.0", "  main-is: Test.hs", "  build-depends: hedgehog <1"]),
+      ("setup", ["custom-setup", "  setup-depends: hedgehog <1"])
+    ] $ \(component, dependencies) ->
+      it ("explains transitive " <> component <> " conflicts without adding partial-plan blockers") $ do
+        result <- runPlan True [("alpha", Just "2.0")]
+          [ ("alpha", [], [("2.0", lib ["plugin ==2.0"])]),
+            ("plugin", [], [("2.0", lib ["stan ==2.0"])]),
+            ("stan", [], [("2.0", lib ["trial ==2.0"])]),
+            ("trial", [], [("2.0", dependencies)]),
+            ("hedgehog", [], [])
+          ]
+        assertBlocked result "dep: alpha requires plugin ==2.0"
+        Plan.planVersions result `shouldBe` Map.singleton (name "alpha") (version "2.0")
+        length (Plan.planProblems result) `shouldBe` 1
+        let notes = unlines $ show <$> Plan.planSearchNotes result
+        notes `shouldContain` "Full-solution conflicts (not additional blockers in the partial plan):"
+        notes `shouldContain` "trial 2.0 MakeDepends requires hedgehog <1"
+        notes `shouldContain` "Required through: alpha -> plugin -> stan -> trial -> hedgehog"
+
+  it "retains both owners of incompatible propagated bounds" $ do
+    result <- runPlan True [("alpha", Just "2.0"), ("bravo", Just "2.0")]
+      [ ("alpha", [], [("2.0", lib ["hedgehog <2"])]),
+        ("bravo", [], [("2.0", lib ["hedgehog >=2"])]),
+        ("hedgehog", [], [("2.0", [])])
+      ]
+    length (Plan.planProblems result) `shouldBe` 1
+    let notes = unlines $ show <$> Plan.planSearchNotes result
+    notes `shouldContain` "alpha 2.0 Depends requires hedgehog <2"
+    notes `shouldContain` "bravo 2.0 Depends requires hedgehog >=2"
+
+  it "omits redundant owners from propagated conflict explanations" $ do
+    result <- runPlan True [("alpha", Just "2.0")]
+      [ ("alpha", [], [("2.0", lib ["trial ==2.0", "hedgehog <3"])]),
+        ("trial", [], [("2.0", lib ["hedgehog <1"])]),
+        ("hedgehog", [], [("2.0", [])])
+      ]
+    let notes = unlines $ show <$> Plan.planSearchNotes result
+    notes `shouldContain` "trial 2.0 Depends requires hedgehog <1"
+    notes `shouldNotContain` "alpha 2.0 Depends requires hedgehog <3"
+    notes `shouldContain` "Required through: alpha -> trial -> hedgehog"
+
+  it "keeps provenance for missing dependencies without version bounds" $ do
+    result <- runPlan True [("alpha", Just "2.0")]
+      [("alpha", [], [("2.0", lib ["missing"])])]
+    let notes = unlines $ show <$> Plan.planSearchNotes result
+    notes `shouldContain` "alpha 2.0 Depends requires missing >=0"
+    notes `shouldContain` "Required through: alpha -> missing"
+
+  it "finds a finite provenance path through dependency cycles" $ do
+    result <- runPlan True [("alpha", Just "2.0")]
+      [ ("alpha", [], [("2.0", lib ["bravo ==2.0"])]),
+        ("bravo", [], [("2.0", lib ["charlie ==2.0"])]),
+        ("charlie", [], [("2.0", lib ["bravo ==2.0", "hedgehog <1"])]),
+        ("hedgehog", [], [])
+      ]
+    let notes = unlines $ show <$> Plan.planSearchNotes result
+    notes `shouldContain` "charlie 2.0 Depends requires hedgehog <1"
+    notes `shouldContain` "Required through: alpha -> bravo -> charlie -> hedgehog"
 
   forM_ [["bravo"], ["bravo", "charlie", "delta"]] $ \required ->
-    it ("stops on proven conflicts with " <> show (length required) <> " initial failures") $ do
+    it ("minimizes partial plans with " <> show (length required) <> " initial failures") $ do
       let plugins = ["plugin" <> show i | i <- [1 :: Int .. 12]]
       result <- runPlan True [("alpha", Just "2.0")]
         ([ ("alpha", [], [("2.0", lib [package <> " ==2.0" | package <- required])]),
@@ -332,10 +470,13 @@ spec = describe "coordinated update planner" $ do
            ("base", [], [])
          ] <> [(package, [], [("2.0", [])]) | package <- plugins <> required])
       assertBlocked result "dep: alpha requires bravo ==2.0"
-      Plan.planVersions result `shouldBe` Map.singleton (name "alpha") (version "2.0")
-      length (Plan.planProblems result) `shouldBe` length required
-      Plan.plansTried result `shouldBe` 1
+      Plan.planVersions result `shouldBe` Map.fromList [(name package, version "2.0") | package <- "alpha" : filter (/= "bravo") required]
+      length (Plan.planProblems result) `shouldBe` 1
+      Plan.plansTried result `shouldSatisfy` (<= 40)
       show (Plan.prettyPlanResult result) `shouldContain` "base is fixed at 1.0 by the installed GHC"
+      let notes = unlines $ show <$> Plan.planSearchNotes result
+      notes `shouldContain` "consumer 2.0 Depends requires base >=2"
+      notes `shouldContain` "Required through: alpha -> bravo -[reverse dependency]-> consumer -> base"
 
   it "does not infer a global conflict when a later target avoids the reverse update" $ do
     result <- runPlan True [("alpha", Just "2.0")]
@@ -345,6 +486,59 @@ spec = describe "coordinated update planner" $ do
       ]
     assertWorking result [("alpha", "3.0")]
     length (Plan.planSearchNotes result) `shouldBe` 0
+
+  it "repairs wide partial plans without enumerating independent update subsets" $ do
+    let plugins = ["plugin" <> show index | index <- [1 :: Int .. 24]]
+    result <- runPlan True [("alpha", Just "2.0")]
+      ([ ("alpha", [], [("2.0", lib $ "base >=2" : [package <> " ==2.0" | package <- plugins])]),
+         ("base", [], [])
+       ] <> [(package, [], [("2.0", [])]) | package <- plugins])
+    assertBlocked result "dep: alpha requires base >=2"
+    Plan.planVersions result `shouldBe` Map.fromList [(name package, version "2.0") | package <- "alpha" : plugins]
+    length (Plan.planProblems result) `shouldBe` 1
+    Plan.plansTried result `shouldSatisfy` (<= 50)
+
+  it "keeps future package failures consistent when bounding wide partial plans" $ do
+    let plugins = ["plugin" <> show index | index <- [1 :: Int .. 24]]
+        dependencies = [package <> " ==2.0" | package <- plugins]
+    result <- runPlan True [("alpha", Just "2.0"), ("bravo", Just "2.0")]
+      ([ ("alpha", [], [("2.0", lib $ "base >=2" : dependencies), ("3.0", lib $ "ghc-prim >=2" : dependencies)]),
+         ("bravo", [], [("2.0", lib ["ghc-prim >=2"]), ("3.0", lib ["base >=2"])]),
+         ("base", [], []),
+         ("ghc-prim", [], [])
+       ] <> [(package, [], [("2.0", [])]) | package <- plugins])
+    assertBlocked result "dep: alpha requires base >=2"
+    Plan.planVersions result `shouldBe` Map.fromList [(name package, version "2.0") | package <- "alpha" : "bravo" : plugins]
+    length (Plan.planProblems result) `shouldBe` 2
+    Plan.plansTried result `shouldSatisfy` (<= 60)
+
+  it "checks later requested releases before enumerating partial update subsets" $ do
+    let plugins = ["plugin" <> show index | index <- [1 :: Int .. 24]]
+        dependencies = "base >=2" : [package <> " ==2.0" | package <- plugins]
+    result <- runPlan True [("alpha", Just "2.0")]
+      ([ ("alpha", [], [("2.0", lib dependencies), ("3.0", lib dependencies), ("4.0", lib ["base >=2"])]),
+         ("base", [], [])
+       ] <> [(package, [], [("2.0", [])]) | package <- plugins])
+    assertBlocked result "dep: alpha requires base >=2"
+    Plan.planVersions result `shouldBe` Map.singleton (name "alpha") (version "4.0")
+    length (Plan.planProblems result) `shouldBe` 1
+    Plan.plansTried result `shouldSatisfy` (<= 60)
+
+  it "solves a coordinated plugin family with unavoidable blockers promptly" $ do
+    let plugins = ["plugin" <> show index | index <- [1 :: Int .. 24]]
+        releases = ["2.0", "3.0"]
+        specs =
+          [ ("server", [], [(release, lib $ "missing ==1" : ("core ==" <> release) : [package <> " ==" <> release | package <- plugins]) | release <- releases]),
+            ("core", [], [(release, lib ["base >=2"]) | release <- releases]),
+            ("base", [], [])
+          ] <> [(package, [], [(release, lib ["core ==" <> release]) | release <- releases]) | package <- plugins]
+    completed <- timeout 5000000 $ runPlan True [("server", Just "2.0")] specs
+    case completed of
+      Nothing -> expectationFailure "coordinated partial optimization exceeded five seconds"
+      Just result -> do
+        Plan.planVersions result `shouldBe` Map.fromList [(name package, version "2.0") | package <- "server" : "core" : plugins]
+        length (Plan.planProblems result) `shouldBe` 2
+        Plan.plansTried result `shouldSatisfy` (<= 10)
 
   it "does not revalidate unrelated dependencies of packages kept installed" $ do
     result <- runPlan True [("alpha", Just "2.0")]
@@ -397,6 +591,51 @@ spec = describe "coordinated update planner" $ do
     assertBlocked result "rdep: haskell-zblocker"
     Plan.planVersions result `shouldBe` Map.fromList [(name "alpha", version "2.0"), (name "consumer", version "2.0")]
     length (Plan.planProblems result) `shouldBe` 1
+
+  it "prefers the cheapest partial plan when repairing one bound breaks another" $ do
+    result <- runPlan True [("alpha", Just "2.0")]
+      [ ("alpha", [], [("2.0", lib ["bravo >=2", "charlie >=2"])]),
+        ("bravo", [], [("2.0", [])]),
+        ("charlie", [], [("2.0", [])]),
+        ("consumer", ["bravo"], [("1.0", lib ["bravo <2"])])
+      ]
+    assertBlocked result "dep: alpha requires bravo"
+    Plan.planVersions result `shouldBe` Map.fromList [(name package, version "2.0") | package <- ["alpha", "charlie"]]
+    length (Plan.planProblems result) `shouldBe` 1
+
+  it "agrees with exhaustive partial search on non-monotonic package versions" $ do
+    forM_ ["bravo <2", "bravo >=3", "bravo >=4"] $ \initialRange -> do
+      let specs =
+            [ ("alpha", [], [("2.0", lib ["missing >=1", initialRange]), ("3.0", lib ["missing >=1", "bravo <3"])]),
+              ("bravo", [], [("2.0", lib ["alpha <3"]), ("3.0", lib ["alpha >=3"])])
+            ]
+          releases = ["2.0", "3.0"]
+          combinations = [(alphaCost + bravoCost, alpha, bravo) |
+            (alphaCost, alpha) <- zip [0 :: Int ..] releases, (bravoCost, bravo) <- zip [0 ..] releases]
+      exhaustive <- mapM
+        (\(cost, alpha, bravo) -> do
+          checked <- runPlan False [("alpha", Just alpha), ("bravo", Just bravo)] specs
+          pure (length $ Plan.planProblems checked, cost)) combinations
+      solved <- runPlan True [("alpha", Just "2.0"), ("bravo", Just "2.0")] specs
+      let cost = length $ filter (== version "3.0") $ Map.elems $ Plan.planVersions solved
+      (length $ Plan.planProblems solved, cost) `shouldBe` minimum exhaustive
+
+  it "agrees with exhaustive partial search across varied three-package constraints" $ do
+    let packages = ["alpha", "bravo", "charlie"]
+        ranges = ["<2", "<3", ">=3", "==2", "==3", ">=4"]
+    forM_ [0 .. 31 :: Int] $ \seed -> do
+      let specs = ("consumer", ["alpha"], [("1.0", lib ["alpha <2"])]) :
+            [(owner, [], [(release, lib [dependency <> " " <> ranges !! ((seed `div` (ownerIndex + 1) + releaseIndex * 3 + ownerIndex) `mod` length ranges)]) |
+              (releaseIndex, release) <- zip [0 :: Int ..] ["2.0", "3.0"]]) |
+              (ownerIndex, (owner, dependency)) <- zip [0 :: Int ..] $ zip packages (drop 1 packages <> take 1 packages)]
+          combinations = sequence $ replicate 3 ["2.0", "3.0"]
+      exhaustive <- mapM
+        (\releases -> do
+          checked <- runPlan False (zip packages $ Just <$> releases) specs
+          pure (length $ Plan.planProblems checked, length $ filter (== "3.0") releases)) combinations
+      solved <- runPlan True [(package, Just "2.0") | package <- packages] specs
+      let cost = length $ filter (== version "3.0") $ Map.elems $ Plan.planVersions solved
+      (length $ Plan.planProblems solved, cost) `shouldBe` minimum exhaustive
 
   it "expands recursively and checks reverse dependencies of added targets" $ do
     result <- runPlan True [("alpha", Just "2.0")]
@@ -625,14 +864,11 @@ spec = describe "coordinated update planner" $ do
       checked <- mapM
         (\versions -> do
           result <- runPlan False (zip packages $ Just <$> versions) specs
-          pure (length $ filter (== "3.0") versions, Plan.planIsReady result))
+          pure (length $ Plan.planProblems result, length $ filter (== "3.0") versions))
         combinations
       solved <- runPlan True [(package, Just "2.0") | package <- packages] specs
-      let costs = [cost | (cost, True) <- checked]
-      Plan.planIsReady solved `shouldBe` not (null costs)
-      if null costs
-        then length (Plan.planProblems solved) `shouldSatisfy` (> 0)
-        else length (filter (== version "3.0") $ Map.elems $ Plan.planVersions solved) `shouldBe` minimum costs
+      let cost = length $ filter (== version "3.0") $ Map.elems $ Plan.planVersions solved
+      (length $ Plan.planProblems solved, cost) `shouldBe` minimum checked
 
   it "searches beyond supplied minimum versions without jumping to the latest" $ do
     result <- runPlan True [("alpha", Just "2.0"), ("bravo", Just "2.0")]
@@ -838,6 +1074,115 @@ spec = describe "coordinated update planner" $ do
       assertBlocked result "rdep: haskell-consumer"
       Plan.planVersions result `shouldBe` Map.singleton (name "ghc") (version "9.6.7")
 
+    it "keeps the best partial compiler plan despite impossible bounds" $ do
+      let consumers = ["consumer" <> show index | index <- [1 .. 8 :: Int]]
+          specs = ("stuck", [], [("1.0", lib ["base <2"])]) :
+            [(consumer, [], [("1.0", lib ["base <2"]), ("1.1", lib ["base >=2"])]) | consumer <- consumers]
+      result <- runToolchainPlan True [("ghc", Nothing)] specs
+      assertBlocked result "rdep: haskell-stuck"
+      Plan.planVersions result `shouldBe` Map.fromList ((name "ghc", version "9.6.7") : [(name consumer, version "1.1") | consumer <- consumers])
+      length (Plan.planProblems result) `shouldBe` 1
+      Plan.plansTried result `shouldSatisfy` (<= 12)
+      show (Plan.prettyPlanResult result) `shouldContain` "Full-solution conflicts (not additional blockers in the partial plan):"
+
+    it "prunes dozens of dominated compiler patches after repairing the first plan" $ do
+      let consumers = ["consumer" <> show index | index <- [1 .. 8 :: Int]]
+          specs = ("stuck", [], [("1.0", lib ["base <2"])]) :
+            [(consumer, [], [("1.0", lib ["base <2"]), ("1.1", lib ["base >=2"])]) | consumer <- consumers]
+          releases = Map.fromList
+            [(compiler, Map.insert (name "ghc") compiler $ toolchainReleases Map.! version "9.6.7") |
+              patch <- [1 .. 48 :: Int], let compiler = version $ "9.8." <> show patch]
+          (extra, raw) = toolchainFixture specs
+      result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty True [("ghc", Nothing)] extra raw
+      Plan.planVersions result `shouldBe` Map.fromList ((name "ghc", version "9.8.1") : [(name consumer, version "1.1") | consumer <- consumers])
+      length (Plan.planProblems result) `shouldBe` 1
+      Plan.plansTried result `shouldSatisfy` (<= 3)
+
+    it "does not prune a later patch which changes a compiler conditional" $ do
+      let releases = Map.fromList
+            [(compiler, Map.insert (name "ghc") compiler $ toolchainReleases Map.! version "9.6.7") |
+              patch <- [1 .. 48 :: Int], let compiler = version $ "9.8." <> show patch]
+          (extra, raw) = toolchainFixture
+            [("consumer", [], [("1.0", ["library", "  if impl(ghc >=9.8.40)", "    build-depends: base >=2", "  else", "    build-depends: base <2"])])]
+      result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty True [("ghc", Nothing)] extra raw
+      assertWorking result [("ghc", "9.8.40")]
+      Plan.plansTried result `shouldBe` 2
+
+    forM_
+      [ ["executable tool", "  main-is: Main.hs"],
+        ["test-suite checks", "  type: exitcode-stdio-1.0", "  main-is: Test.hs"],
+        ["library helper"]
+      ] $ \component ->
+        it ("reevaluates compiler conditionals in " <> head component) $ do
+          result <- runToolchainPlan True [("ghc", Nothing)]
+            [("consumer", [], [("1.0", component <> ["  if impl(ghc >=9.6.7 && <9.8)", "    build-depends: missing", "  else", "    build-depends: base >=1"])])]
+          assertWorking result [("ghc", "9.8.1")]
+
+    it "reduces failures even when a dependency cannot be repaired completely" $ do
+      let specs = [("consumer", [], [("1.0", lib ["base <2"] <>
+              ["test-suite spec", "  type: exitcode-stdio-1.0", "  main-is: Spec.hs", "  build-depends: base <1.5"]),
+              ("1.1", lib ["base <2"])])]
+      checked <- runToolchainPlan False [("ghc", Nothing)] specs
+      length (Plan.planProblems checked) `shouldBe` 2
+      result <- runToolchainPlan True [("ghc", Nothing)] specs
+      assertBlocked result "consumer requires base"
+      Plan.planVersions result `shouldBe` Map.fromList [(name "ghc", version "9.6.7"), (name "consumer", version "1.1")]
+      length (Plan.planProblems result) `shouldBe` 1
+
+    it "keeps compiler alternatives consistent when minimizing remaining failures" $ do
+      result <- runToolchainPlan True [("ghc", Nothing)]
+        [ ("alpha", [], [("1.0", ["library", "  if impl(ghc >=9.8 && <9.8.2)",
+            "    build-depends: base >=3", "  else", "    build-depends: base <2"])]),
+          ("bravo", [], [("1.0", ["library", "  if impl(ghc >=9.6.7)",
+            "    build-depends: base >=4", "  else", "    build-depends: base >=1"])])
+        ]
+      assertBlocked result "haskell-bravo"
+      Plan.planVersions result `shouldBe` Map.singleton (name "ghc") (version "9.8.1")
+      length (Plan.planProblems result) `shouldBe` 1
+
+    it "agrees with exhaustive partial search across compiler and package versions" $ do
+      let specs =
+            [ ("stuck", [], [("1.0", lib ["base <2"])]),
+              ("consumer", [], [("1.0", lib ["base <2", "helper >=1"]),
+                ("1.1", lib ["base >=2", "helper >=2"]), ("2.0", lib ["base >=3", "helper >=1"])]),
+              ("helper", [], [("2.0", [])])
+            ]
+          compilers = ["9.6.7", "9.8.1", "9.8.2"]
+          consumers = ["1.0", "1.1", "2.0"]
+          helpers = ["1.0", "2.0"]
+          combinations = [(compilerCost + consumerCost + helperCost, compiler, consumer, helper) |
+            (compilerCost, compiler) <- zip [0 :: Int ..] compilers,
+            (consumerCost, consumer) <- zip [0 ..] consumers, (helperCost, helper) <- zip [0 ..] helpers]
+      exhaustive <- mapM
+        (\(cost, compiler, consumer, helper) -> do
+          checked <- runToolchainPlan False [("ghc", Just compiler), ("consumer", Just consumer), ("helper", Just helper)] specs
+          pure (length $ Plan.planProblems checked, cost)) combinations
+      solved <- runToolchainPlan True [("ghc", Nothing), ("consumer", Just "1.0"), ("helper", Just "1.0")] specs
+      let cost = sum [index | (package, releases) <- [("ghc", compilers), ("consumer", consumers), ("helper", helpers)],
+            (index, release) <- zip [0 :: Int ..] releases, Plan.planVersions solved Map.! name package == version release]
+      (length $ Plan.planProblems solved, cost) `shouldBe` minimum exhaustive
+
+    it "does not use installed versions below requested minimums to dismiss compiler conflicts" $ do
+      result <- runToolchainPlan True [("ghc", Nothing), ("consumer", Just "2.0")]
+        [("consumer", [], [("1.0", lib ["base >=1"]), ("2.0", lib ["base <2"])])]
+      assertBlocked result "dep: consumer requires base"
+      Plan.plansTried result `shouldBe` 1
+      show (Plan.prettyPlanResult result) `shouldContain` "Full-solution conflicts (not additional blockers in the partial plan):"
+
+    it "allows combined compiler, owner, and dependency updates when checking conflicts" $ do
+      result <- runToolchainPlan True [("ghc", Nothing)]
+        [ ("consumer", [], [("1.0", lib ["base <2"]),
+            ("1.1", ["library", "  if impl(ghc >=9.8)", "    build-depends: helper >=2", "  else", "    build-depends: base <2"])]),
+          ("helper", [], [("2.0", [])])
+        ]
+      assertWorking result [("ghc", "9.8.1"), ("consumer", "1.1"), ("helper", "2.0")]
+
+    it "allows a standalone library after a later compiler stops bundling it" $ do
+      let releases = Map.adjust (Map.insert (name "os-string") (version "2.0")) (version "9.6.7") toolchainReleases
+          (extra, raw) = toolchainFixture [("consumer", [], [("1.0", lib ["os-string <2"])]), ("os-string", [], [])]
+      result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty True [("ghc", Nothing)] extra raw
+      assertWorking result [("ghc", "9.8.1")]
+
     it "does not retain libraries removed from the compiler bundle" $ do
       result <- runToolchainPlan False [("ghc", Nothing)]
         [("consumer", [], [("1.0", lib ["libiserv >=1"])]), ("libiserv", [], [])]
@@ -978,6 +1323,16 @@ runPlan :: Bool -> [(String, Maybe String)] -> Fixture -> IO Plan.PlanResult
 runPlan solve targets specs = do
   let (extra, raw) = fixture specs
   requireResult =<< runDB solve targets extra raw
+
+capturePlanTrace :: Bool -> IO String
+capturePlanTrace debug = do
+  temporary <- getTemporaryDirectory
+  bracket (openBinaryTempFile temporary "arch-hs-plan-debug") (\(path, handle) -> hClose handle >> removeFile path) $ \(path, handle) -> do
+    runM . runPlanTrace debug handle $ do
+      trace "Internal dependency trace"
+      tracePlan "Checking candidate..."
+    hClose handle
+    B8.unpack <$> B8.readFile path
 
 runRevisionPlan :: Bool -> [(String, Maybe String)] -> Fixture -> Fixture -> IO Plan.PlanResult
 runRevisionPlan solve targets latest original = do

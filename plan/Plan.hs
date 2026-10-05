@@ -6,8 +6,10 @@
 
 module Plan (PlanResult (..), PlanProblem (..), planUpdates, planIsReady, prettyPlanResult, comparePlanRevisions) where
 
-import Control.Monad (foldM, forM)
+import Control.Monad (foldM, forM, forM_, unless)
+import Data.Foldable (toList)
 import Data.List (foldl', partition, sortOn)
+import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Ord (Down (..))
@@ -22,8 +24,13 @@ import Distribution.ArchHs.Name (isGHCLibs, isHaskellPackage, toArchLinuxName, t
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.RDepCheck
 import Distribution.ArchHs.Types
+import Distribution.Compiler (CompilerFlavor (GHC))
+import Distribution.Types.CondTree (CondTree, condTreeComponents, condBranchCondition, condBranchIfTrue, condBranchIfFalse)
+import Distribution.Types.ConfVar (ConfVar (Impl))
 import Distribution.Version (asVersionIntervals, simplifyVersionRange)
 import Plan.Toolchain
+import qualified Plan.Solver as Solver
+import Plan.Trace (tracePlan)
 
 type PlanEffects r =
   Members
@@ -57,6 +64,7 @@ planUpdates releases solve targets
   | length names /= Set.size (Set.fromList names) = pure $ Left "Each target must be specified only once."
   | any (\name -> name /= "ghc" && isGHCLibs name) names = pure $ Left "GHC bundled libraries cannot be updated independently; request ghc to update the toolchain."
   | otherwise = do
+      tracePlan "Selecting starting versions..."
       installed <- Map.fromList <$> forM names (\name -> (name,) <$> currentVersion name)
       choices <- forM targets $ \(name, requested) -> do
         newer <- if not solve && requested /= Nothing then pure [] else
@@ -89,18 +97,22 @@ currentVersion name = do
 
 data DependencyCache = DependencyCache
   { cachedDependencies :: Map.Map (Version, PackageName, Version) (Either MyException (VersionedList, VersionedList)),
+    cachedDependencyConditions :: Map.Map (PackageName, Version) [VersionRange],
+    cachedDependencyVariants :: Map.Map (PackageName, Version, [Bool]) (Either MyException (VersionedList, VersionedList)),
     cachedExistingDependencies :: Map.Map PackageName ExistingDependencies,
+    cachedCandidateChecks :: Map.Map (Version, PackageName, Version, Bool, Map.Map PackageName Version) ([PlanProblem], [PlanProblem]),
     cachedToolchain :: Maybe Toolchain
   }
 type ExistingDependencies = Map.Map (DepSrc, PackageName) (VersionRange, Maybe Version)
 type ReverseChecks = [(PackageName, [ReverseDep], [SkippedReverseDep])]
 
 emptyDependencies :: DependencyCache
-emptyDependencies = DependencyCache Map.empty Map.empty Nothing
+emptyDependencies = DependencyCache Map.empty Map.empty Map.empty Map.empty Map.empty Nothing
 
 selectToolchain :: PlanEffects r => GHCReleases -> Map.Map PackageName Version -> DependencyCache -> Sem r DependencyCache
 selectToolchain releases selected cache = case Map.lookup "ghc" selected of
   Nothing -> pure cache
+  Just release | Just toolchain <- cachedToolchain cache, toolchainVersion toolchain == release -> pure cache
   Just release -> do
     compiler <- ask @Version
     extra <- ask @ExtraDB
@@ -149,8 +161,19 @@ data SearchCache = SearchCache
     searchReversePackages :: Map.Map ArchLinuxName (Set.Set ArchLinuxName),
     searchRetainable :: Map.Map (PackageName, Int, PackageName, Maybe Version) Bool,
     searchRequiredRanges :: Map.Map PackageName VersionRange,
-    searchConflicts :: Map.Map PackageName PlanProblem
+    searchRangeOrigins :: RangeOrigins,
+    searchConflicts :: Map.Map PackageName PlanProblem,
+    searchRepairBounds :: Map.Map (Maybe Int, PackageName, Maybe Int, PackageName, Maybe Int) RepairBound,
+    searchUnavoidableFailures :: Map.Map (Maybe Int, PackageName, Int) Int
   }
+
+data RangeOrigin
+  = DependencyOrigin [Version] [DepSrc] VersionRange
+  | ReverseUpdateOrigin [Version]
+
+type RangeOrigins = Map.Map PackageName (Map.Map PackageName RangeOrigin)
+
+data RepairBound = RepairBound Int [(Set.Set PackageName, Int)] (Map.Map Version Int)
 
 externalChecks :: PlanEffects r => [PackageName] -> Map.Map ArchLinuxName (Set.Set ArchLinuxName) -> DependencyCache -> Sem r (ReverseChecks, DependencyCache)
 externalChecks targets reversePackages cache = do
@@ -191,6 +214,7 @@ search ::
   Map.Map PackageName [Version] ->
   Sem r PlanResult
 search releases solve installed choices = do
+  tracePlan "Collecting required dependency ranges..."
   extra <- ask @ExtraDB
   let reversePackages = Map.fromListWith Set.union
         [ (_pdName dependency, Set.singleton $ _name desc)
@@ -198,110 +222,177 @@ search releases solve installed choices = do
             isHaskellPackage $ _name desc,
             dependency <- _depends desc <> _makeDepends desc <> _checkDepends desc
         ]
-  (requiredRanges, dependencies) <- if updatingGHC then pure (Map.empty, emptyDependencies) else requestedRanges choices emptyDependencies
-  let initial = SearchCache installed choices dependencies Map.empty reversePackages Map.empty requiredRanges Map.empty
+  (requiredRanges, origins, dependencies) <- if updatingGHC then pure (Map.empty, Map.empty, emptyDependencies) else requestedRanges choices emptyDependencies
+  let initial = SearchCache installed choices dependencies Map.empty reversePackages Map.empty requiredRanges origins Map.empty Map.empty Map.empty
+  tracePlan "Propagating dependency constraints..."
   (conflict, directCache) <- if solve && not updatingGHC then propagateRanges False (Map.keysSet choices) initial else pure (Nothing, initial)
   cache <- case conflict of
-    Nothing | solve && not updatingGHC -> snd <$> propagateRanges True (Map.keysSet choices) directCache
+    Nothing | solve && not updatingGHC -> do
+      tracePlan "Propagating reverse-dependency constraints..."
+      snd <$> propagateRanges True (Map.keysSet choices) directCache
+    Just problem -> pure directCache {searchConflicts = Map.singleton (fst $ Map.findMin choices) problem}
     _ -> pure directCache
-  case conflict of
-    Nothing -> go
-      (Map.singleton (0 :: Int, Down (0 :: Int), start) Nothing)
-      (Set.singleton start)
-      cache 0 Nothing
-    Just problem -> do
-      let selected = versions choices start
-      (reverseChecks, known) <- externalChecks (Map.keys selected) reversePackages (searchDependencies cache)
-      (problems, warnings, _) <- checkSet installed selected reverseChecks known
-      pure $ PlanResult installed selected (Map.keysSet choices) (problem : problems) warnings 1 Nothing [] []
+  let partial = not $ Map.null $ searchConflicts cache
+      known = if partial then cache {searchRequiredRanges = Map.empty} else cache
+  tracePlan $ if partial then "Constraints cannot all be satisfied; optimizing the partial plan..." else "Searching candidate update sets..."
+  forM_ (Map.elems $ searchConflicts cache) $ tracePlan . show . prettySearchConflict (Map.keysSet choices) cache
+  go partial
+    startingQueue
+    startingVisited
+    known 0 Nothing
   where
     updatingGHC = Map.member "ghc" choices
     start = Map.map (const 0) choices
+    startingStates = (0, start) :
+      [(index, Map.insert name index start) | (name, candidates) <- Map.toList choices, index <- [1 .. length candidates - 1]]
+    startingQueue = Map.fromList [((0 :: Int, cost, Down cost, indices), Nothing) | (cost, indices) <- startingStates]
+    startingVisited = Set.fromList $ snd <$> startingStates
     versions catalog indices = Map.mapWithKey (\name index -> catalog Map.! name !! index) indices
 
-    go queue visited cache tried best =
+    go partial queue visited cache tried best =
       case Map.minViewWithKey queue of
         Nothing -> case best of
-          Just (_, result) -> finish tried cache result
+          Just (_, result)
+            | solve && not partial -> do
+                tracePlan "No complete solution; optimizing the partial plan..."
+                go True
+                  startingQueue
+                  startingVisited cache {searchRequiredRanges = Map.empty} tried best
+            | otherwise -> finish tried cache result
           Nothing -> error "planner search starts with one candidate set"
-        Just (((estimate, Down cost, _), Just (result, neighbors)), remaining) ->
-          continue estimate cost remaining visited cache tried best result neighbors
-        Just (((estimate, Down cost, indices), Nothing), remaining) -> do
-          toolchainDependencies <- selectToolchain releases (versions (searchChoices cache) indices) (searchDependencies cache)
-          let selected = Map.filterWithKey (\name _ -> name == "ghc" || not (fixedPackage toolchainDependencies name)) $ versions (searchChoices cache) indices
-              targets = Map.keysSet selected
-          (reverseChecks, dependencies) <- if updatingGHC then pure ([], toolchainDependencies) else case Map.lookup targets (searchReverseChecks cache) of
-            Just cached -> pure (cached, searchDependencies cache)
-            Nothing -> externalChecks (Map.keys selected) (searchReversePackages cache) (searchDependencies cache)
-          (problems, warnings, dependencies') <- checkSet (searchInstalled cache) selected reverseChecks dependencies
-          let cache' = cache
-                { searchDependencies = dependencies',
-                  searchReverseChecks = Map.insert targets reverseChecks (searchReverseChecks cache)
-                }
-              result = PlanResult
-                { planInstalled = Map.filterWithKey (\name _ -> Map.member name selected) (searchInstalled cache),
-                  planVersions = selected,
-                  planRequested = Map.keysSet choices,
-                  planProblems = problems,
-                  planWarnings = warnings,
-                  plansTried = tried + 1,
-                  planToolchain = cachedToolchain dependencies',
-                  planRevisionNotes = [],
-                  planSearchNotes = []
-                }
-              best' = case best of
-                Just (previousCost, previous)
-                  | (length (planProblems previous), previousCost) <= (length problems, cost) -> best
-                _ -> Just (cost, result)
-          case problems of
-            [] -> pure result
-            -- Once propagation proves the whole update impossible, report the
-            -- checked starting set and the conflict. Optimizing partial sets
-            -- cannot produce a working plan and can grow exponentially.
-            _ | not $ Map.null $ searchConflicts cache' -> finish (tried + 1) cache' result
-            _ -> do
-              (neighbors, cache'') <- foldM (advance indices) ([], cache') (nub $ ["ghc" | updatingGHC] <> concatMap problemTargets problems)
-              let movable = Set.fromList $ fst <$> neighbors
-              (repairs, cache''') <- if updatingGHC
-                then pure
-                  ( filter (not . Set.null) [Set.intersection movable $ Set.fromList $ "ghc" : problemTargets problem | problem <- problems],
-                    cache''
-                  )
-                else repairChoices movable indices problems cache''
-              let lowerBound = max (requiredSteps indices cache''') (remainingSteps movable repairs)
-                  priority = max estimate (cost + lowerBound)
-                  -- Every complete solution must repair this clause. Keep all
-                  -- of its alternatives, without enumerating interleavings of
-                  -- unrelated repairs. Prefer small clauses and preserve the
-                  -- requested versions when either choice costs the same.
-                  branchKey clause = (Set.size clause, not $ Set.null $ Set.intersection (Map.keysSet choices) clause, Set.toList clause)
-                  next = case sortOn branchKey repairs of
-                    [] -> []
-                    clause : _ -> [nextState | (name, nextState) <- neighbors, Set.member name clause]
-              -- Refine a queued lower bound before expanding the node. Retain
-              -- its evaluation so reordering does not repeat metadata checks.
-              if priority > estimate
-                then go
-                  (Map.insert (priority, Down cost, indices) (Just (result, next)) remaining)
-                  visited cache''' (tried + 1) best'
-                else continue priority cost remaining visited cache''' (tried + 1) best' result next
+        Just (((failureEstimate, estimate, Down cost, indices), queued), remaining)
+          | partial && prunable failureEstimate estimate best -> go partial remaining visited cache tried best
+          | Just (result, neighbors) <- queued ->
+              continue partial failureEstimate estimate cost remaining visited cache tried best result neighbors
+          | otherwise -> do
+              tracePlan $ "Candidate " <> show (tried + 1) <> ": " <> show cost <> " release steps, " <> show (Map.size remaining) <> " queued; " <>
+                intercalate ", " [unPackageName name <> " " <> prettyShow version | (name, version) <- Map.toList $ versions (searchChoices cache) indices]
+              toolchainDependencies <- selectToolchain releases (versions (searchChoices cache) indices) (searchDependencies cache)
+              let selected = Map.filterWithKey (\name _ -> name == "ghc" || not (fixedPackage toolchainDependencies name)) $ versions (searchChoices cache) indices
+                  targets = Map.keysSet selected
+              (reverseChecks, dependencies) <- if updatingGHC then pure ([], toolchainDependencies) else case Map.lookup targets (searchReverseChecks cache) of
+                Just cached -> pure (cached, searchDependencies cache)
+                Nothing -> externalChecks (Map.keys selected) (searchReversePackages cache) (searchDependencies cache)
+              (problems, warnings, dependencies') <- checkSet (searchInstalled cache) selected reverseChecks dependencies
+              tracePlan $ "Candidate " <> show (tried + 1) <> ": " <> show (length problems) <> " blockers, " <> show (length warnings) <> " warnings"
+              let checkedCache = cache
+                    { searchDependencies = dependencies',
+                      searchReverseChecks = Map.insert targets reverseChecks (searchReverseChecks cache)
+                    }
+              (initialBounds, boundedCache) <- if not (solve && updatingGHC) && (partial || solve && tried == 0)
+                then repairBounds releases indices selected problems checkedCache
+                else pure ([], checkedCache)
+              (ownerFailures, ownerCache) <- if not (solve && updatingGHC) && not (null problems) && (partial || solve && tried == 0 || jointFailures initialBounds > 0)
+                then unavoidableFailures releases indices boundedCache
+                else pure (0, boundedCache)
+              (bounds, cache') <- if ownerFailures > 0 && null initialBounds
+                then repairBounds releases indices selected problems ownerCache
+                else pure (initialBounds, ownerCache)
+              let unavoidable = sum [minimumFailures | (_, RepairBound minimumFailures _ _) <- bounds]
+                  failureBound = max ownerFailures $ jointFailures bounds
+                  boundedQueue = if indices == start && failureBound > 0
+                    then Map.fromList
+                      [((max failureBound failures, priority, depth, candidate), queuedCandidate)
+                        | ((failures, priority, depth, candidate), queuedCandidate) <- Map.toList remaining]
+                    else remaining
+                  partial' = partial || failureBound > 0
+                  diagnosed = if not partial && failureBound > 0
+                    then cache' {searchConflicts = Map.fromList
+                      [(owner, problem) | (problem : _, RepairBound minimumFailures _ _) <- bounds,
+                        owner : _ <- [problemTargets problem], minimumFailures > 0]}
+                    else cache'
+                  result = PlanResult
+                    { planInstalled = Map.filterWithKey (\name _ -> Map.member name selected) (searchInstalled cache),
+                      planVersions = selected,
+                      planRequested = Map.keysSet choices,
+                      planProblems = problems,
+                      planWarnings = warnings,
+                      plansTried = tried + 1,
+                      planToolchain = cachedToolchain dependencies',
+                      planRevisionNotes = [],
+                      planSearchNotes = []
+                    }
+                  best' = case best of
+                    Just (previousCost, previous)
+                      | (length (planProblems previous), previousCost) <= (length problems, cost) -> best
+                    _ -> Just (cost, result)
+              when (maybe True (\(previousCost, previous) -> (length problems, cost) < (length $ planProblems previous, previousCost)) best) $ do
+                tracePlan $ "Best plan: " <> show (length problems) <> " blockers, " <> show cost <> " release steps"
+                forM_ problems $ tracePlan . show . prettyProblem
+              when (not partial && partial') $ tracePlan $ "At least " <> show failureBound <> " blockers are unavoidable; optimizing the partial plan..."
+              case problems of
+                [] -> finish (tried + 1) cache' result
+                _ | solve && updatingGHC -> do
+                  tracePlan "Optimizing compiler alternatives without incremental update-set enumeration..."
+                  (checked, optimized) <- optimizePartial releases choices cache' (tried + 1) best'
+                  let conflicts = Map.fromList
+                        [(owner, problem) | problem <- planProblems optimized, owner : _ <- [problemTargets problem]]
+                  finish checked cache' {searchConflicts = conflicts} optimized
+                _ | partial' -> do
+                  let active = [alternatives | (related, RepairBound minimumFailures alternatives _) <- bounds, length related > minimumFailures]
+                      names = Set.toList $ Set.unions $ fst <$> concat active
+                  (neighbors, known) <- foldM (advance indices) ([], diagnosed {searchRequiredRanges = Map.empty}) names
+                  let movable = Set.fromList $ fst <$> neighbors
+                      minimumFailures = max failureEstimate $ max 1 failureBound
+                      allowance = minimumFailures - unavoidable
+                      steps = remainingCost movable allowance active
+                      priority = if minimumFailures == failureEstimate then max estimate (cost + steps) else cost + steps
+                  tracePlan $ "Partial-plan lower bound: " <> show minimumFailures <> " blockers, " <> show priority <> " release steps"
+                  if prunable minimumFailures priority best'
+                    then go True boundedQueue visited known (tried + 1) best'
+                    else do
+                      (checked, optimized) <- optimizePartial releases choices known (tried + 1) best'
+                      finish checked known optimized
+                _ -> do
+                  (neighbors, cache'') <- foldM (advance indices) ([], cache') (nub $ ["ghc" | updatingGHC] <> concatMap problemTargets problems)
+                  let movable = Set.fromList $ fst <$> neighbors
+                  (repairs, cache''') <- if updatingGHC
+                    then pure
+                      ( filter (not . Set.null) [Set.intersection movable $ Set.fromList $ "ghc" : problemTargets problem | problem <- problems],
+                        cache''
+                      )
+                    else repairChoices movable indices problems cache''
+                  let lowerBound = max (requiredSteps indices cache''') (remainingSteps movable repairs)
+                      priority = max estimate (cost + lowerBound)
+                      -- Every complete solution must repair this clause. Keep all
+                      -- of its alternatives, without enumerating interleavings of
+                      -- unrelated repairs. Prefer small clauses and preserve the
+                      -- requested versions when either choice costs the same.
+                      branchKey clause = (Set.size clause, not $ Set.null $ Set.intersection (Map.keysSet choices) clause, Set.toList clause)
+                      next = case sortOn branchKey repairs of
+                        [] -> []
+                        clause : _ -> [nextState | (name, nextState) <- neighbors, Set.member name clause]
+                  tracePlan $ "Complete-plan lower bound: " <> show priority <> " release steps; " <> show (length next) <> " branches"
+                  -- Refine a queued lower bound before expanding the node. Retain
+                  -- its evaluation so reordering does not repeat metadata checks.
+                  if priority > estimate
+                    then go
+                      False (Map.insert (0, priority, Down cost, indices) (Just (result, next)) boundedQueue)
+                      visited cache''' (tried + 1) best'
+                    else continue False 0 priority cost boundedQueue visited cache''' (tried + 1) best' result next
 
-    finish tried cache result = pure result
-      { plansTried = tried,
+    prunable failures cost best = case best of
+      Just (previousCost, previous) -> (failures, cost) >= (length $ planProblems previous, previousCost)
+      Nothing -> False
+
+    finish tried cache result = do
+      tracePlan $ "Search finished after " <> show tried <> " candidates; " <> show (length $ planProblems result) <> " blockers remain"
+      pure result { plansTried = tried,
         planSearchNotes =
-          [ vsep $ "The required updates cannot all be satisfied:" : (indent 2 . prettyProblem <$> Map.elems (searchConflicts cache))
+          [ vsep $ "Full-solution conflicts (not additional blockers in the partial plan):"
+              : (indent 2 . prettySearchConflict (planRequested result) cache <$> Map.elems (searchConflicts cache))
             | not $ Map.null $ searchConflicts cache
           ]
       }
 
-    continue estimate cost remaining visited cache tried best result neighbors
+    continue partial failureEstimate estimate cost remaining visited cache tried best result neighbors
       | null $ planProblems result = pure result {plansTried = tried}
       | otherwise =
           let unseen = filter (`Set.notMember` visited) neighbors
               -- One release step can reduce the remaining cost by at most one.
               priority = max estimate (cost + 1)
-           in go
-                (foldr (\indices -> Map.insert (priority, Down (cost + 1), indices) Nothing) remaining unseen)
+           in go partial
+                (foldr (\indices -> Map.insert (failureEstimate, priority, Down (cost + 1), indices) Nothing) remaining unseen)
                 (foldr Set.insert visited unseen)
                 cache tried best
 
@@ -318,6 +409,381 @@ search releases solve installed choices = do
               | otherwise -> do
                   cache' <- discoverVersions name cache
                   pure ([(name, Map.insert name 0 indices) | not $ null $ searchChoices cache' Map.! name] <> neighbors, cache')
+
+data DomainOption = DomainOption
+  { optionVersion :: Maybe Version,
+    optionUpdated :: Bool,
+    optionSteps :: Int
+  }
+
+data ConstraintView = ConstraintView Bool Int VersionedList
+
+data ConstraintProblem = ConstraintProblem
+  { constraintDomains :: Map.Map PackageName (IntMap.IntMap DomainOption),
+    constraintViews :: Map.Map (PackageName, Int) ConstraintView,
+    constraintCache :: SearchCache
+  }
+
+inspectConstraint :: PlanEffects r => PackageName -> DomainOption -> SearchCache -> Sem r (ConstraintView, SearchCache)
+inspectConstraint owner option cache = case optionVersion option of
+  Nothing -> pure (ConstraintView False 0 [], cache)
+  Just version -> do
+    (parsed, loaded) <- loadDependencies owner version $ searchDependencies cache
+    (existing, known) <- existingDependencies owner loaded
+    compiler <- ask @Version
+    let updated = optionUpdated option
+        repository = not updated
+        checkingCompiler = isJust $ cachedToolchain known
+        previous = Map.lookup (compiler, owner, version) (cachedDependencies known) >>= either (const Nothing) Just
+        activeRanges = case parsed of
+          Left _ -> []
+          Right parts -> tagDependencies parts
+    ranges <- fmap catMaybes $ forM activeRanges $ \(src, dependency, range) ->
+      if updated || checkingCompiler
+        then pure $ if dependencyWasBroken previous known existing src dependency range then Nothing else Just (dependency, range)
+        else if Set.member (toArchLinuxName owner) $ Map.findWithDefault Set.empty (toArchLinuxName dependency) (searchReversePackages cache)
+          then do
+            installed <- availableVersion known Map.empty dependency
+            pure $ if maybe False (not . (`withinRange` range)) installed then Nothing else Just (dependency, range)
+          else pure Nothing
+    pure (ConstraintView updated (case parsed of Left _ | not repository -> 1; _ -> 0) ranges,
+      cache {searchDependencies = known})
+
+introduceConstraints :: PlanEffects r => Map.Map PackageName [Version] -> Set.Set PackageName -> ConstraintProblem -> Sem r ConstraintProblem
+introduceConstraints requested = go
+  where
+    go pending problem = case Set.minView pending of
+      Nothing -> pure problem
+      Just (name, rest)
+        | Map.member name $ constraintDomains problem -> go rest problem
+        | fixedPackage (searchDependencies $ constraintCache problem) name -> go rest problem
+        | otherwise -> do
+            known <- discoverVersions name $ constraintCache problem
+            let installed = Map.lookup name $ searchInstalled known
+                candidates = searchChoices known Map.! name
+                values = case Map.lookup name requested of
+                  Just releases -> IntMap.fromList [(index, DomainOption (Just version) True index) | (index, version) <- zip [0 ..] releases]
+                  Nothing -> IntMap.fromList $ (-1, DomainOption installed False 0) :
+                    [(index, DomainOption (Just version) True (index + 1)) | (index, version) <- zip [0 ..] candidates]
+                added = problem {constraintDomains = Map.insert name values $ constraintDomains problem, constraintCache = known}
+            withInstalled <- case IntMap.lookup (-1) values of
+              Nothing -> pure added
+              Just option -> do
+                (view, checked) <- inspectConstraint name option known
+                pure added {constraintViews = Map.insert (name, -1) view $ constraintViews added, constraintCache = checked}
+            (owners, checked) <- if isJust $ cachedToolchain $ searchDependencies $ constraintCache withInstalled
+              then pure ([], constraintCache withInstalled)
+              else reverseOwners name values $ constraintCache withInstalled
+            let direct = case Map.lookup (name, -1) $ constraintViews withInstalled of
+                  Just (ConstraintView _ _ ranges) | isJust $ cachedToolchain $ searchDependencies checked -> fst <$> ranges
+                  _ -> []
+            go (Set.unions [rest, Set.fromList owners, Set.fromList direct]) withInstalled {constraintCache = checked}
+
+    reverseOwners target values initial = foldM inspect ([], initial) $ Set.toList $
+      Map.findWithDefault Set.empty (toArchLinuxName target) (searchReversePackages initial)
+      where
+        inspect (owners, cache) archOwner = do
+          let owner = toHackageName archOwner
+          found <- try @MyException $ currentVersion owner
+          case found of
+            Left _ -> pure (owners, cache)
+            Right version -> do
+              (parsed, loaded) <- loadDependencies owner version $ searchDependencies cache
+              installed <- availableVersion loaded Map.empty target
+              let ranges = case parsed of
+                    Left _ -> []
+                    Right parts -> [range | (_, dependency, range) <- tagDependencies parts, dependency == target,
+                      not $ maybe False (not . (`withinRange` range)) installed]
+                  broken = any (\option -> optionUpdated option && any (\range -> maybe True (not . (`withinRange` range)) $ optionVersion option) ranges) $ IntMap.elems values
+              pure ([owner | broken] <> owners, cache {searchDependencies = loaded})
+
+expandConstraints :: PlanEffects r => Map.Map PackageName [Version] -> [(PackageName, Int)] -> ConstraintProblem -> Sem r ConstraintProblem
+expandConstraints requested selections initial = do
+  let names = Set.fromList $ fst <$> selections
+      candidates = [(name, value) | name <- Set.toList names,
+        (value, option) <- IntMap.toList $ constraintDomains initial Map.! name,
+        optionUpdated option, Map.notMember (name, value) $ constraintViews initial]
+  (expanded, dependencies) <- foldM inspect (initial, Set.empty) candidates
+  introduceConstraints requested dependencies expanded
+  where
+    inspect (problem, dependencies) key@(name, value) = do
+      tracePlan $ "Expanding constraint metadata for " <> unPackageName name <> " " <>
+        maybe "(missing)" prettyShow (optionVersion $ constraintDomains problem Map.! name IntMap.! value)
+      (view@(ConstraintView _ _ ranges), known) <- inspectConstraint name (constraintDomains problem Map.! name IntMap.! value) $ constraintCache problem
+      pure (problem {constraintViews = Map.insert key view $ constraintViews problem, constraintCache = known},
+        Set.union dependencies $ Set.fromList $ fst <$> ranges)
+
+constraintModel :: PlanEffects r => Int -> ConstraintProblem -> Sem r (Solver.Model PackageName)
+constraintModel compilerCost problem = foldM addView initial $ Map.toList $ constraintViews problem
+  where
+    domains = constraintDomains problem
+    known = searchDependencies $ constraintCache problem
+    checkingCompiler = isJust $ cachedToolchain known
+    initial = Solver.Model (0, compilerCost) (Map.map (IntMap.map $ \option -> (0, optionSteps option)) domains) Map.empty
+    addCost (failures, steps) (otherFailures, otherSteps) = (failures + otherFailures, steps + otherSteps)
+    addUnary owner value failures model = model
+      {Solver.modelDomains = Map.adjust (IntMap.adjust (addCost (failures, 0)) value) owner $ Solver.modelDomains model}
+    addView model ((owner, value), ConstraintView updated unchecked ranges) =
+      foldM (addRange owner value updated) (addUnary owner value unchecked model) ranges
+    addRange owner value updated model (dependency, range)
+      | unknownCompilerTool known dependency = pure model
+      | dependency == owner = pure $ addUnary owner value (failure updated $ domains Map.! owner IntMap.! value) model
+      | fixedPackage known dependency = do
+          actual <- availableVersion known Map.empty dependency
+          pure $ addUnary owner value (failure updated $ DomainOption actual False 0) model
+      | Just available <- Map.lookup dependency domains = do
+          let key = if owner < dependency then (owner, dependency) else (dependency, owner)
+              emptyTable = IntMap.map (const $ IntMap.map (const (0, 0)) $ domains Map.! snd key) $ domains Map.! fst key
+              table = Map.findWithDefault emptyTable key $ Solver.modelEdges model
+              costs = IntMap.map (\option -> (failure updated option, 0)) available
+              combined = if owner < dependency
+                then IntMap.adjust (IntMap.unionWith addCost costs) value table
+                else IntMap.mapWithKey (\other -> IntMap.adjust (addCost $ costs IntMap.! other) value) table
+          pure model {Solver.modelEdges = Map.insert key combined $ Solver.modelEdges model}
+      | otherwise = pure model
+      where
+        failure active option = if (active || checkingCompiler || optionUpdated option)
+          && maybe True (not . (`withinRange` range)) (optionVersion option) then 1 else 0
+
+optimizePartial :: PlanEffects r => GHCReleases -> Map.Map PackageName [Version] -> SearchCache -> Int -> Maybe (Int, PlanResult) -> Sem r (Int, PlanResult)
+optimizePartial releases requested initial tried best = do
+  tracePlan "Optimizing finite package domains instead of enumerating update subsets..."
+  (_, checked, final) <- foldM compiler (initial, tried, best) compilers
+  case final of
+    Just (_, result) -> pure (checked, result)
+    Nothing -> error "constraint solver starts with an evaluated plan"
+  where
+    compilers = case Map.lookup "ghc" requested of
+      Nothing -> [(Nothing, 0)]
+      Just versions -> [(Just version, index) | (index, version) <- zip [0 ..] versions]
+    compiler (cache, checked, previous) (release, cost)
+      | Just (steps, result) <- previous, null (planProblems result), cost >= steps = pure (cache, checked, previous)
+      | otherwise = do
+          tracePlan $ "Considering " <> maybe "package updates" (\version -> "GHC " <> prettyShow version) release <>
+            "; best score " <> show ((\(steps, result) -> (length $ planProblems result, steps)) <$> previous)
+          dependencies <- case release of
+            Nothing -> pure $ (searchDependencies cache) {cachedToolchain = Nothing}
+            Just version -> selectToolchain releases (Map.singleton "ghc" version) $ searchDependencies cache
+          extra <- ask @ExtraDB
+          let names = Map.keysSet (Map.delete "ghc" requested) `Set.union` case cachedToolchain dependencies of
+                Nothing -> Set.empty
+                Just toolchain -> Set.fromList
+                  [toHackageName $ _name desc | desc <- Map.elems extra, isHaskellPackage $ _name desc,
+                    Set.notMember (_name desc) $ toolchainArchPackages toolchain, isJust $ simpleParsec @Version $ _version desc]
+              problem = ConstraintProblem Map.empty Map.empty cache {searchDependencies = dependencies, searchRequiredRanges = Map.empty}
+          introduced <- introduceConstraints requested names problem
+          let cachedSelections = [(name, value) | isJust release, (name, values) <- Map.toList $ constraintDomains introduced,
+                (value, option) <- IntMap.toList values, optionUpdated option,
+                Just version <- [optionVersion option],
+                Map.member (name, version) $ cachedDependencyConditions $ searchDependencies $ constraintCache introduced]
+          expanded <- expandConstraints requested
+            (cachedSelections <> [(name, value) | name <- Map.keys $ Map.delete "ghc" requested,
+              value <- IntMap.keys $ constraintDomains introduced Map.! name]) introduced
+          let limit = (\(steps, result) -> (length $ planProblems result, steps)) <$> previous
+          (improved, searched, known) <- refine limit cost checked expanded
+          case improved of
+            Nothing -> do
+              tracePlan $ "Pruned " <> maybe "package updates" (\version -> "GHC " <> prettyShow version) release <>
+                ": no improvement below " <> show limit
+              pure (known, searched, previous)
+            Just (score, selected) -> do
+              let selectedCompiler = maybe selected (\version -> Map.insert "ghc" version selected) release
+              (reverseChecks, loaded) <- case release of
+                Just _ -> pure ([], searchDependencies known)
+                Nothing -> externalChecks (Map.keys selectedCompiler) (searchReversePackages known) $ searchDependencies known
+              (problems, warnings, finalDependencies) <- checkSet (searchInstalled known) selectedCompiler reverseChecks loaded
+              unless (fst score == length problems) $ error $ "constraint solver blocker count differs from checked plan: " <> show score <> " versus " <> show (length problems)
+              let result = PlanResult
+                    { planInstalled = Map.restrictKeys (searchInstalled known) $ Map.keysSet selectedCompiler,
+                      planVersions = selectedCompiler,
+                      planRequested = Map.keysSet requested,
+                      planProblems = problems,
+                      planWarnings = warnings,
+                      plansTried = searched,
+                      planToolchain = cachedToolchain finalDependencies,
+                      planRevisionNotes = [],
+                      planSearchNotes = []
+                    }
+              tracePlan $ "Verified constraint optimum: " <> show (length problems) <> " blockers, " <> show (snd score) <> " release steps"
+              pure (known {searchDependencies = finalDependencies}, searched, Just (snd score, result))
+
+    refine limit cost checked problem = do
+      model <- constraintModel cost problem
+      tracePlan $ "Constraint model: " <> show (Map.size $ Solver.modelDomains model) <> " packages, " <>
+        show (Map.size $ Solver.modelEdges model) <> " dependency edges"
+      (improved, nodes) <- Solver.optimizeBelow tracePlan limit model
+      case improved of
+        Nothing -> pure (Nothing, checked, constraintCache problem)
+        Just (score, assignment) -> do
+          tracePlan $ "Constraint lower bound " <> show score <> " after " <> show nodes <> " branches"
+          let unknown = [(name, value) | (name, value) <- Map.toList assignment,
+                optionUpdated $ constraintDomains problem Map.! name IntMap.! value,
+                Map.notMember (name, value) $ constraintViews problem]
+          if null unknown
+            then pure (Just (score, Map.mapMaybeWithKey
+              (\name value -> let option = constraintDomains problem Map.! name IntMap.! value
+                in if optionUpdated option then optionVersion option else Nothing) assignment), checked + 1, constraintCache problem)
+            else do
+              expanded <- expandConstraints requested unknown problem
+              refine limit cost (checked + 1) expanded
+
+jointFailures :: [([PlanProblem], RepairBound)] -> Int
+jointFailures bounds = case Set.toList compilers of
+  [] -> 0
+  available -> minimum [sum [Map.findWithDefault 0 compiler failures | (_, RepairBound _ _ failures) <- bounds] | compiler <- available]
+  where
+    compilers = Set.unions [Map.keysSet failures | (_, RepairBound _ _ failures) <- bounds]
+
+remainingCost :: Set.Set PackageName -> Int -> [[(Set.Set PackageName, Int)]] -> Int
+remainingCost movable allowance repairs = sum $ drop allowance $ sortOn Down costs
+  where
+    branchKey (names, cost) = (Set.size names, Down cost, Set.toList names)
+    clauses = if allowance == 0 then concat repairs else
+      [first | alternatives <- repairs, first : _ <- [sortOn branchKey alternatives]]
+    actionable = [(names', cost) | (names, cost) <- clauses, let names' = Set.intersection movable names, not $ Set.null names']
+    (_, costs) = foldl' count (Set.empty, []) $ sortOn branchKey actionable
+    count (used, totals) (names, cost)
+      | Set.null $ Set.intersection used names = (Set.union used names, cost : totals)
+      | otherwise = (used, totals)
+
+repairBounds :: PlanEffects r => GHCReleases -> Map.Map PackageName Int -> Map.Map PackageName Version -> [PlanProblem] -> SearchCache -> Sem r ([([PlanProblem], RepairBound)], SearchCache)
+repairBounds releases indices selected problems initial = foldM collect (unchecked, initial) $ Map.toList grouped
+  where
+    groupKey problem = case problem of
+      DependencyProblem owner dependency _ _ -> Just (owner, dependency)
+      ReverseDependencyProblem owner dependency _ _ _ -> Just (toHackageName owner, dependency)
+      _ -> Nothing
+    grouped = Map.fromListWith (<>) [(key, [problem]) | problem <- problems, Just key <- [groupKey problem]]
+    unchecked = [([problem], RepairBound 0 [(Set.fromList $ problemTargets problem, 1)] Map.empty) | problem <- problems, Nothing <- [groupKey problem]]
+
+    collect (bounds, cache) ((owner, dependency), related) = do
+      let key = (Map.lookup "ghc" indices, owner, Map.lookup owner indices, dependency, Map.lookup dependency indices)
+      case Map.lookup key $ searchRepairBounds cache of
+        Just bound -> pure ((related, bound) : bounds, cache)
+        Nothing -> do
+          tracePlan $ "Analyzing repairs for " <> unPackageName owner <> " -> " <> unPackageName dependency
+          (bound, checked) <- check owner dependency (length related) cache
+          pure ((related, bound) : bounds, checked {searchRepairBounds = Map.insert key bound $ searchRepairBounds checked})
+
+    check owner dependency failures cache = do
+      (owners, known) <- domain owner cache
+      (dependencies, known') <- domain dependency known
+      installedCompiler <- ask @Version
+      let compilers = case Map.lookup "ghc" indices of
+            Nothing -> [(installedCompiler, 0)]
+            Just index -> [(compiler, offset) | (offset, compiler) <- zip [0 :: Int ..] $ drop index $ searchChoices cache Map.! "ghc"]
+      ((minimumFailures, mandatory, alternatives, minimumCost, compilerFailures), checked) <- foldM
+        (compilerBounds owner dependency failures owners dependencies)
+        ((failures, Nothing, Set.empty, maxBound, Map.empty), known') compilers
+      let restored = checked {searchDependencies = (searchDependencies checked)
+            { cachedToolchain = cachedToolchain $ searchDependencies cache }}
+          repairs = case mandatory of
+            Nothing -> []
+            Just required
+              | Map.null required -> [(alternatives, minimumCost)]
+              | otherwise -> [(Set.singleton name, cost) | (name, cost) <- Map.toList required]
+      pure (RepairBound minimumFailures repairs compilerFailures, restored)
+
+    domain name cache
+      | isGHCLibs name || unknownCompilerTool (searchDependencies cache) name = pure ([], cache)
+      | otherwise = do
+          known <- discoverVersions name cache
+          let versions = Map.findWithDefault [] name $ searchChoices known
+              available = case Map.lookup name indices of
+                Just index -> [(Just version, offset) | (offset, version) <- zip [0 :: Int ..] $ drop index versions]
+                Nothing -> (Map.lookup name $ searchInstalled known, 0) : [(Just version, cost) | (cost, version) <- zip [1 :: Int ..] versions]
+          pure (available, known)
+
+    compilerBounds owner dependency failures owners dependencies (summary, cache) (compiler, compilerCost) = do
+      toolchain <- if Map.member "ghc" selected
+        then selectToolchain releases (Map.singleton "ghc" compiler) (searchDependencies cache)
+        else pure $ searchDependencies cache
+      let known = cache {searchDependencies = toolchain}
+      available <- if fixedPackage toolchain dependency
+        then (\actual -> [(actual, 0)]) <$> availableVersion toolchain Map.empty dependency
+        else pure dependencies
+      foldM (candidateBounds owner dependency failures compiler compilerCost available) (summary, known) owners
+
+    candidateBounds owner dependency failures targetCompiler compilerCost available (summary, cache) (candidate, ownerCost) = do
+      let toolchain = searchDependencies cache
+      (ranges, known) <- if fixedPackage toolchain owner || unknownCompilerTool toolchain dependency
+        then pure ([], toolchain)
+        else case candidate of
+          Nothing -> pure ([], toolchain)
+          Just version -> do
+            (parsed, loaded) <- loadDependencies owner version toolchain
+            (existing, loaded') <- existingDependencies owner loaded
+            compiler <- ask @Version
+            let previous = Map.lookup (compiler, owner, version) (cachedDependencies loaded') >>= either (const Nothing) Just
+                required = case parsed of
+                  Left _ -> []
+                  Right parts -> [range | (src, name, range) <- tagDependencies parts, name == dependency,
+                    not $ dependencyWasBroken previous loaded' existing src name range]
+            pure (required, loaded')
+      let summarize (minimumFailures, mandatory, alternatives, minimumCost, compilerFailures) (actual, dependencyCost) =
+            let count = length [range | range <- ranges, maybe True (not . (`withinRange` range)) actual]
+                changed = Map.fromListWith max $ [(owner, ownerCost) | ownerCost > 0] <>
+                  [(dependency, dependencyCost) | dependencyCost > 0] <> [("ghc", compilerCost) | compilerCost > 0]
+                perCompiler = Map.insertWith min targetCompiler count compilerFailures
+             in if count < failures
+                  then (min minimumFailures count, Just $ maybe changed (Map.intersectionWith min changed) mandatory,
+                    Set.union (Map.keysSet changed) alternatives, min minimumCost $ sum $ Map.elems changed, perCompiler)
+                  else (minimumFailures, mandatory, alternatives, minimumCost, perCompiler)
+      pure (foldl' summarize summary available, cache {searchDependencies = known})
+
+unavoidableFailures :: PlanEffects r => GHCReleases -> Map.Map PackageName Int -> SearchCache -> Sem r (Int, SearchCache)
+unavoidableFailures releases indices initial = foldM collect (0, initial) $ Map.toList $ Map.delete "ghc" indices
+  where
+    collect (total, cache) (owner, index) = do
+      let key = (Map.lookup "ghc" indices, owner, index)
+      case Map.lookup key $ searchUnavoidableFailures cache of
+        Just count -> pure (total + count, cache)
+        Nothing -> do
+          tracePlan $ "Checking unavoidable future failures of " <> unPackageName owner
+          installedCompiler <- ask @Version
+          let compilers = case Map.lookup "ghc" indices of
+                Nothing -> [installedCompiler]
+                Just compilerIndex -> drop compilerIndex $ searchChoices cache Map.! "ghc"
+              candidates = drop index $ searchChoices cache Map.! owner
+          (counts, known) <- foldM (compilerFailures owner candidates) ([], cache) compilers
+          let count = minimum counts
+              restored = known {searchDependencies = (searchDependencies known)
+                    {cachedToolchain = cachedToolchain $ searchDependencies cache}}
+          pure (total + count, restored {searchUnavoidableFailures = Map.insert key count $ searchUnavoidableFailures restored})
+
+    compilerFailures owner candidates (counts, cache) compiler = do
+      toolchain <- if Map.member "ghc" indices
+        then selectToolchain releases (Map.singleton "ghc" compiler) (searchDependencies cache)
+        else pure $ searchDependencies cache
+      if fixedPackage toolchain owner
+        then pure (0 : counts, cache)
+        else foldM (candidateFailures owner) (counts, cache {searchDependencies = toolchain}) candidates
+
+    candidateFailures owner (counts, cache) candidate = do
+      (parsed, loaded) <- loadDependencies owner candidate $ searchDependencies cache
+      (existing, known) <- existingDependencies owner loaded
+      compiler <- ask @Version
+      let previous = Map.lookup (compiler, owner, candidate) (cachedDependencies known) >>= either (const Nothing) Just
+          grouped = case parsed of
+            Left _ -> Map.empty
+            Right parts -> Map.fromListWith (<>)
+              [(dependency, [range]) | (src, dependency, range) <- tagDependencies parts,
+                not $ dependencyWasBroken previous known existing src dependency range]
+      (count, checked) <- foldM dependencyFailures (0, cache {searchDependencies = known}) $ Map.toList grouped
+      pure (count : counts, checked)
+
+    dependencyFailures (total, cache) (dependency, ranges)
+      | unknownCompilerTool (searchDependencies cache) dependency = pure (total, cache)
+      | fixedPackage (searchDependencies cache) dependency = do
+          actual <- availableVersion (searchDependencies cache) Map.empty dependency
+          pure (total + failures actual, cache)
+      | otherwise = do
+          known <- discoverVersions dependency cache
+          let available = Map.lookup dependency (searchInstalled known) :
+                (Just <$> Map.findWithDefault [] dependency (searchChoices known))
+          pure (total + minimum (failures <$> available), known)
+      where
+        failures actual = length [range | range <- ranges, maybe True (not . (`withinRange` range)) actual]
 
 -- Disjoint repair choices each require at least one separate release step.
 -- Shared dependencies are deliberately counted only once, so the estimate
@@ -401,23 +867,32 @@ repairChoices movable indices problems cache = foldM repair ([], cache) problems
 -- constrain the whole search. Their ranges are unions across releases and
 -- intersections across targets. These bounds prevent impossible later releases
 -- from weakening the estimate for an otherwise mandatory update.
-requestedRanges :: PlanEffects r => Map.Map PackageName [Version] -> DependencyCache -> Sem r (Map.Map PackageName VersionRange, DependencyCache)
-requestedRanges choices cache = foldM collect (Map.empty, cache) (Map.toList choices)
+requestedRanges :: PlanEffects r => Map.Map PackageName [Version] -> DependencyCache -> Sem r (Map.Map PackageName VersionRange, RangeOrigins, DependencyCache)
+requestedRanges choices cache = foldM collect (Map.empty, Map.empty, cache) (Map.toList choices)
   where
-    collect (required, known) (name, releases) = do
+    collect (required, origins, known) (name, releases) = do
+      tracePlan $ "Required ranges for " <> unPackageName name <> ": " <> show (length releases) <> " releases"
       (existing, known') <- existingDependencies name known
-      (common, known'') <- foldM
-        (\(previous, parsed) release -> do
+      (common, sources, known'') <- foldM
+        (\(previous, previousSources, parsed) release -> do
           (result, parsed') <- loadDependencies name release parsed
-          let bounds = case result of
-                Left _ -> Map.empty
-                Right parts -> Map.fromListWith intersectVersionRanges $ requiredDependencies existing parts
-          pure (Just $ maybe bounds (Map.intersectionWith unionVersionRanges bounds) previous, parsed'))
-        (Nothing, known')
+          let dependencies = case result of
+                Left _ -> []
+                Right parts -> [(src, dependency, range) | (src, dependency, range) <- tagDependencies parts,
+                  not $ existingDependencyFailure existing src dependency range]
+              bounds = Map.fromListWith intersectVersionRanges [(dependency, range) | (_, dependency, range) <- dependencies]
+              dependencySources = Map.fromListWith Set.union [(dependency, Set.singleton src) | (src, dependency, _) <- dependencies]
+          pure (Just $ maybe bounds (Map.intersectionWith unionVersionRanges bounds) previous,
+            Map.unionWith Set.union previousSources dependencySources, parsed'))
+        (Nothing, Map.empty, known')
         releases
       let own = foldr (unionVersionRanges . thisVersion) noVersion releases
-          bounds = Map.insertWith intersectVersionRanges name own (maybe Map.empty id common)
-      pure (Map.map simplifyVersionRange $ Map.unionWith intersectVersionRanges required bounds, known'')
+          dependencies = Map.map simplifyVersionRange $ fromMaybe Map.empty common
+          bounds = Map.insertWith intersectVersionRanges name own dependencies
+          reasons = Map.mapWithKey (\dependency range -> Map.singleton name $
+            DependencyOrigin releases (Set.toList $ Map.findWithDefault Set.empty dependency sources) range) dependencies
+      pure (Map.map simplifyVersionRange $ Map.unionWith intersectVersionRanges required bounds,
+        Map.unionWith Map.union reasons origins, known'')
 
 -- Propagate only dependencies required by every remaining release. A package
 -- that can stay installed does not need its existing dependencies revalidated.
@@ -428,6 +903,7 @@ propagateRanges includeReverse requested initial = go (Map.keysSet $ searchRequi
     go pending examined cache = case Set.minView pending of
       Nothing -> pure (Nothing, cache)
       Just (name, rest) -> do
+        tracePlan $ "Propagating " <> unPackageName name <> "; " <> show (Set.size rest) <> " packages pending"
         let required = searchRequiredRanges cache Map.! name
         current <- case Map.lookup name (searchInstalled cache) of
           Just version -> pure $ Just version
@@ -457,9 +933,10 @@ propagateRanges includeReverse requested initial = go (Map.keysSet $ searchRequi
               else if Map.lookup name examined == Just eligible
                 then go rest examined known'
                 else do
-                  (implied, dependencies) <- requestedRanges (Map.singleton name eligible) (searchDependencies known')
+                  (implied, origins, dependencies) <- requestedRanges (Map.singleton name eligible) (searchDependencies known')
                   let combined = Map.map simplifyVersionRange $ Map.unionWith intersectVersionRanges (searchRequiredRanges known') implied
-                      forward = known' {searchDependencies = dependencies, searchRequiredRanges = combined}
+                      forward = known' {searchDependencies = dependencies, searchRequiredRanges = combined,
+                        searchRangeOrigins = Map.unionWith Map.union origins (searchRangeOrigins known')}
                   expanded <- if includeReverse then forceReverseUpdates name eligible current forward else pure forward
                   let finalRanges = searchRequiredRanges expanded
                       changed = Map.keysSet $ Map.filterWithKey
@@ -513,7 +990,9 @@ forceReverseUpdates target eligible current initial =
                         then pure checked
                         else pure checked
                           { searchRequiredRanges = Map.insertWith (\a b -> simplifyVersionRange $ intersectVersionRanges a b) owner
-                              (foldr (unionVersionRanges . thisVersion) noVersion releases) (searchRequiredRanges checked)
+                              (foldr (unionVersionRanges . thisVersion) noVersion releases) (searchRequiredRanges checked),
+                            searchRangeOrigins = Map.insertWith Map.union owner (Map.singleton target $ ReverseUpdateOrigin eligible)
+                              (searchRangeOrigins checked)
                           }
 
 -- Adding a package starts at its next preferred release and costs one step,
@@ -532,6 +1011,7 @@ discoverVersions name cache
         Right releases -> pure releases
         Left (PkgNotFound _) -> pure []
         Left err -> throw err
+      tracePlan $ "Discovered " <> show (length available) <> " newer releases of " <> unPackageName name
       pure cache
         { searchInstalled = maybe id (Map.insert name) installed (searchInstalled cache),
           searchChoices = Map.insert name available (searchChoices cache)
@@ -598,19 +1078,28 @@ checkSet installed selected reverseChecks cache = do
       (existing, known'') <- existingDependencies name known'
       compiler <- ask @Version
       let previous = Map.lookup (compiler, name, version) (cachedDependencies known'') >>= either (const Nothing) Just
-      problems <- case dependencies of
-        Left err -> pure [if repository then (True, UncheckedReverseDependency (toArchLinuxName name) ["ghc"] err) else (False, UncheckedCandidate name version err)]
-        Right parts -> concat <$> forM (tagDependencies parts) (\(src, dependency, range) -> do
-          actual <- availableVersion known'' selected dependency
-          let problem = case (repository, actual) of
-                (True, Just candidate) -> ReverseDependencyProblem (toArchLinuxName name) dependency src range candidate
-                _ -> DependencyProblem name dependency range actual
-          pure $ if unknownCompilerTool known'' dependency
-            then [(True, UncheckedCompilerTool name dependency range)]
-            else [(dependencyWasBroken previous known'' existing src dependency range, problem) | maybe True (not . (`withinRange` range)) actual])
-      let (warnings, failures) = partition fst problems
-      (others, otherWarnings, finalCache) <- checkCandidates repository rest known''
-      pure ((snd <$> failures) <> others, (snd <$> warnings) <> otherWarnings, finalCache)
+          proposedCompiler = maybe compiler toolchainVersion $ cachedToolchain known''
+          targets = either (const Set.empty) (Set.fromList . fmap (\(_, dependency, _) -> dependency) . tagDependencies) dependencies
+          key = (proposedCompiler, name, version, repository, Map.restrictKeys selected targets)
+      (failures, warnings, checked) <- case Map.lookup key $ cachedCandidateChecks known'' of
+        Just (failures, warnings) -> pure (failures, warnings, known'')
+        Nothing -> do
+          problems <- case dependencies of
+            Left err -> pure [if repository then (True, UncheckedReverseDependency (toArchLinuxName name) ["ghc"] err) else (False, UncheckedCandidate name version err)]
+            Right parts -> concat <$> forM (tagDependencies parts) (\(src, dependency, range) -> do
+              actual <- availableVersion known'' selected dependency
+              let problem = case (repository, actual) of
+                    (True, Just candidate) -> ReverseDependencyProblem (toArchLinuxName name) dependency src range candidate
+                    _ -> DependencyProblem name dependency range actual
+              pure $ if unknownCompilerTool known'' dependency
+                then [(True, UncheckedCompilerTool name dependency range)]
+                else [(dependencyWasBroken previous known'' existing src dependency range, problem) | maybe True (not . (`withinRange` range)) actual])
+          let (old, introduced) = partition fst problems
+              failures = snd <$> introduced
+              warnings = snd <$> old
+          pure (failures, warnings, known'' {cachedCandidateChecks = Map.insert key (failures, warnings) $ cachedCandidateChecks known''})
+      (others, otherWarnings, finalCache) <- checkCandidates repository rest checked
+      pure (failures <> others, warnings <> otherWarnings, finalCache)
 
 loadDependencies ::
   PlanEffects r =>
@@ -628,11 +1117,35 @@ loadDependencies name version known = do
 loadDependenciesWith :: PlanEffects r => Version -> PackageName -> Version -> DependencyCache -> Sem r (Either MyException (VersionedList, VersionedList), DependencyCache)
 loadDependenciesWith compiler name version known = case Map.lookup (compiler, name, version) (cachedDependencies known) of
   Just cached -> pure (cached, known)
-  Nothing -> do
-    dependencies <- try @MyException $ do
-      cabal <- getCabalIncludingDeprecated name version
-      local @Version (const compiler) $ localDependencyRecord $ directDependencies cabal
-    pure (dependencies, known {cachedDependencies = Map.insert (compiler, name, version) dependencies (cachedDependencies known)})
+  Nothing -> case Map.lookup (name, version) (cachedDependencyConditions known) >>= \conditions ->
+    Map.lookup (name, version, fmap (withinRange compiler) conditions) (cachedDependencyVariants known) of
+      Just cached -> pure (cached, known {cachedDependencies = Map.insert (compiler, name, version) cached (cachedDependencies known)})
+      Nothing -> do
+        tracePlan $ "Reading " <> unPackageName name <> " " <> prettyShow version <> " metadata for GHC " <> prettyShow compiler
+        parsed <- try @MyException $ getCabalIncludingDeprecated name version
+        let conditions = either (const []) compilerConditions parsed
+        dependencies <- case parsed of
+          Left err -> pure $ Left err
+          Right cabal -> try @MyException $ local @Version (const compiler) $ localDependencyRecord $ directDependencies cabal
+        pure (dependencies, known
+          { cachedDependencies = Map.insert (compiler, name, version) dependencies (cachedDependencies known),
+            cachedDependencyConditions = Map.insert (name, version) conditions (cachedDependencyConditions known),
+            cachedDependencyVariants = Map.insert (name, version, fmap (withinRange compiler) conditions) dependencies (cachedDependencyVariants known)
+          })
+
+compilerConditions :: GenericPackageDescription -> [VersionRange]
+compilerConditions cabal = maybe [] compilerRanges (condLibrary cabal)
+  <> concatMap (compilerRanges . snd) (condSubLibraries cabal)
+  <> concatMap (compilerRanges . snd) (condExecutables cabal)
+  <> concatMap (compilerRanges . snd) (condTestSuites cabal)
+
+compilerRanges :: CondTree ConfVar constraints component -> [VersionRange]
+compilerRanges tree = concat
+  [ [range | Impl GHC range <- toList $ condBranchCondition branch]
+      <> compilerRanges (condBranchIfTrue branch)
+      <> maybe [] compilerRanges (condBranchIfFalse branch)
+    | branch <- condTreeComponents tree
+  ]
 
 tagDependencies :: (VersionedList, VersionedList) -> [(DepSrc, PackageName, VersionRange)]
 tagDependencies (depends, makeDepends) =
@@ -843,6 +1356,59 @@ prettyPlanResult result@PlanResult {..} =
     unchecked (UncheckedReverseDependency _ _ _) = True
     unchecked (UncheckedCompilerTool _ _ _) = True
     unchecked _ = False
+
+prettySearchConflict :: Set.Set PackageName -> SearchCache -> PlanProblem -> Doc AnsiStyle
+prettySearchConflict requested cache problem = case problem of
+  UnavailableDependency dependency _ _ -> vsep $ prettyProblem problem :
+    [ indent 2 $ vsep $ prettyOrigin dependency owner origin :
+        [ "Required through:" <+> prettyPath (path <> [dependency])
+          | let path = requiredThrough owner, not $ null path
+        ]
+      | (owner, origin) <- Map.toList $ contributingOrigins dependency
+    ]
+  _ -> prettyProblem problem
+  where
+    origins = searchRangeOrigins cache
+    contributingOrigins dependency = foldl' removeRedundant available $ Map.keys available
+      where
+        available = Map.findWithDefault Map.empty dependency origins
+        bounds reasons = asVersionIntervals $ foldr intersectVersionRanges anyVersion
+          [range | DependencyOrigin _ _ range <- Map.elems reasons]
+        removeRedundant reasons owner = case Map.lookup owner reasons of
+          Just (DependencyOrigin _ _ _)
+            | Map.size reasons > 1,
+              let remaining = Map.delete owner reasons,
+              bounds remaining == bounds reasons -> Map.delete owner reasons
+          _ -> reasons
+    prettyOwner owner [release] = viaPretty owner <+> viaPretty release
+    prettyOwner owner releases = viaPretty owner <+> parens (pretty (length releases) <+> "eligible releases")
+    prettyOrigin dependency owner (DependencyOrigin releases sources range) =
+      prettyOwner owner releases <+> hcat (punctuate "/" $ pretty <$> sources)
+        <+> "requires" <+> viaPretty dependency <+> viaPretty range
+    prettyOrigin dependency owner (ReverseUpdateOrigin releases) =
+      prettyOwner owner releases <+> "forces" <+> viaPretty dependency <+> "to update (reverse dependency)"
+    requiredThrough owner = go Set.empty $ Map.singleton owner [owner]
+      where
+        go visited pending
+          | Just (_, path) <- Map.lookupMin $ Map.restrictKeys pending requested = path
+          | Map.null pending = []
+          | otherwise =
+              let seen = Set.union visited $ Map.keysSet pending
+                  next = Map.fromList
+                    [ (parent, parent : path)
+                      | (dependency, path) <- Map.toList pending,
+                        parent <- Map.keys $ Map.findWithDefault Map.empty dependency origins,
+                        Set.notMember parent seen
+                    ]
+               in go seen next
+    prettyPath [] = mempty
+    prettyPath (first : rest) = foldl' append (viaPretty first) $ zip (first : rest) rest
+      where
+        append path (parent, dependency) = path <+> arrow <+> viaPretty dependency
+          where
+            arrow = case Map.lookup dependency origins >>= Map.lookup parent of
+              Just (ReverseUpdateOrigin _) -> "-[reverse dependency]->"
+              _ -> "->"
 
 prettyProblem :: PlanProblem -> Doc AnsiStyle
 prettyProblem = \case
