@@ -991,7 +991,8 @@ spec = describe "coordinated update planner" $ do
       output `shouldContain` "base 1.0 -> 2.0"
       output `shouldNotContain` "ghc-prim 1.0 -> 1.0"
       output `shouldNotContain` "template-haskell 1.0 -> 1.0"
-      output `shouldContain` "Commit message:\nghc 9.6.7\n\ngenrebuild -H --ignore ghc-static ghc"
+      output `shouldContain` "Commit message:\nghc 9.6.7\n\ngenrebuild -H ghc"
+      output `shouldNotContain` "--ignore"
 
     it "hides the bundled summary when all library versions are unchanged" $ do
       let releases = Map.adjust (Map.insert (name "base") (version "1.0")) (version "9.6.7") toolchainReleases

@@ -1338,7 +1338,7 @@ prettyPlanResult result@PlanResult {..} =
       <> [line <> vsep planSearchNotes | not $ null planSearchNotes]
       <> [line <> vsep planRevisionNotes | not $ null planRevisionNotes]
       <> [ line <> "Commit message:" <> line <> pretty (intercalate ", " updates)
-             <> line <> line <> ("genrebuild -H" <> (if isJust planToolchain then " --ignore ghc-static" else mempty)
+             <> line <> line <> ("genrebuild -H"
                <+> hsep [if name == "ghc" then "ghc" else pretty $ unArchLinuxName $ toArchLinuxName name | name <- Map.keys planVersions])
            | not $ null updates
          ]
