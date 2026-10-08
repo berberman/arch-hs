@@ -260,6 +260,92 @@ main = hspec $ do
         show result `shouldBe` "Right ()"
         output `shouldContain` "haskell-hsc2hs"
 
+  describe "sync direct dependency failure classification" $ do
+    forM_
+      [ ("warns about unchanged upper bounds", ["ansi-wl-pprint ^>=1.0.2"], ["ansi-wl-pprint ^>=1.0.2"], "existing: dep-old=1"),
+        ("warns about changed bounds that remain unmet", ["ansi-wl-pprint <1"], ["ansi-wl-pprint <1.1"], "existing: dep-old=1"),
+        ("blocks newly unmet bounds", ["ansi-wl-pprint ^>=1.1.1"], ["ansi-wl-pprint ^>=1.0.2"], "blocked: dep=1"),
+        ("blocks newly added dependencies", [], ["ansi-wl-pprint ^>=1.0.2"], "blocked: dep=1"),
+        ("drops failures repaired by the candidate", ["ansi-wl-pprint ^>=1.0.2"], ["ansi-wl-pprint ^>=1.0.2 || ^>=1.1.1"], "ok"),
+        ("drops removed dependencies", ["ansi-wl-pprint ^>=1.0.2"], [], "ok")
+      ] $ \(label, installedDeps, candidateDeps, expected) ->
+        it label $ do
+          let (hackage, raw, baseExtra, name) = syncDepCheckDBsWithVersions [("1.0", installedDeps), ("2.0", candidateDeps)] []
+              dependency = toArchLinuxName $ mkPackageName "ansi-wl-pprint"
+              desc = (baseExtra Map.! toArchLinuxName name) {_name = dependency, _version = "1.1.1", _rawVersion = "1.1.1-1"}
+              extra = Map.insert dependency desc baseExtra
+          output <- runSyncDepCheckDBs True (hackage, raw, extra, name)
+          output `shouldContain` ("2.0 (" <> expected <> ")")
+          if expected == "existing: dep-old=1"
+            then do
+              output `shouldContain` "dep-old: ansi-wl-pprint requires"
+              output `shouldNotContain` "dep: ansi-wl-pprint"
+            else output `shouldNotContain` "dep-old:"
+
+    it "warns about missing dependencies already required by the installed version" $ do
+      output <- runSyncDepCheckDBs False $
+        syncDepCheckDBsWithVersions [("1.0", ["missing >=1"]), ("2.0", ["missing >=2"])] []
+      output `shouldContain` "2.0 (existing: dep-old=1)"
+      output `shouldNotContain` "blocked:"
+      output `shouldNotContain` "dep-old:"
+
+    it "combines new and existing direct and reverse dependency failures" $ do
+      output <- runSyncDepCheckDBs True $
+        syncDepCheckDBsWithVersions
+          [("1.0", ["missing >=1"]), ("2.0", ["missing >=1", "new-missing >=1"])]
+          [("new", [Run], "<2"), ("old", [Run], "<1")]
+      output `shouldContain` "2.0 (blocked: dep=1, dep-old=1, rdep=1, rdep-old=1)"
+      output `shouldContain` "dep: new-missing requires >=1, [extra] missing"
+      output `shouldContain` "dep-old: missing requires >=1, [extra] missing"
+
+    it "shows existing direct and reverse failures together as warnings" $ do
+      output <- runSyncDepCheckDBs False $
+        syncDepCheckDBsWithVersions [("1.0", ["missing >=1"]), ("2.0", ["missing >=1"])] [("old", [Run], "<1")]
+      output `shouldContain` "2.0 (existing: dep-old=1, rdep-old=1)"
+      output `shouldNotContain` "blocked:"
+
+    it "compares every candidate against the installed version" $ do
+      output <- runSyncDepCheckDBs False $
+        syncDepCheckDBsWithVersions [("1.0", []), ("1.1", ["missing >=1"]), ("2.0", ["missing >=1"]), ("3.0", ["missing >=1"])] []
+      forM_ ["1.1", "2.0", "3.0"] $ \version ->
+        output `shouldContain` (version <> " (blocked: dep=1)")
+      output `shouldNotContain` "dep-old="
+
+    it "does not classify new build dependency failures as existing runtime failures" $ do
+      let (_, baseRaw, extra, name) = syncDepCheckDBsWithVersions [("1.0", ["missing <1"]), ("2.0", ["missing <1"])] []
+          raw = Map.adjust
+            (\package ->
+              package
+                { RawHackage.versions = Map.adjust
+                    (\version -> version {RawHackage.cabalFile = RawHackage.cabalFile version <> B8.pack "custom-setup\n  setup-depends: missing >=2\n"})
+                    (parseVersion "2.0")
+                    (RawHackage.versions package)
+                })
+            name
+            baseRaw
+      output <- runSyncDepCheckDBs True (Hackage.parseDB raw, raw, extra, name)
+      output `shouldContain` "2.0 (blocked: dep=1, dep-old=1)"
+      output `shouldContain` "dep: missing requires >=2, [extra] missing"
+      output `shouldContain` "dep-old: missing requires <1, [extra] missing"
+
+    it "reads installed metadata even when that version is deprecated" $ do
+      let (_, baseRaw, extra, name) = syncDepCheckDBsWithVersions [("1.0", ["missing >=1"]), ("2.0", ["missing >=1"])] []
+          raw = Map.adjust (\package -> package {RawHackage.preferredVersions = B8.pack "Diff >1"}) name baseRaw
+      output <- runSyncDepCheckDBs False (Hackage.parseDB raw, raw, extra, name)
+      output `shouldContain` "2.0 (existing: dep-old=1)"
+
+    forM_ [False, True] $ \unparseable ->
+      it ("keeps failures blocking without readable installed metadata, unparseable=" <> show unparseable) $ do
+        let (_, baseRaw, extra, name) = syncDepCheckDBsWithVersions [("1.0", ["missing >=1"]), ("2.0", ["missing >=1"])] []
+            changeVersions =
+              if unparseable
+                then Map.adjust (\version -> version {RawHackage.cabalFile = B8.pack "cabal-version: 999.0\nname: Diff\nversion: 1.0\n"}) (parseVersion "1.0")
+                else Map.delete (parseVersion "1.0")
+            raw = Map.adjust (\package -> package {RawHackage.versions = changeVersions $ RawHackage.versions package}) name baseRaw
+        output <- runSyncDepCheckDBs False (Hackage.parseDB raw, raw, extra, name)
+        output `shouldContain` "2.0 (blocked: dep=1)"
+        output `shouldNotContain` "dep-old="
+
   describe "sync reverse dependency failure classification" $ do
     it "counts newly broken and already unmet ranges separately" $ do
       output <- runSyncDepCheck True [] [("new", [Run], "<2"), ("old", [Run], "<1")]
@@ -765,9 +851,12 @@ withIndexEntries entries action = do
     action path
 
 runSyncDepCheck :: Bool -> [String] -> [(String, [DepSrc], String)] -> IO String
-runSyncDepCheck verbose deps reverseDeps = do
-  let (hackage, raw, extra, name) = syncDepCheckDBs deps reverseDeps
-      currentVersion = parseVersion "1.0"
+runSyncDepCheck verbose deps reverseDeps =
+  runSyncDepCheckDBs verbose $ syncDepCheckDBs deps reverseDeps
+
+runSyncDepCheckDBs :: Bool -> (Hackage.HackageDB, RawHackage.HackageDB, ExtraDB, PackageName) -> IO String
+runSyncDepCheckDBs verbose (hackage, raw, extra, name) = do
+  let currentVersion = parseVersion "1.0"
   result <-
     runM
       . runError @MyException
@@ -791,7 +880,10 @@ runSyncDepCheck verbose deps reverseDeps = do
       pure ""
 
 syncDepCheckDBs :: [String] -> [(String, [DepSrc], String)] -> (Hackage.HackageDB, RawHackage.HackageDB, ExtraDB, PackageName)
-syncDepCheckDBs deps reverseDeps =
+syncDepCheckDBs deps = syncDepCheckDBsWithVersions $ ("1.0", []) : [(version, deps) | version <- ["1.1", "2.0", "3.0"]]
+
+syncDepCheckDBsWithVersions :: [(String, [String])] -> [(String, [DepSrc], String)] -> (Hackage.HackageDB, RawHackage.HackageDB, ExtraDB, PackageName)
+syncDepCheckDBsWithVersions candidates reverseDeps =
   (Hackage.parseDB raw, raw, extra, name)
   where
     name = mkPackageName "Diff"
@@ -799,20 +891,20 @@ syncDepCheckDBs deps reverseDeps =
     grouped = Map.fromListWith (<>) [(rdep, [(sources, range)]) | (rdep, sources, range) <- reverseDeps]
     raw =
       Map.fromList $
-        (name, packageData [(version, candidate) | version <- ["1.1", "2.0", "3.0"]] "Diff")
+        (name, packageData [(version, candidate deps) | (version, deps) <- candidates] "Diff")
           : [(mkPackageName rdep, packageData [("1.0", components ranges)] rdep) | (rdep, ranges) <- Map.toList grouped]
 
     packageData versions package =
       RawHackage.PackageData B8.empty . Map.fromList $
         [ ( parseVersion version,
             RawHackage.VersionData
-              (B8.pack $ unlines $ ["cabal-version: 1.24", "name: " <> package, "version: " <> version, "build-type: Simple"] <> body)
+              (B8.pack $ unlines $ ["cabal-version: 2.2", "name: " <> package, "version: " <> version, "build-type: Simple"] <> body)
               B8.empty
           )
           | (version, body) <- versions
         ]
 
-    candidate =
+    candidate deps =
       if null deps
         then []
         else ["library", "  build-depends: " <> intercalate ", " deps]

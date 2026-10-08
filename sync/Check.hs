@@ -24,6 +24,7 @@ data NewerVersion
 
 data CheckResult = CheckResult
   { depFailures :: [DependencyFailure],
+    existingDepFailures :: [DependencyFailure],
     rdepFailures :: [ReverseDependencyFailure],
     existingRdepFailures :: [ReverseDependencyFailure]
   }
@@ -103,6 +104,8 @@ checkNewerVersions False _ _ hackageVersions =
   pure ((\hackageVersion -> NewerVersion hackageVersion Nothing) <$> hackageVersions, [])
 checkNewerVersions True hackageName archVersion hackageVersions = do
   (reverseDeps, skipped) <- reverseDependencyRangesWithSkips hackageName
+  currentFailures <- try @MyException $ getCabalIncludingDeprecated hackageName archVersion >>= dependencyFailuresByCategory
+  let (currentDepends, currentMakeDepends) = either (const ([], [])) id currentFailures
   newerVersions <-
     forM hackageVersions $ \hackageVersion -> do
       -- Candidates are already filtered by preferred versions. Parse the raw
@@ -111,8 +114,10 @@ checkNewerVersions True hackageName archVersion hackageVersions = do
       case eCabal of
         Left err -> pure $ UncheckedVersion hackageVersion err
         Right cabal -> do
-          depFailureDetails <- dependencyFailures cabal
-          let (newRdepFailures, oldRdepFailures) =
+          (depends, makeDepends) <- dependencyFailuresByCategory cabal
+          let (newDepends, oldDepends) = classifyDependencyFailures currentDepends depends
+              (newMakeDepends, oldMakeDepends) = classifyDependencyFailures currentMakeDepends makeDepends
+              (newRdepFailures, oldRdepFailures) =
                 partition
                   (\(ReverseDependencyFailure _ _ range) -> withinRange archVersion range)
                   (rdepFailureDetails hackageVersion reverseDeps)
@@ -121,12 +126,23 @@ checkNewerVersions True hackageName archVersion hackageVersions = do
               hackageVersion
               ( Just
                   CheckResult
-                    { depFailures = depFailureDetails,
+                    { depFailures = newDepends <> newMakeDepends,
+                      existingDepFailures = oldDepends <> oldMakeDepends,
                       rdepFailures = newRdepFailures,
                       existingRdepFailures = oldRdepFailures
                     }
               )
   pure (newerVersions, skipped)
+
+classifyDependencyFailures :: [DependencyFailure] -> [DependencyFailure] -> ([DependencyFailure], [DependencyFailure])
+classifyDependencyFailures current = partition ((`Set.notMember` existing) . dependencyFailureName)
+  where
+    existing = Set.fromList $ dependencyFailureName <$> current
+
+dependencyFailureName :: DependencyFailure -> PackageName
+dependencyFailureName = \case
+  MissingDependency name _ -> name
+  DependencyOutOfRange name _ _ -> name
 
 uniqueSkippedReverseDeps :: [SkippedReverseDep] -> [SkippedReverseDep]
 uniqueSkippedReverseDeps =
@@ -188,7 +204,7 @@ prettyNewerVersion :: NewerVersion -> Doc AnsiStyle
 prettyNewerVersion (UncheckedVersion version _) =
   annRed $ viaPretty version <+> parens "unchecked: cabal parse failed"
 prettyNewerVersion (NewerVersion version Nothing) = annGreen $ viaPretty version
-prettyNewerVersion (NewerVersion version (Just CheckResult {depFailures = [], rdepFailures = [], existingRdepFailures = []})) =
+prettyNewerVersion (NewerVersion version (Just CheckResult {depFailures = [], existingDepFailures = [], rdepFailures = [], existingRdepFailures = []})) =
   annGreen $ viaPretty version <+> parens "ok"
 prettyNewerVersion (NewerVersion version (Just failures@CheckResult {depFailures = [], rdepFailures = []})) =
   annYellow $ viaPretty version <+> parens ("existing:" <+> prettyCheckFailures failures)
@@ -199,6 +215,7 @@ prettyCheckFailures :: CheckResult -> Doc AnsiStyle
 prettyCheckFailures CheckResult {..} =
   hsep . punctuate comma $
     ["dep=" <> pretty (length depFailures) | not (null depFailures)]
+      <> ["dep-old=" <> pretty (length existingDepFailures) | not (null existingDepFailures)]
       <> ["rdep=" <> pretty (length rdepFailures) | not (null rdepFailures)]
       <> ["rdep-old=" <> pretty (length existingRdepFailures) | not (null existingRdepFailures)]
 
@@ -206,17 +223,18 @@ prettyVerboseNewerVersion :: NewerVersion -> [Doc AnsiStyle]
 prettyVerboseNewerVersion (UncheckedVersion version err) =
   [viaPretty version <> colon, indent 2 $ viaShow err]
 prettyVerboseNewerVersion (NewerVersion _ Nothing) = []
-prettyVerboseNewerVersion (NewerVersion _ (Just CheckResult {depFailures = [], rdepFailures = [], existingRdepFailures = []})) = []
+prettyVerboseNewerVersion (NewerVersion _ (Just CheckResult {depFailures = [], existingDepFailures = [], rdepFailures = [], existingRdepFailures = []})) = []
 prettyVerboseNewerVersion (NewerVersion version (Just CheckResult {..})) =
   (viaPretty version <> colon)
-    : fmap (indent 2 . prettyDependencyFailure) depFailures
+    : fmap (indent 2 . prettyDependencyFailure (annRed "dep:")) depFailures
+      <> fmap (indent 2 . prettyDependencyFailure (annYellow "dep-old:")) existingDepFailures
       <> fmap (indent 2 . prettyReverseDependencyFailure (annRed "rdep:")) rdepFailures
       <> fmap (indent 2 . prettyReverseDependencyFailure (annYellow "rdep-old:")) existingRdepFailures
 
-prettyDependencyFailure :: DependencyFailure -> Doc AnsiStyle
-prettyDependencyFailure = \case
+prettyDependencyFailure :: Doc AnsiStyle -> DependencyFailure -> Doc AnsiStyle
+prettyDependencyFailure label = \case
   MissingDependency name range ->
-    annRed "dep:"
+    label
       <+> viaPretty name
       <+> "requires"
       <+> viaPretty range
@@ -224,7 +242,7 @@ prettyDependencyFailure = \case
       <+> ppExtra
       <+> "missing"
   DependencyOutOfRange name range version ->
-    annRed "dep:"
+    label
       <+> viaPretty name
       <+> "requires"
       <+> viaPretty range

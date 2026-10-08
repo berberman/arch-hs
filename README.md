@@ -644,11 +644,15 @@ haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has ne
 
 `rdep` counts ranges that accept the current [extra] version but reject the candidate. `rdep-old` counts ranges that reject both versions. Each failing range is counted separately, including different dependency sources of the same reverse dependency. Ranges satisfied by the candidate are not counted, even if they reject the current version.
 
-Candidates with only existing reverse dependency failures are shown in yellow as `existing: rdep-old=N`. Candidates with direct dependency failures or newly unmet reverse dependency ranges are shown in red as `blocked`, with existing failures counted separately when present.
+`dep` counts newly unmet direct dependency ranges. `dep-old` counts failing ranges for dependencies whose requirements are already unmet for the installed package, comparing runtime dependencies separately from build and test dependencies. Each candidate is compared with the installed version's latest Cabal revision, even if that version is deprecated. Dependencies removed or satisfied by the candidate are not counted. If the installed version's metadata cannot be read or checked, direct dependency failures remain blocking rather than being assumed existing.
+
+Candidates with only existing direct or reverse dependency failures are shown in yellow as `existing: dep-old=N, rdep-old=M`, omitting zero counts. Candidates with newly unmet direct or reverse dependency ranges are shown in red as `blocked`, with existing failures counted separately when present. Existing failure warnings do not establish build compatibility.
+
+For example, both `tree-diff` 0.3.3 and 0.3.4 require `ansi-wl-pprint ^>=1.0.2`, which rejects [extra]'s 1.1.1. Since upgrading does not introduce that failure, 0.3.4 is shown as `existing: dep-old=1`, not `blocked: dep=1`.
 
 If a candidate's `.cabal` file cannot be parsed, `--depcheck` marks it as `unchecked: cabal parse failed` and continues checking the other candidates. Use `--verbose` to include the lookup error.
 
-Add `--verbose` with `--depcheck` to list the dependency and reverse dependency ranges that fail for a version, with existing reverse dependency failures labeled `rdep-old:`:
+Add `--verbose` with `--depcheck` to list the dependency and reverse dependency ranges that fail for a version, with existing failures labeled `dep-old:` and `rdep-old:`:
 
 ```
 $ arch-hs-sync check --depcheck --verbose

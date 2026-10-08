@@ -5,6 +5,7 @@ module Distribution.ArchHs.DepCheck
   ( DependencyFailure (..),
     VersionedList,
     dependencyFailures,
+    dependencyFailuresByCategory,
     directDependencies,
     inRange,
   )
@@ -27,9 +28,17 @@ dependencyFailures ::
   Members [KnownGHCVersion, ExtraEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord] r =>
   GenericPackageDescription ->
   Sem r [DependencyFailure]
-dependencyFailures cabal = do
+dependencyFailures cabal = uncurry (<>) <$> dependencyFailuresByCategory cabal
+
+dependencyFailuresByCategory ::
+  Members [KnownGHCVersion, ExtraEnv, FlagAssignmentsEnv, WithMyErr, Trace, DependencyRecord] r =>
+  GenericPackageDescription ->
+  Sem r ([DependencyFailure], [DependencyFailure])
+dependencyFailuresByCategory cabal = do
   (depends, makedepends) <- directDependencies cabal
-  concat <$> traverse dependencyFailure (depends <> makedepends)
+  depFailures <- concat <$> traverse dependencyFailure depends
+  makeDepFailures <- concat <$> traverse dependencyFailure makedepends
+  pure (depFailures, makeDepFailures)
 
 dependencyFailure :: Members [ExtraEnv, WithMyErr] r => (PackageName, VersionRange) -> Sem r [DependencyFailure]
 dependencyFailure dep =

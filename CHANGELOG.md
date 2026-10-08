@@ -3,6 +3,10 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## Unreleased
+
+- Count existing direct dependency failures as `dep-old` warnings in `arch-hs-sync check --depcheck`, keeping only newly unmet dependencies blocking
+
 ## 0.16
 
 - Add `arch-hs-plan` to check coordinated updates against dependencies and reverse dependencies, with optional search that automatically expands to blocking packages using the fewest incremental release steps
