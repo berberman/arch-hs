@@ -3,9 +3,23 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
-## Unreleased
+## 0.16.1
 
 - Count existing direct dependency failures as `dep-old` warnings in `arch-hs-sync check --depcheck`, keeping only newly unmet dependencies blocking
+
+- Speed up coordinated update solving in `arch-hs-plan --solve` with bounded constraint optimization, minimizing dependency blockers before release steps and pruning equivalent package choices and uncompetitive compiler alternatives
+
+- Add `arch-hs-plan --debug` for solver progress and metadata diagnostics, and distinguish full-solution dependency conflicts from the selected partial plan's blockers
+
+- Remove the obsolete `--ignore ghc-static` exclusion from generated GHC rebuild commands
+
+- Automatically generate selective `uusi` commands for dependency bounds relaxed by Hackage revisions, retaining `--uusi` as a manual override
+
+- Pass `MAKEFLAGS` to builds and show test details directly in generated PKGBUILDs
+
+- Replace the `Cabal` dependency with `Cabal-syntax`, support its 3.16 license identifiers, and update dependency bounds and tested GHC versions to 9.6 through 9.12
+
+- Fix Arch Linux CI by installing the planner's `yaml` dependency
 
 ## 0.16
 
