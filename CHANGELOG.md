@@ -3,6 +3,10 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
+## Unreleased
+
+- Combine planned update commit messages and `genrebuild -H` into a copyable `dorebuild 'rebuild with ...'` command
+
 ## 0.16.1
 
 - Count existing direct dependency failures as `dep-old` warnings in `arch-hs-sync check --depcheck`, keeping only newly unmet dependencies blocking

@@ -612,7 +612,13 @@ The solver minimizes the **total number of release steps beyond the starting set
 
 The output lists installed and proposed versions, marking automatically included packages with `(added by solver)`. It also shows the number of candidate sets checked and any blocking dependency or reverse dependency ranges. If no working set can be found, it reports the remaining conflicts and exits unsuccessfully.
 
-Plans with version changes also print a commit message listing all updated packages and versions on one comma-separated line, including packages added by the solver. A copyable `genrebuild -H <pkgbases...>` command follows, using the corresponding Arch package bases of all packages in the plan and respecting package name presets. Blocked plans include both too, so their updates can be tried manually.
+Plans with version changes also print a copyable full rebuild command, combining a `rebuild with ...` commit message listing all updated packages and versions (including packages added by the solver) with `genrebuild -H` using the corresponding Arch package bases of all packages in the plan and respecting package name presets:
+
+```sh
+dorebuild 'rebuild with dbus 1.3.4, network 3.2.0.0' `genrebuild -H haskell-dbus haskell-network`
+```
+
+Blocked plans include the command too, so their updates can be tried manually. Plans with no version changes omit it.
 
 The planner compares the latest Cabal revision with revision 0 for the chosen packages and their reverse dependencies, showing only dependencies whose check outcomes change. Range-only differences are hidden when both revisions pass, block, warn, or remain unchecked; adding or removing an already-satisfied dependency is also hidden. Changes between those outcomes, including whether a revision can be checked, remain visible. Version selection and the final status use the latest revision; revision 0 is shown for comparison.
 

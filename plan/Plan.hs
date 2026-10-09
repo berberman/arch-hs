@@ -1337,9 +1337,11 @@ prettyPlanResult result@PlanResult {..} =
       <> (prettyWarning <$> planWarnings)
       <> [line <> vsep planSearchNotes | not $ null planSearchNotes]
       <> [line <> vsep planRevisionNotes | not $ null planRevisionNotes]
-      <> [ line <> "Commit message:" <> line <> pretty (intercalate ", " updates)
-             <> line <> line <> ("genrebuild -H"
-               <+> hsep [if name == "ghc" then "ghc" else pretty $ unArchLinuxName $ toArchLinuxName name | name <- Map.keys planVersions])
+      <> [ line <> "Rebuild command:" <> line
+             <> ("dorebuild" <+> squotes ("rebuild with" <+> pretty (intercalate ", " updates))
+               <+> ("`genrebuild -H"
+                 <+> hsep [if name == "ghc" then "ghc" else pretty $ unArchLinuxName $ toArchLinuxName name | name <- Map.keys planVersions]
+                 <> "`"))
            | not $ null updates
          ]
   where
