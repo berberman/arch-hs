@@ -5,6 +5,8 @@ The changelog is available [on GitHub][2].
 
 ## Unreleased
 
+- Preserve shell line continuations and spacing in generated PKGBUILDs by keeping Cabal license compatibility CPP outside the template module
+
 - Combine planned update commit messages and `genrebuild -H` into a copyable `dorebuild 'rebuild with ...'` command
 
 ## 0.16.1

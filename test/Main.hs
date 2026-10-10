@@ -19,6 +19,7 @@ import Distribution.ArchHs.Hackage (getCabalIncludingDeprecated, getNewerVersion
 import Distribution.ArchHs.Name (isGHCLibs, isHaskellPackage, toArchLinuxName, toHackageName)
 import Distribution.ArchHs.Options (ParserResult (..), defaultPrefs, execParserPure, info)
 import Distribution.ArchHs.PP (AnsiStyle, Doc)
+import qualified Distribution.ArchHs.PkgBuild as PkgBuild
 import Distribution.ArchHs.RDepCheck (DepSrc (..), ReverseDep (..))
 import Distribution.ArchHs.Types
 import qualified Distribution.Hackage.DB.Parsed as Hackage
@@ -44,10 +45,45 @@ import System.Exit (ExitCode (..))
 import System.IO (hClose, hFlush, openBinaryTempFile, stdout)
 import Test.Hspec
 import Utils (linkedHaskellPackageDescs)
+import qualified Web.ArchLinux.Types as Arch
 
 main :: IO ()
 main = hspec $ do
   PlanSpec.spec
+  describe "PKGBUILD template" $ do
+    it "preserves configure continuations and spacing before the build command" $ do
+      let output = PkgBuild.applyTemplate templatePkgBuild
+      output `shouldContain` unlines
+        [ "  runhaskell Setup configure -O --enable-shared --enable-debug-info --enable-executable-dynamic --disable-library-vanilla \\",
+          "    --prefix=/usr --docdir=/usr/share/doc/$pkgname --datasubdir=$pkgname --enable-tests \\",
+          "    --dynlibdir=/usr/lib --libsubdir=\\$compiler/site-local/\\$pkgid \\",
+          "    --ghc-option=-optl-Wl\\,-z\\,relro\\,-z\\,now \\",
+          "    --ghc-option='-pie' ",
+          "",
+          "  runhaskell Setup build $MAKEFLAGS"
+        ]
+
+    it "continues configure flags on the following line" $ do
+      let output = PkgBuild.applyTemplate templatePkgBuild {PkgBuild._flags = "-fexample -f-another"}
+      output `shouldContain` unlines
+        [ "    --ghc-option='-pie' \\",
+          "    -fexample -f-another",
+          "",
+          "  runhaskell Setup build $MAKEFLAGS"
+        ]
+
+    it "preserves prepare, check, and license installation blocks" $ do
+      let output = PkgBuild.applyTemplate templatePkgBuild
+            { PkgBuild._enableUusi = True,
+              PkgBuild._removeBoundsWithUusi = ["aeson", "text"]
+            }
+      output `shouldContain` "prepare() {\n  cd $_hkgname-$pkgver\n  uusi -u aeson -u text\n}\n\nbuild() {"
+      output `shouldContain` "check() {\n  cd $_hkgname-$pkgver\n  runhaskell Setup test --show-details=direct\n}\n\npackage() {"
+      output `shouldContain` "  runhaskell Setup copy --destdir=\"$pkgdir\"\n  install -D -m644 LICENSE -t \"$pkgdir\"/usr/share/licenses/$pkgname/"
+
+    it "retains the 0BSD license mapping across Cabal-syntax versions" $
+      PkgBuild.mapLicense <$> simpleParsec "0BSD" `shouldBe` Just Arch.N_0BSD
+
   describe "reverse dependency target arguments" $ do
     forM_
       [ (["aeson"], [("aeson", Nothing)]),
@@ -557,6 +593,23 @@ main = hspec $ do
           show doc `shouldContain` "revision 0"
           show doc `shouldContain` "unchecked: Unable to parse"
           show doc `shouldContain` "rdep: 2.0 is outside Depends range (<2)"
+
+templatePkgBuild :: PkgBuild.PkgBuild
+templatePkgBuild = PkgBuild.PkgBuild
+  { PkgBuild._hkgName = "vcr",
+    PkgBuild._pkgName = "haskell-vcr",
+    PkgBuild._pkgVer = "0.1.0",
+    PkgBuild._pkgDesc = "Record and replay HTTP interactions",
+    PkgBuild._url = "https://github.com/assertible/vcr#readme",
+    PkgBuild._license = "MIT",
+    PkgBuild._depends = "",
+    PkgBuild._makeDepends = "",
+    PkgBuild._sha256sums = "'checksum'",
+    PkgBuild._licenseFile = Just "LICENSE",
+    PkgBuild._enableUusi = False,
+    PkgBuild._removeBoundsWithUusi = [],
+    PkgBuild._flags = ""
+  }
 
 loadLiveExtraDB :: IO ExtraDB
 loadLiveExtraDB = do
