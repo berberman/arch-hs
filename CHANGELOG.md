@@ -3,7 +3,7 @@
 `arch-hs` uses [PVP Versioning][1].
 The changelog is available [on GitHub][2].
 
-## Unreleased
+## 0.16.2
 
 - Show `arch-hs-diff` metadata, dependency, and flag changes together in the existing report, with `-`/`+` markers and unchanged entries shown once, while retaining repository dependency checks
 
