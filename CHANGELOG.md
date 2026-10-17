@@ -5,6 +5,8 @@ The changelog is available [on GitHub][2].
 
 ## Unreleased
 
+- Show `arch-hs-diff` metadata, dependency, and flag changes together in the existing report, with `-`/`+` markers and unchanged entries shown once, while retaining repository dependency checks
+
 - Recognize `rts` and `system-cxx-std-lib` as part of GHC, and honor compiler `provides` metadata consistently in sync checks, Hackage distribution links, and ordinary update planning without excluding standalone versions of newer bundled libraries
 
 - Resolve compiler-provided dependency versions in `arch-hs-plan`, `arch-hs-diff`, and sync dependency checks even when repository aliases are missing, using known GHC placeholder versions without bypassing version bounds

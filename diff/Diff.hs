@@ -16,6 +16,7 @@ import qualified Data.Conduit.Tar as Tar
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes)
+import qualified Data.Text as Text
 import Conduit
 import Distribution.ArchHs.DepCheck
 import Distribution.ArchHs.Exception
@@ -123,11 +124,10 @@ diffCabal name a b = do
 diffTerm :: String -> (a -> String) -> a -> a -> Doc AnsiStyle
 diffTerm s f a b =
   let (ra, rb) = (f a, f b)
-   in annMagneta (pretty s) <> colon
-        <+> ( if ra == rb
-                then pretty ra
-                else ppFromTo 2 (annRed (pretty ra)) (annGreen (pretty rb))
-            )
+      heading = pretty s <> colon
+   in if ra == rb
+        then annMagneta heading <+> pretty ra
+        else vsep [annRed $ "-" <+> heading <+> pretty ra, annGreen $ "+" <+> heading <+> pretty rb]
 
 desc :: PackageDescription -> PackageDescription -> Doc AnsiStyle
 desc = diffTerm "Synopsis" $ fromShortText . synopsis
@@ -174,35 +174,32 @@ lookupDiffExtra va vb = do
   old <- fmap (pp False) <$> mapM inRange diffOld
   return $ vsep [cat $ catMaybes old, cat $ catMaybes new]
 
+ppUnified :: [Text.Text] -> [Text.Text] -> Doc AnsiStyle
+ppUnified before after = indent 2 $
+  case renderChanges $ getGroupedDiff before after of
+    [] -> "[]"
+    changes -> vsep changes
+  where
+    renderChanges (Second added : First removed : rest) = renderChanges $ First removed : Second added : rest
+    renderChanges (change : rest) =
+      (case change of
+        First removed -> fmap (annRed . ("-" <+>) . pretty) removed
+        Second added -> fmap (annGreen . ("+" <+>) . pretty) added
+        Both unchanged _ -> fmap ((" " <+>) . pretty) unchanged)
+        <> renderChanges rest
+    renderChanges [] = []
+
 dep :: Doc AnsiStyle -> VersionedList -> VersionedList -> Doc AnsiStyle
 dep s va vb =
   annMagneta s <> colon <> line
-    <> if noDiff diff
-      then joinToString da
-      else
-        joinToString da
-          <> splitLine
-          <> joinToString db
+    <> ppUnified (joinVersionWithName <$> va) (joinVersionWithName <$> vb)
   where
-    a = joinVersionWithName <$> va
-    b = joinVersionWithName <$> vb
-    da = mconcat $ ppDiffColored <$> filterFirstAndBothDiff diff
-    db = mconcat $ ppDiffColored <$> filterSecondAndBothDiff diff
-    diff = getGroupedDiff a b
-    joinToString [] = indent 2 "[]"
-    joinToString xs = indent 2 $ vsep xs
-    joinVersionWithName (n, range) = unPackageName n <> "  " <> prettyShow range
+    joinVersionWithName (name, range) = Text.pack $ unPackageName name <> "  " <> prettyShow range
 
 flags :: PackageName -> [PkgFlag] -> [PkgFlag] -> Doc AnsiStyle
 flags name a b =
   annMagneta "Flags" <> colon <> line
-    <> if noDiff diff
-      then joinToString a
-      else
-        joinToString a
-          <> splitLine
-          <> joinToString b
+    <> ppUnified (flagLines a) (flagLines b)
   where
-    diff = getGroupedDiff a b
-    joinToString [] = indent 2 "[]"
-    joinToString xs = indent 2 $ prettyFlags [(name, xs)]
+    flagLines [] = []
+    flagLines xs = Text.lines $ render $ unAnnotate $ prettyFlags [(name, xs)]

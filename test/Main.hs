@@ -16,6 +16,7 @@ import Data.List (intercalate, isInfixOf, isPrefixOf, sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe, mapMaybe)
 import qualified Data.Text as Text
+import Data.Text.Encoding (decodeUtf8)
 import Diff (CabalSource (..), diffCabal, inRange)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.ExtraDB (defaultExtraDBPath, loadExtraDB)
@@ -233,6 +234,101 @@ main = hspec $ do
       let rows = take 20 $ liveDistroRows extra
       rows `shouldSatisfy` not . null
       parseDistroCSV (renderDistroCSV rows) `shouldBe` rows
+
+  describe "unified package diffs" $ do
+    let cabal release body = B8.pack $ unlines $
+          ["cabal-version: 1.24", "name: sample", "version: " <> release, "build-type: Simple"] <> body
+        plainOutput ('\ESC' : '[' : rest) = plainOutput $ drop 1 $ dropWhile (/= 'm') rest
+        plainOutput (character : rest) = character : plainOutput rest
+        plainOutput [] = []
+        compareEntries entries = withIndexEntries entries $ \path -> do
+          (result, output) <- captureStdout $
+            runM . runError @MyException . evalState (Map.empty :: Map.Map PackageName [VersionRange])
+              . ignoreTrace . runReader (Offline path) . runReader (Map.empty :: FlagAssignments)
+              . runReader (parseVersion "9.6.7") . runReader (ghcExtraDB "9.6.7")
+              $ diffCabal (mkPackageName "sample") (parseVersion "1.0") (parseVersion "2.0")
+          first show result `shouldBe` Right ()
+          pure $ plainOutput $ Text.unpack $ decodeUtf8 $ B8.pack output
+        compareCabals old new = compareEntries
+          [("sample/1.0/sample.cabal", cabal "1.0" old), ("sample/2.0/sample.cabal", cabal "2.0" new)]
+        library dependencies = ["library", "  build-depends: " <> dependencies]
+        flag name description def manual =
+          ["flag " <> name, "  description: " <> description, "  default: " <> def, "  manual: " <> manual]
+
+    it "keeps the original report sections and marks changed metadata" $ do
+      output <- compareCabals
+        ["synopsis: Old synopsis", "license: BSD3", "homepage: https://example.org/old", "-- old source comment"]
+        ["synopsis: New synopsis", "license: MIT", "homepage: https://example.org/new", "-- new source comment"]
+      output `shouldContain` "Package: sample\n- Version: 1.0\n+ Version: 2.0"
+      output `shouldContain` "- Synopsis: Old synopsis\n+ Synopsis: New synopsis"
+      output `shouldContain` "- License: BSD-3-Clause\n+ License: MIT"
+      output `shouldContain` "- URL: https://example.org/old\n+ URL: https://example.org/new"
+      forM_ ["Depends:", "MakeDepends:", "Flags:"] $ \heading -> output `shouldContain` heading
+      forM_ ["cabal-version:", "source comment", "--- sample-", "+++ sample-", "@@"] $ \raw -> output `shouldNotContain` raw
+
+    it "shows unchanged dependencies once and puts range changes next to each other" $ do
+      output <- compareCabals
+        (library "base >=4 && <5, bytestring >=0.10 && <0.11")
+        (library "base >=4 && <5, bytestring >=0.11 && <0.12, text >=2")
+      output `shouldContain` unlines
+        ["Depends:", "    base  >=4 && <5", "  - bytestring  >=0.10 && <0.11", "  + bytestring  >=0.11 && <0.12", "  + text  >=2"]
+      length (filter (isInfixOf "base  >=4 && <5") $ lines output) `shouldBe` 1
+      output `shouldNotContain` replicate 38 '-'
+
+    it "uses the same unified presentation for build dependencies" $ do
+      let testSuite range = library "base >=4 && <5" <>
+            ["test-suite tests", "  type: exitcode-stdio-1.0", "  main-is: Main.hs", "  build-depends: base >=4 && <5, doctest " <> range]
+      output <- compareCabals (testSuite ">=0.11 && <0.17") (testSuite ">=0.11 && <0.18")
+      output `shouldContain` "MakeDepends:\n  - doctest  >=0.11 && <0.17\n  + doctest  >=0.11 && <0.18"
+
+    it "shows removed dependencies and retains empty sections" $ do
+      output <- compareCabals (library "text >=1") []
+      output `shouldContain` "Depends:\n  - text  >=1"
+      output `shouldContain` "MakeDepends:\n  []"
+      output `shouldContain` "Flags:\n  []"
+
+    it "shows flag field changes together while displaying unchanged flags once" $ do
+      let stable = flag "stable" "Keep this flag" "True" "True"
+      output <- compareCabals
+        (flag "debug" "Old description" "False" "True" <> stable)
+        (flag "debug" "New description" "True" "False" <> stable)
+      output `shouldContain` "Flags:\n    sample\n      ⚐ debug:"
+      output `shouldContain` unlines
+        ["  -         Old description", "  -       default: False", "  -       isManual: True",
+         "  +         New description", "  +       default: True", "  +       isManual: False"]
+      length (filter (isInfixOf "⚐ stable:") $ lines output) `shouldBe` 1
+      length (filter (isInfixOf "Keep this flag") $ lines output) `shouldBe` 1
+
+    forM_ [(False, "+"), (True, "-")] $ \(removed, marker) ->
+      it ("marks a whole " <> (if removed then "removed" else "added") <> " flag") $ do
+        let newFlag = flag "debug" "Debug output" "False" "True"
+        output <- compareCabals (if removed then newFlag else []) (if removed then [] else newFlag)
+        output `shouldContain` ("  " <> marker <> "   ⚐ debug:")
+        output `shouldContain` ("  " <> marker <> "       default: False")
+        output `shouldContain` ("  " <> marker <> "       isManual: True")
+
+    it "retains unchanged metadata, dependencies, and flags without change markers" $ do
+      let body = ["synopsis: Same synopsis"] <> flag "debug" "Debug output" "False" "True" <> library "base >=4 && <5"
+      output <- compareCabals body body
+      output `shouldContain` "Synopsis: Same synopsis"
+      length (filter (isInfixOf "base  >=4 && <5") $ lines output) `shouldBe` 1
+      length (filter (isInfixOf "⚐ debug:") $ lines output) `shouldBe` 1
+      filter (isPrefixOf "  -") (lines output) `shouldBe` []
+      filter (isPrefixOf "  +") (lines output) `shouldBe` []
+
+    forM_ [("unavailable >=1", "does not provide this package"), ("system-cxx-std-lib >=2", "provides")] $ \(dependency, warning) ->
+      it ("compares revision 0 metadata while retaining checks for " <> dependency) $ do
+        let oldPath = "sample/1.0/sample.cabal"
+            newPath = "sample/2.0/sample.cabal"
+        output <- compareEntries
+          [(oldPath, cabal "1.0" ["synopsis: Old original"]),
+           (oldPath, cabal "1.0" ["synopsis: Revised old"]),
+           (newPath, cabal "2.0" $ ["synopsis: New original"] <> library dependency),
+           (newPath, cabal "2.0" ["synopsis: Revised new"])]
+        output `shouldContain` "- Synopsis: Old original\n+ Synopsis: New original"
+        output `shouldNotContain` "Revised old"
+        output `shouldNotContain` "Revised new"
+        output `shouldContain` warning
 
   describe "diff dependency range checks" $ do
     forM_ [("system-cxx-std-lib", "1.0"), ("rts", "1.0.2")] $ \(package, release) ->

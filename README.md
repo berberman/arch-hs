@@ -422,100 +422,30 @@ and remind us if some required packages in extra repo can't satisfy the version 
 By default, `arch-hs-diff` reads revision 0 cabal files from the local Hackage index.
 `-h`/`--hackage` can be used to specify the index tarball path.
 Use `--online` to download revision 0 cabal files from Hackage instead.
-This is useful in the subsequent maintenance of a package. For example:
+
+Changes appear together within the metadata, `Depends`, `MakeDepends`, and `Flags` sections. Removed lines are prefixed with `-`, added lines with `+`, and unchanged entries appear once. Flag descriptions, defaults, and manual settings are compared line by line. Repository dependency warnings remain below the relevant dependency section. This format is used with both the local index and `--online`.
+
+For example:
 
 ```
-$ arch-hs-diff comonad 5.0.6 5.0.7
-ⓘ Loading extra.db from /var/lib/pacman/sync/extra.db
-ⓘ Loading hackage from /home/berberman/.cabal/packages/hackage.haskell.org/01-index.tar
-ⓘ Start running...
-ⓘ Reading revision 0 cabal file from /home/berberman/.cabal/packages/hackage.haskell.org/01-index.tar: comonad/5.0.6/comonad.cabal
-ⓘ Reading revision 0 cabal file from /home/berberman/.cabal/packages/hackage.haskell.org/01-index.tar: comonad/5.0.7/comonad.cabal
-Package: comonad
-Version: 5.0.6  ⇒  5.0.7
-Synopsis: Comonads
-URL: http://github.com/ekmett/comonad/
+$ arch-hs-diff minisat 0.1.3 0.1.4
+Package: minisat
+- Version: 0.1.3
++ Version: 0.1.4
+Synopsis: A Haskell bundle of the Minisat SAT solver
+License: BSD-3-Clause
+URL: https://github.com/jbransen/minisat-bundle.git
 Depends:
-  base  >=4 && <5
-  containers  >=0.3 && <0.7
-  distributive  >=0.2.2 && <1
-  tagged  >=0.7 && <1
-  transformers  >=0.2 && <0.6
-  transformers-compat  >=0.3 && <1
---------------------------------------
-  base  >=4 && <5
-  containers  >=0.3 && <0.7
-  distributive  >=0.2.2 && <1
-  indexed-traversable  >=0.1 && <0.2
-  tagged  >=0.7 && <1
-  transformers  >=0.2 && <0.6
-  transformers-compat  >=0.3 && <1
- 
+  - async  >=0
+  + async  >=2.0.0.0
+    base  >=3 && <5
+  + system-cxx-std-lib  ==1.0
+
 MakeDepends:
-  base  -any
-  doctest  >=0.11.1 && <0.17
---------------------------------------
-  base  -any
-  doctest  >=0.11.1 && <0.18
-"doctest" is required to be in range (>=0.11.1 && <0.17), but [extra] provides (0.17). 
+  []
+
 Flags:
-  comonad
-    ⚐ test-doctests:
-        description:
-          
-        default: True
-        isManual: True
-    ⚐ containers:
-        description:
-          You can disable the use of the `containers` package using `-f-containers`.
-
-          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
-        default: True
-        isManual: True
-    ⚐ distributive:
-        description:
-          You can disable the use of the `distributive` package using `-f-distributive`.
-
-          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
-
-          If disabled we will not supply instances of `Distributive`
-
-        default: True
-        isManual: True
---------------------------------------
-  comonad
-    ⚐ test-doctests:
-        description:
-          
-        default: True
-        isManual: True
-    ⚐ containers:
-        description:
-          You can disable the use of the `containers` package using `-f-containers`.
-
-          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
-        default: True
-        isManual: True
-    ⚐ distributive:
-        description:
-          You can disable the use of the `distributive` package using `-f-distributive`.
-
-          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
-
-          If disabled we will not supply instances of `Distributive`
-
-        default: True
-        isManual: True
-    ⚐ indexed-traversable:
-        description:
-          You can disable the use of the `indexed-traversable` package using `-f-indexed-traversable`.
-
-          Disabling this is an unsupported configuration, but it may be useful for accelerating builds in sandboxes for expert users.
-
-          If disabled we will not supply instances of `FunctorWithIndex`
-
-        default: True
-        isManual: True
+  []
 ✔ Success!
 ```
 
