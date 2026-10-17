@@ -150,6 +150,7 @@ executable arch-hs-sync
   other-modules:
     Args
     Check
+    Check.Options
     Submit
     Submit.CSV
     Utils
@@ -197,6 +198,7 @@ test-suite arch-hs-tests
   main-is:         Main.hs
   other-modules:
     Check
+    Check.Options
     Diff
     Plan
     Plan.Args

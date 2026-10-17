@@ -641,6 +641,15 @@ Only non-deprecated Hackage versions newer than the [extra] version are reported
 
 GHC and its bundled libraries and tools, including `hsc2hs`, are excluded by default because they are updated with the compiler rather than independently. This includes packages listed in the repository `provides` metadata for `ghc` and `ghc-libs`. Pass `--show-ghc-libs` to include them.
 
+Use `--sort name` for alphabetical Arch package names, `--sort updated` for the newest Arch builds first, or `--sort pkgrel` for the lowest Arch package release numbers first. Add `--reverse` for the opposite order, for example:
+
+```
+$ arch-hs-sync check --sort updated --reverse
+$ arch-hs-sync check --depcheck --sort pkgrel
+```
+
+`updated` uses the package's build timestamp from the local `extra.db`, including when loading through `--alpm`; it does not fetch the Arch website's last-update time. Package releases are compared numerically, including subreleases such as `2.1`. Equal sort values use alphabetical Arch package names, and missing or invalid values always appear last. Without `--sort`, the existing package order is preserved. Sorting also works with `--depcheck` and `--verbose`, keeping each package's details together.
+
 Pass `--depcheck` to check whether each newer Hackage version is currently upgradable with the packages already in [extra]. A version is shown as `ok` only when both its dependency ranges are satisfied by [extra] and all current reverse dependency ranges accept that version:
 
 ```

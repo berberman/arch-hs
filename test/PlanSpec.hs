@@ -1312,6 +1312,7 @@ fixture specs =
       { _name = toArchLinuxName $ name package,
         _version = "1.0",
         _rawVersion = "1.0-1",
+        _buildDate = Nothing,
         _desc = "Planner fixture",
         _url = Nothing,
         _provides = [],

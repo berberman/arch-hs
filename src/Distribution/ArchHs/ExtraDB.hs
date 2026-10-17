@@ -35,27 +35,32 @@ import Distribution.ArchHs.Types
 -----------------------------------------------------------------------------
 
 #ifdef ALPM
+import Data.Int (Int64)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Distribution.ArchHs.Utils (extractFromEVR)
 import Foreign.C.String (CString, peekCString)
 import Foreign.Ptr (FunPtr, freeHaskellFunPtr)
 
 foreign import ccall "wrapper"
-  wrap :: (CString -> CString -> CString -> CString -> IO ()) -> IO (FunPtr (CString -> CString -> CString -> CString -> IO ()))
+  wrapPkg :: (CString -> CString -> CString -> CString -> Int64 -> IO ()) -> IO (FunPtr (CString -> CString -> CString -> CString -> Int64 -> IO ()))
+
+foreign import ccall "wrapper"
+  wrapList :: (CString -> CString -> CString -> CString -> IO ()) -> IO (FunPtr (CString -> CString -> CString -> CString -> IO ()))
 
 foreign import ccall "clib.h query_extra"
-  query_extra :: FunPtr (CString -> CString -> CString -> CString -> IO ()) -> FunPtr (CString -> CString -> CString -> CString -> IO ()) -> IO ()
+  query_extra :: FunPtr (CString -> CString -> CString -> CString -> Int64 -> IO ()) -> FunPtr (CString -> CString -> CString -> CString -> IO ()) -> IO ()
 
-type RawPkgSet = IORef (Map.Map ArchLinuxName ((ArchLinuxVersion, ArchLinuxVersion, String, String), IORef (Map.Map String [(ArchLinuxName, Maybe ArchLinuxVersion)])))
+type RawPkgSet = IORef (Map.Map ArchLinuxName ((ArchLinuxVersion, ArchLinuxVersion, String, String, Maybe Integer), IORef (Map.Map String [(ArchLinuxName, Maybe ArchLinuxVersion)])))
 
-pkgCallback :: RawPkgSet -> CString -> CString -> CString -> CString -> IO ()
-pkgCallback ref name version desc url = do
+pkgCallback :: RawPkgSet -> CString -> CString -> CString -> CString -> Int64 -> IO ()
+pkgCallback ref name version desc url buildDate = do
   name' <- peekCString name
   version' <- peekCString version
   desc' <- peekCString desc
   url' <- peekCString url
   m <- newIORef Map.empty
-  modifyIORef' ref (Map.insert (ArchLinuxName name') ((extractFromEVR version', version', desc', url'), m))
+  let buildDate' = if buildDate > 0 then Just (toInteger buildDate) else Nothing
+  modifyIORef' ref (Map.insert (ArchLinuxName name') ((extractFromEVR version', version', desc', url', buildDate'), m))
 
 listCallback :: RawPkgSet -> CString -> CString -> CString -> CString -> IO ()
 listCallback ref name key dm dv = do
@@ -70,15 +75,15 @@ listCallback ref name key dm dv = do
 loadExtraDBFFI :: IO ExtraDB
 loadExtraDBFFI = do
   ref <- newIORef Map.empty
-  pkgCallbackW <- wrap $ pkgCallback ref
-  listCallbackW <- wrap $ listCallback ref
+  pkgCallbackW <- wrapPkg $ pkgCallback ref
+  listCallbackW <- wrapList $ listCallback ref
   query_extra pkgCallbackW listCallbackW
   freeHaskellFunPtr pkgCallbackW
   freeHaskellFunPtr listCallbackW
   s <- readIORef ref
   re <-
     mapM
-      ( \(name, ((ver, rawVer, desc, url), r)) -> do
+      ( \(name, ((ver, rawVer, desc, url, buildDate), r)) -> do
           l <- readIORef r
           let f (Just xs) = uncurry PkgDependent <$> xs
               f Nothing = []
@@ -88,6 +93,7 @@ loadExtraDBFFI = do
                 { _name = name,
                   _version = ver,
                   _rawVersion = rawVer,
+                  _buildDate = buildDate,
                   _desc = desc,
                   _url = if null url then Nothing else Just url,
                   _depends = f $ l Map.!? "depends",
@@ -124,7 +130,7 @@ loadExtraDBC path = do
                 desc
                   : ( if _name desc == ArchLinuxName "ghc"
                         || _name desc == ArchLinuxName "ghc-libs"
-                        then mapMaybe promoteDependent (_provides desc)
+                        then map (\provided -> provided {_buildDate = _buildDate desc}) $ mapMaybe promoteDependent (_provides desc)
                         else []
                     )
               -- Drop it if failed to parse

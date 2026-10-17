@@ -1,9 +1,11 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Main (main) where
 
 import qualified Check as Sync
+import qualified Check.Options as SyncOptions
 import qualified Conduit as C
 import Control.Exception (bracket, try)
 import Control.Monad (forM_, void)
@@ -12,14 +14,19 @@ import qualified Data.Conduit.Tar as Tar
 import Data.List (intercalate, isInfixOf, isPrefixOf, sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe, mapMaybe)
+import qualified Data.Text as Text
 import Diff (inRange)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.ExtraDB (defaultExtraDBPath, loadExtraDB)
+#ifdef ALPM
+import Distribution.ArchHs.ExtraDB (loadExtraDBFFI)
+#endif
 import Distribution.ArchHs.Hackage (getCabalIncludingDeprecated, getNewerVersions, loadHackageDBsWithRevisions, loadRawHackageDB, loadRawHackageRevisions)
 import Distribution.ArchHs.Name (isGHCLibs, isHaskellPackage, toArchLinuxName, toHackageName)
 import Distribution.ArchHs.Options (ParserResult (..), defaultPrefs, execParserPure, info)
 import Distribution.ArchHs.PP (AnsiStyle, Doc)
 import qualified Distribution.ArchHs.PkgBuild as PkgBuild
+import Distribution.ArchHs.PkgDesc (parseDescEntry)
 import Distribution.ArchHs.RDepCheck (DepSrc (..), ReverseDep (..))
 import Distribution.ArchHs.Types
 import qualified Distribution.Hackage.DB.Parsed as Hackage
@@ -204,6 +211,21 @@ main = hspec $ do
       _rawVersion `shouldSatisfy` (_version `isPrefixOf`)
       drop (length _version) _rawVersion `shouldSatisfy` isPkgrelSuffix
 
+    it "keeps build timestamps for real Haskell packages" $ do
+      extra <- loadLiveExtraDB
+      samples <- requireHaskellSamples extra
+      forM_ samples $ \(_, desc) ->
+        _buildDate desc `shouldSatisfy` maybe False (> 0)
+
+#ifdef ALPM
+    it "loads the same build timestamps through libalpm" $ do
+      extra <- loadLiveExtraDB
+      samples <- requireHaskellSamples extra
+      alpmExtra <- loadExtraDBFFI
+      forM_ samples $ \(name, desc) ->
+        (_buildDate <$> Map.lookup name alpmExtra) `shouldBe` Just (_buildDate desc)
+#endif
+
     it "renders Hackage distro CSV rows from current extra.db and parses them back" $ do
       extra <- loadLiveExtraDB
       let rows = take 20 $ liveDistroRows extra
@@ -251,6 +273,75 @@ main = hspec $ do
           packageVersion desc `shouldBe` version101
         Left err ->
           expectationFailure $ "expected masked cabal lookup to succeed, got: " <> show err
+
+  describe "pacman build timestamp parsing" $ do
+    forM_ ["100", "4000000000"] $ \timestamp ->
+      it ("reads build timestamp " <> timestamp) $
+        (_buildDate <$> parseDescEntry (syncDescEntry "example" "1.0-1" $ Just timestamp))
+          `shouldBe` Just (Just $ read timestamp)
+
+    forM_ [Nothing, Just "", Just "invalid", Just "0", Just "-1"] $ \timestamp ->
+      it ("keeps packages with missing or invalid build timestamps: " <> show timestamp) $
+        (_buildDate <$> parseDescEntry (syncDescEntry "example" "1.0-1" timestamp))
+          `shouldBe` Just Nothing
+
+  describe "sync sorting arguments" $ do
+    forM_
+      [ ([], Nothing, False),
+        (["--reverse"], Nothing, True),
+        (["--sort", "name"], Just SyncOptions.SortName, False),
+        (["--sort", "updated"], Just SyncOptions.SortUpdated, False),
+        (["--sort=pkgrel"], Just SyncOptions.SortPkgrel, False),
+        (["--sort", "updated", "--reverse"], Just SyncOptions.SortUpdated, True)
+      ] $ \(args, sortKey, reverseOrder) ->
+        it ("parses sorting options " <> show args) $
+          case execParserPure defaultPrefs (info SyncOptions.checkOptionsParser mempty) args of
+            Success options -> options `shouldBe` SyncOptions.CheckOptions False False False sortKey reverseOrder
+            _ -> expectationFailure "expected sorting arguments to parse"
+
+    it "combines sorting with existing check options" $
+      case execParserPure defaultPrefs (info SyncOptions.checkOptionsParser mempty)
+        ["--show-ghc-libs", "--depcheck", "--verbose", "--sort", "pkgrel", "--reverse"] of
+        Success options -> options `shouldBe` SyncOptions.CheckOptions True True True (Just SyncOptions.SortPkgrel) True
+        _ -> expectationFailure "expected combined check arguments to parse"
+
+    forM_ [["--sort", "unknown"], ["--sort"], ["--reverse", "true"]] $ \args ->
+      it ("rejects malformed sorting options " <> show args) $
+        case execParserPure defaultPrefs (info SyncOptions.checkOptionsParser mempty) args of
+          Success _ -> expectationFailure "expected malformed sorting arguments to fail"
+          _ -> pure ()
+
+  describe "sync package sorting" $ do
+    forM_ [False, True] $ \depCheck ->
+      forM_
+        [ ("preserves the existing default order", Nothing, False, ["golf", "foxtrot", "echo", "delta", "charlie", "bravo", "alpha"]),
+          ("reverses the default order", Nothing, True, ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"]),
+          ("sorts by Arch package name", Just SyncOptions.SortName, False, ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"]),
+          ("reverses package name sorting", Just SyncOptions.SortName, True, ["golf", "foxtrot", "echo", "delta", "charlie", "bravo", "alpha"]),
+          ("sorts newest builds first with missing dates last and alphabetical ties", Just SyncOptions.SortUpdated, False, ["bravo", "charlie", "delta", "alpha", "echo", "foxtrot", "golf"]),
+          ("sorts oldest builds first with missing dates last and alphabetical ties", Just SyncOptions.SortUpdated, True, ["alpha", "charlie", "delta", "bravo", "echo", "foxtrot", "golf"]),
+          ("sorts lowest numeric pkgrel and subreleases first ignoring epochs", Just SyncOptions.SortPkgrel, False, ["alpha", "echo", "delta", "charlie", "bravo", "foxtrot", "golf"]),
+          ("sorts highest pkgrel first with reverse, missing releases last and alphabetical ties", Just SyncOptions.SortPkgrel, True, ["bravo", "charlie", "delta", "alpha", "echo", "foxtrot", "golf"])
+        ] $ \(label, sortKey, reverseOrder, expected) ->
+          it (label <> ", depcheck=" <> show depCheck) $ do
+            let (hackage, raw, extra) = syncSortDBs
+                options = SyncOptions.CheckOptions False depCheck True sortKey reverseOrder
+            (result, output) <- captureStdout $ runSyncCheckWithOptions extra hackage raw options
+            show result `shouldBe` "Right ()"
+            let packages = [package | entry <- lines output, package <- expected, ("haskell-" <> package) `isInfixOf` entry]
+            packages `shouldBe` expected
+            let candidates = filter (isInfixOf "has newer versions") $ lines output
+            length candidates `shouldBe` length expected
+            forM_ candidates $ \entry -> do
+              entry `shouldContain` "1.1"
+              entry `shouldContain` "1.2"
+            if depCheck
+              then do
+                length (filter (isInfixOf "missing requires >=1") $ lines output) `shouldBe` 2 * length expected
+                let details = filter (\entry -> "haskell-" `isInfixOf` entry || "dep:" `isInfixOf` entry) $ lines output
+                [listToMaybe [package | package <- expected, ("haskell-" <> package) `isInfixOf` entry] | entry <- details]
+                  `shouldBe` concatMap (\package -> [Just package, Nothing, Nothing]) expected
+              else output `shouldNotContain` "dep:"
 
   describe "sync with unsupported cabal formats" $ do
     it "lists newer versions without parsing their cabal files" $ do
@@ -776,6 +867,7 @@ unsupportedHackageDBs =
         { _name = archName,
           _version = "1.0",
           _rawVersion = "1.0-1",
+          _buildDate = Nothing,
           _desc = "Diff algorithm in pure Haskell",
           _url = Nothing,
           _provides = [],
@@ -813,6 +905,7 @@ syncGHCDBs = (Hackage.parseDB raw, raw, extra)
         { _name = package,
           _version = "1.0",
           _rawVersion = "1.0-1",
+          _buildDate = Nothing,
           _desc = "GHC-provided package fixture",
           _url = Nothing,
           _provides = provides,
@@ -826,6 +919,10 @@ syncGHCDBs = (Hackage.parseDB raw, raw, extra)
 
 runSyncCheck :: ExtraDB -> Hackage.HackageDB -> RawHackage.HackageDB -> Bool -> Bool -> IO (Either MyException ())
 runSyncCheck extra hackage raw includeGHC depCheck =
+  runSyncCheckWithOptions extra hackage raw $ SyncOptions.CheckOptions includeGHC depCheck True Nothing False
+
+runSyncCheckWithOptions :: ExtraDB -> Hackage.HackageDB -> RawHackage.HackageDB -> SyncOptions.CheckOptions -> IO (Either MyException ())
+runSyncCheckWithOptions extra hackage raw options =
   runM
     . runError @MyException
     . evalState (Map.empty :: Map.Map PackageName [VersionRange])
@@ -835,7 +932,48 @@ runSyncCheck extra hackage raw includeGHC depCheck =
     . runReader raw
     . runReader hackage
     . runReader extra
-    $ Sync.check includeGHC depCheck True
+    $ Sync.check options
+
+syncDescEntry :: String -> ArchLinuxVersion -> Maybe String -> Text.Text
+syncDescEntry package version buildDate =
+  Text.pack $ unlines $
+    ["%NAME%", "haskell-" <> package, "", "%VERSION%", version, "", "%DESC%", "Sync sorting fixture", ""]
+      <> maybe [] (\timestamp -> ["%BUILDDATE%", timestamp, ""]) buildDate
+
+syncSortDBs :: (Hackage.HackageDB, RawHackage.HackageDB, ExtraDB)
+syncSortDBs = (Hackage.parseDB raw, raw, extra)
+  where
+    packages =
+      [ ("alpha", "1.0-2", Just "100"),
+        ("bravo", "1.0-10", Just "300"),
+        ("charlie", "3:1.0-2.10", Just "200"),
+        ("delta", "1.0-2.2", Just "200"),
+        ("echo", "1.0-2", Nothing),
+        ("foxtrot", "1.0", Just "invalid"),
+        ("golf", "1.0-invalid", Just "0")
+      ]
+    raw = Map.fromList
+      [ ( mkPackageName package,
+          RawHackage.PackageData B8.empty $ Map.fromList
+            [ ( parseVersion version,
+                RawHackage.VersionData
+                  (B8.pack $ unlines $
+                    ["cabal-version: 1.12", "name: " <> package, "version: " <> version, "build-type: Simple"]
+                      <> (if version == "1.0" then [] else ["library", "  build-depends: missing >=1"]))
+                  B8.empty
+              )
+              | version <- ["1.0", "1.1", "1.2"]
+            ]
+        )
+        | (package, _, _) <- packages
+      ]
+    extra = Map.fromList
+      [ (toArchLinuxName $ mkPackageName package, desc)
+        | (package, version, buildDate) <- packages,
+          let desc = case parseDescEntry $ syncDescEntry package version buildDate of
+                Just parsed -> parsed
+                Nothing -> error $ "invalid sync sorting fixture: " <> package
+      ]
 
 runRdepCheck :: ExtraDB -> RawHackage.HackageDB -> Maybe Version -> PackageName -> IO (Either MyException RDepCheck.FailureCounts)
 runRdepCheck extra raw = runRdepCheckRevisions extra raw raw
@@ -992,6 +1130,7 @@ syncDepCheckDBsWithVersions candidates reverseDeps =
         { _name = package,
           _version = "1.0",
           _rawVersion = "1.0-7",
+          _buildDate = Nothing,
           _desc = "Dependency check fixture",
           _url = Nothing,
           _provides = [],

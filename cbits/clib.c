@@ -32,6 +32,7 @@ void query_extra(extra_pkg_callback_t pkg_callback,
     const char *ver = alpm_pkg_get_version(i->data);
     const char *desc = alpm_pkg_get_desc(i->data);
     const char *url = alpm_pkg_get_url(i->data);
+    alpm_time_t builddate = alpm_pkg_get_builddate(i->data);
     alpm_list_t *depends = alpm_pkg_get_depends(i->data);
     alpm_list_t *makedepends = alpm_pkg_get_makedepends(i->data);
     alpm_list_t *checkdepends = alpm_pkg_get_checkdepends(i->data);
@@ -39,7 +40,7 @@ void query_extra(extra_pkg_callback_t pkg_callback,
     alpm_list_t *conflicts = alpm_pkg_get_conflicts(i->data);
     alpm_list_t *replaces = alpm_pkg_get_replaces(i->data);
     alpm_list_t *optdepends = alpm_pkg_get_optdepends(i->data);
-    pkg_callback(name, ver, desc, url);
+    pkg_callback(name, ver, desc, url, builddate);
     if (strcmp(name, "ghc") == 0 || strcmp(name, "ghc-libs") == 0) {
       alpm_list_t *v, *provides;
       provides = alpm_pkg_get_provides(i->data);
@@ -48,7 +49,7 @@ void query_extra(extra_pkg_callback_t pkg_callback,
         const char *d_name = d->name;
         const char *d_ver = d->version;
         // promote
-        pkg_callback(d_name, d_ver, "", "");
+        pkg_callback(d_name, d_ver, "", "", builddate);
       }
     }
 

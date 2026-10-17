@@ -5,6 +5,8 @@ The changelog is available [on GitHub][2].
 
 ## Unreleased
 
+- Add `arch-hs-sync check --sort name|updated|pkgrel` and `--reverse`, using Arch build timestamps (newest first) or numeric package release numbers (lowest first)
+
 - Preserve shell line continuations and spacing in generated PKGBUILDs by keeping Cabal license compatibility CPP outside the template module
 
 - Combine planned update commit messages and `genrebuild -H` into a copyable `dorebuild 'rebuild with ...'` command

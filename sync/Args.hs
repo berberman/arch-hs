@@ -8,6 +8,7 @@ module Args
   )
 where
 
+import Check.Options
 import Distribution.ArchHs.Options
 import Distribution.ArchHs.Utils (archHsVersion)
 
@@ -45,21 +46,6 @@ submitOptionsParser =
           <> short 'u'
           <> help "Upload to hackage"
       )
-
------------------------------------------------------------------------------
-
-data CheckOptions = CheckOptions
-  { optShowGHCLibs :: Bool,
-    optDepCheck :: Bool,
-    optVerbose :: Bool
-  }
-
-checkOptionsParser :: Parser CheckOptions
-checkOptionsParser =
-  CheckOptions
-    <$> switch (long "show-ghc-libs" <> help "Include GHC and its bundled libraries and tools")
-    <*> switch (long "depcheck" <> help "Check whether newer Hackage versions are currently upgradable")
-    <*> switch (long "verbose" <> help "Show failing dependency and reverse dependency ranges for --depcheck candidates")
 
 -----------------------------------------------------------------------------
 

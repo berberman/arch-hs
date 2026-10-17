@@ -17,12 +17,14 @@ module Distribution.ArchHs.PkgDesc
   )
 where
 
+import Control.Monad (mfilter)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
 import qualified Data.Text as T
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils (extractFromEVR)
+import Text.Read (readMaybe)
 
 -- Common fields
 {- fieldList =
@@ -54,6 +56,7 @@ promoteDependent PkgDependent {..} =
         { _name = _pdName,
           _version = ver,
           _rawVersion = ver,
+          _buildDate = Nothing,
           _desc = "",
           _url = Nothing,
           _provides = [],
@@ -94,6 +97,7 @@ parseDescEntry txt = do
   _name <- ArchLinuxName . T.unpack <$> lookupSingle "NAME"
   _rawVersion <- T.unpack <$> lookupSingle "VERSION"
   let _version = extractFromEVR _rawVersion
+      _buildDate = mfilter (> 0) $ lookupSingle "BUILDDATE" >>= readMaybe . T.unpack
   _desc <- T.unpack <$> lookupSingle "DESC"
   _depends <- toDepList $ lookupList "DEPENDS"
   _makeDepends <- toDepList $ lookupList "MAKEDEPENDS"

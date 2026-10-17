@@ -1,9 +1,12 @@
 #ifndef CLIB_H
 #define CLIB_H
 
+#include <stdint.h>
+
 typedef void file_callback_t(const char *pkg_name, const char *file_path);
 typedef void extra_pkg_callback_t(const char *pkg_name, const char *version,
-                                      const char *desc, const char *url);
+                                      const char *desc, const char *url,
+                                      int64_t builddate);
 typedef void extra_list_callback_t(const char *pkg_name, const char *key,
                                        const char *dependent_pkg_name,
                                        const char *dependent_pkg_version);

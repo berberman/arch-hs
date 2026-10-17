@@ -4,6 +4,7 @@
 
 module Check (check, checkNewerVersions, prettyNewerVersions) where
 
+import Check.Options
 import Control.Monad (forM)
 import Data.List (partition)
 import qualified Data.Map.Strict as Map
@@ -16,6 +17,7 @@ import Distribution.ArchHs.Name (isGHCLibs)
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.RDepCheck
 import Distribution.ArchHs.Types
+import Text.Read (readMaybe)
 import Utils
 
 data NewerVersion
@@ -44,11 +46,9 @@ check ::
       Embed IO
     ]
     r =>
-  Bool ->
-  Bool ->
-  Bool ->
+  CheckOptions ->
   Sem r ()
-check includeGHC runDepCheck verbose = do
+check CheckOptions {..} = do
   extra <- ask @ExtraDB
   let providedByGHC = Set.fromList
         [ name
@@ -56,20 +56,20 @@ check includeGHC runDepCheck verbose = do
             Just desc <- [Map.lookup (ArchLinuxName provider) extra],
             PkgDependent name _ <- _provides desc
         ]
-  linked <- linkedHaskellPackageDescs
+  linked <- sortPackages optSort optReverse <$> linkedHaskellPackageDescs
   checked <-
     traverse
       ( \(archName, desc, hackageName) -> do
           let rawArchVersion = _version desc
           case simpleParsec rawArchVersion of
             Just archVersion
-              | includeGHC || (not (isGHCLibs hackageName) && Set.notMember archName providedByGHC) -> do
+              | optShowGHCLibs || (not (isGHCLibs hackageName) && Set.notMember archName providedByGHC) -> do
                   hackageVersions <- getNewerVersions hackageName archVersion
                   if null hackageVersions
                     then pure ([], [])
                     else do
-                      (newerVersions, skipped) <- checkNewerVersions runDepCheck hackageName archVersion hackageVersions
-                      pure ([prettyNewerVersions verbose archName (_rawVersion desc) hackageName archVersion newerVersions], skipped)
+                      (newerVersions, skipped) <- checkNewerVersions optDepCheck hackageName archVersion hackageVersions
+                      pure ([prettyNewerVersions optVerbose archName (_rawVersion desc) hackageName archVersion newerVersions], skipped)
             _ -> pure ([], [])
       )
       linked
@@ -81,6 +81,32 @@ check includeGHC runDepCheck verbose = do
     else do
       printWarn "Finished checking with inconsistenc(ies):"
       embed $ putDoc $ vcat result <> line
+
+sortPackages :: Maybe CheckSort -> Bool -> [(ArchLinuxName, PkgDesc, PackageName)] -> [(ArchLinuxName, PkgDesc, PackageName)]
+sortPackages Nothing reverseOrder = if reverseOrder then reverse else id
+sortPackages (Just sortKey) reverseOrder = sortBy comparePackage
+  where
+    comparePackage (leftName, leftDesc, _) (rightName, rightDesc, _) =
+      ( case sortKey of
+          SortName -> compareKey False leftName rightName
+          SortUpdated -> compareOptional True (_buildDate leftDesc) (_buildDate rightDesc)
+          SortPkgrel -> compareOptional False (pkgrelKey $ _rawVersion leftDesc) (pkgrelKey $ _rawVersion rightDesc)
+      )
+        <> compare leftName rightName
+
+    compareKey :: Ord key => Bool -> key -> key -> Ordering
+    compareKey descending left right
+      | descending /= reverseOrder = compare right left
+      | otherwise = compare left right
+
+    compareOptional :: Ord key => Bool -> Maybe key -> Maybe key -> Ordering
+    compareOptional _ Nothing Nothing = EQ
+    compareOptional _ Nothing (Just _) = GT
+    compareOptional _ (Just _) Nothing = LT
+    compareOptional descending (Just left) (Just right) = compareKey descending left right
+
+pkgrelKey :: ArchLinuxVersion -> Maybe [Integer]
+pkgrelKey rawVersion = pkgrelSuffix rawVersion >>= traverse readMaybe . splitOn "." . drop 1
 
 checkNewerVersions ::
   Members

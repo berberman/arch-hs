@@ -85,6 +85,7 @@ data PkgDesc = PkgDesc
   { _name :: ArchLinuxName,
     _version :: ArchLinuxVersion,
     _rawVersion :: ArchLinuxVersion,
+    _buildDate :: Maybe Integer,
     _desc :: String,
     _url :: Maybe String,
     _provides :: PkgDependentList,

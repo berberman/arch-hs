@@ -30,11 +30,9 @@ runCheck ::
   ExtraDB ->
   HackageDB ->
   RawHackageDB ->
-  Bool ->
-  Bool ->
-  Bool ->
+  CheckOptions ->
   IO (Either MyException ())
-runCheck extra hackage rawHackage includeGHC runDepCheck verbose =
+runCheck extra hackage rawHackage options@CheckOptions {..} =
   ( runFinal
       . embedToFinal @IO
       . errorToIOFinal
@@ -45,9 +43,9 @@ runCheck extra hackage rawHackage includeGHC runDepCheck verbose =
       . runReader hackage
       . runReader extra
   )
-    ( if runDepCheck
-        then subsumeGHCVersion $ check includeGHC runDepCheck verbose
-        else runReader nullVersion $ check includeGHC runDepCheck verbose
+    ( if optDepCheck
+        then subsumeGHCVersion $ check options
+        else runReader nullVersion $ check options
     )
 
 runSubmit ::
@@ -93,7 +91,7 @@ runMode = \case
 
     manager <- newTlsManager
     runSubmit extra hackage manager token optOutput optUpload & printAppResult
-  Check CommonOptions {..} CheckOptions {..} -> do
+  Check CommonOptions {..} options@CheckOptions {..} -> do
     extra <- loadExtraDBFromOptions optExtraDB
     (hackage, rawHackage) <-
       if optDepCheck
@@ -101,7 +99,7 @@ runMode = \case
         else do
           hackage <- loadHackageDBFromOptions optHackage
           pure (hackage, Map.empty)
-    runCheck extra hackage rawHackage optShowGHCLibs optDepCheck optVerbose & printAppResult
+    runCheck extra hackage rawHackage options & printAppResult
   List ExtraDBOptions {..} ListOptions {..} -> do
     extra <- loadExtraDBFromOptions
     putStrLn $
