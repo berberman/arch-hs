@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Submit (submit) where
+module Submit (submit, genCSV) where
 
 import Control.Monad (unless)
 import Data.Algorithm.Diff (getGroupedDiff)
@@ -9,10 +9,11 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.List (sortOn)
 import Data.Maybe (fromJust)
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.Name (isGHCLibs)
+import Distribution.ArchHs.Name (ghcProvidedPackages)
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.Types
 import Distribution.ArchHs.Utils
@@ -24,14 +25,16 @@ import Utils
 -- | Generate Distro CSV from Extra DB
 genCSV :: Members [ExtraEnv, HackageEnv, WithMyErr, Embed IO] r => Sem r DistroCSV
 genCSV = do
+  extra <- ask
   linked <- linkedHaskellPackages
+  let providedByGHC = ghcProvidedPackages extra
   pure $
     sortOn
       (^. _1)
       [ (unPackageName hackageName, version, prefix <> tweakedName)
         | (archLinuxName, version, hackageName) <- linked,
           let tweakedName =
-                if isGHCLibs hackageName
+                if Set.member hackageName providedByGHC
                   then "ghc"
                   else unArchLinuxName archLinuxName
               prefix = "https://archlinux.org/packages/extra/x86_64/"

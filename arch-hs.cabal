@@ -208,6 +208,7 @@ test-suite arch-hs-tests
     PlanSpec
     RDepCheck
     RDepCheck.Args
+    Submit
     Submit.CSV
     Utils
 

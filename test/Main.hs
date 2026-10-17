@@ -9,20 +9,21 @@ import qualified Check.Options as SyncOptions
 import qualified Conduit as C
 import Control.Exception (bracket, try)
 import Control.Monad (forM_, void)
+import Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Conduit.Tar as Tar
 import Data.List (intercalate, isInfixOf, isPrefixOf, sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe, mapMaybe)
 import qualified Data.Text as Text
-import Diff (inRange)
+import Diff (CabalSource (..), diffCabal, inRange)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.ExtraDB (defaultExtraDBPath, loadExtraDB)
 #ifdef ALPM
 import Distribution.ArchHs.ExtraDB (loadExtraDBFFI)
 #endif
 import Distribution.ArchHs.Hackage (getCabalIncludingDeprecated, getNewerVersions, loadHackageDBsWithRevisions, loadRawHackageDB, loadRawHackageRevisions)
-import Distribution.ArchHs.Name (isGHCLibs, isHaskellPackage, toArchLinuxName, toHackageName)
+import Distribution.ArchHs.Name (ghcProvidedPackages, isGHCLibs, isHaskellPackage, toArchLinuxName, toHackageName)
 import Distribution.ArchHs.Options (ParserResult (..), defaultPrefs, execParserPure, info)
 import Distribution.ArchHs.PP (AnsiStyle, Doc)
 import qualified Distribution.ArchHs.PkgBuild as PkgBuild
@@ -46,6 +47,7 @@ import Polysemy.State (evalState)
 import Polysemy.Trace (ignoreTrace)
 import qualified RDepCheck
 import qualified RDepCheck.Args as RDepArgs
+import qualified Submit
 import Submit.CSV
 import System.Directory (doesFileExist, getTemporaryDirectory, removeFile)
 import System.Exit (ExitCode (..))
@@ -233,6 +235,64 @@ main = hspec $ do
       parseDistroCSV (renderDistroCSV rows) `shouldBe` rows
 
   describe "diff dependency range checks" $ do
+    forM_ [("system-cxx-std-lib", "1.0"), ("rts", "1.0.2")] $ \(package, release) ->
+      it ("checks " <> package <> " without a repository package or provides entry") $ do
+        let extra = ghcExtraDB "9.6.7"
+            placeholderName = mkPackageName package
+        first show (runInRange extra placeholderName (parseRange $ "==" <> release))
+          `shouldBe` Right (Right (placeholderName, parseRange $ "==" <> release, parseVersion release, True))
+        first show (runInRange extra placeholderName (parseRange ">=2"))
+          `shouldBe` Right (Right (placeholderName, parseRange ">=2", parseVersion release, False))
+
+    it "uses the repository compiler's runtime version rather than the host compiler's" $ do
+      let placeholderName = mkPackageName "rts"
+      forM_ [("9.12.3", "1.0.2"), ("9.12.4", "1.0.3")] $ \(compiler, release) ->
+        first show (runInRange (ghcExtraDB compiler) placeholderName (parseRange $ "==" <> release))
+          `shouldBe` Right (Right (placeholderName, parseRange $ "==" <> release, parseVersion release, True))
+
+    it "does not invent placeholders for older or unknown compilers" $ do
+      let placeholderName = mkPackageName "system-cxx-std-lib"
+      forM_ ["9.2.8", "99.0.1"] $ \compiler ->
+        first show (runInRange (ghcExtraDB compiler) placeholderName anyVersion)
+          `shouldBe` Right (Left (placeholderName, anyVersion))
+
+    it "honors explicit compiler provides before placeholder fallback versions" $ do
+      let placeholderName = mkPackageName "system-cxx-std-lib"
+          extra = Map.adjust (\desc -> desc {_provides = [PkgDependent (toArchLinuxName placeholderName) (Just "2.0")]})
+            (ArchLinuxName "ghc") (ghcExtraDB "9.6.7")
+      first show (runInRange extra placeholderName (parseRange ">=2"))
+        `shouldBe` Right (Right (placeholderName, parseRange ">=2", parseVersion "2.0", True))
+
+    it "uses ghc-libs placeholder metadata when no compiler entry is present" $ do
+      let compiler = ghcExtraDB "9.6.7" Map.! ArchLinuxName "ghc"
+          extra = Map.singleton (ArchLinuxName "ghc-libs") compiler {_name = ArchLinuxName "ghc-libs"}
+          placeholderName = mkPackageName "system-cxx-std-lib"
+      first show (runInRange extra placeholderName anyVersion)
+        `shouldBe` Right (Right (placeholderName, anyVersion, parseVersion "1.0", True))
+
+    it "does not hide a malformed explicit placeholder version with a fallback" $ do
+      let extra = ghcExtraDB "9.6.7"
+          placeholderName = mkPackageName "system-cxx-std-lib"
+          placeholderArch = toArchLinuxName placeholderName
+          desc = (extra Map.! ArchLinuxName "ghc") {_name = placeholderArch, _version = "invalid"}
+      case runInRange (Map.insert placeholderArch desc extra) placeholderName anyVersion of
+        Left (VersionNoParse rawVersion) -> rawVersion `shouldBe` "invalid"
+        result -> expectationFailure $ "expected VersionNoParse, got: " <> show result
+
+    it "does not report a newly added compiler placeholder as missing in diff output" $ do
+      let cabal release deps = B8.pack $ unlines $
+            ["cabal-version: 1.24", "name: sample", "version: " <> release, "build-type: Simple"]
+              <> if null deps then [] else ["library", "  build-depends: " <> deps]
+      withIndexEntries [("sample/1.0/sample.cabal", cabal "1.0" ""), ("sample/2.0/sample.cabal", cabal "2.0" "system-cxx-std-lib ==1.0")] $ \path -> do
+        (result, output) <- captureStdout $
+          runM . runError @MyException . evalState (Map.empty :: Map.Map PackageName [VersionRange])
+            . ignoreTrace . runReader (Offline path) . runReader (Map.empty :: FlagAssignments)
+            . runReader (parseVersion "9.6.7") . runReader (ghcExtraDB "9.6.7")
+            $ diffCabal (mkPackageName "sample") (parseVersion "1.0") (parseVersion "2.0")
+        first show result `shouldBe` Right ()
+        output `shouldContain` "system-cxx-std-lib"
+        output `shouldNotContain` "does not provide this package"
+
     it "uses a live extra.db version when checking a Hackage dependency range" $ do
       extra <- loadLiveExtraDB
       (hackageName, expectedVersion) <- requireParseableHackagePackage extra
@@ -364,28 +424,61 @@ main = hspec $ do
       result <- runSyncCheck extra preferred raw False True
       show result `shouldBe` "Right ()"
 
+  describe "GHC-provided package classification" $ do
+    forM_ ["rts", "system-cxx-std-lib"] $ \package ->
+      it ("recognizes " <> package <> " without repository provides") $ do
+        let name = mkPackageName package
+        isGHCLibs name `shouldBe` True
+        name `shouldSatisfy` (`elem` ghcProvidedPackages Map.empty)
+
+    forM_ modernGHCPackages $ \package ->
+      it ("keeps standalone " <> package <> " outside the unconditional bundled list") $
+        isGHCLibs (mkPackageName package) `shouldBe` False
+
   describe "sync GHC-provided packages" $ do
     forM_ [False, True] $ \depCheck -> do
       it ("excludes bundled tools and libraries by default, depcheck=" <> show depCheck) $ do
         let (hackage, raw, extra) = syncGHCDBs
         (result, output) <- captureStdout $ runSyncCheck extra hackage raw False depCheck
         show result `shouldBe` "Right ()"
-        forM_ ["haskell-hsc2hs", "haskell-haddock", "haskell-bundled-library", "haskell-base"] $ \package ->
-          output `shouldNotContain` package
+        forM_ (["hsc2hs", "haddock", "bundled-library", "base", "rts", "system-cxx-std-lib"] <> modernGHCPackages) $ \package ->
+          output `shouldNotContain` ("haskell-" <> package)
         output `shouldContain` "haskell-standalone"
 
       it ("includes bundled tools and libraries with show-ghc-libs, depcheck=" <> show depCheck) $ do
         let (hackage, raw, extra) = syncGHCDBs
         (result, output) <- captureStdout $ runSyncCheck extra hackage raw True depCheck
         show result `shouldBe` "Right ()"
-        forM_ ["haskell-hsc2hs", "haskell-haddock", "haskell-bundled-library", "haskell-base", "haskell-standalone"] $ \package ->
-          output `shouldContain` package
+        forM_ (["hsc2hs", "haddock", "bundled-library", "base", "rts", "system-cxx-std-lib", "standalone"] <> modernGHCPackages) $ \package ->
+          output `shouldContain` ("haskell-" <> package)
 
       it ("still checks hsc2hs when it is not provided by GHC, depcheck=" <> show depCheck) $ do
         let (hackage, raw, extra) = syncGHCDBs
         (result, output) <- captureStdout $ runSyncCheck (Map.delete (ArchLinuxName "ghc") extra) hackage raw False depCheck
         show result `shouldBe` "Right ()"
         output `shouldContain` "haskell-hsc2hs"
+
+      it ("checks newer bundled libraries when installed as standalone packages, depcheck=" <> show depCheck) $ do
+        let (hackage, raw, extra) = syncGHCDBs
+        (result, output) <- captureStdout $ runSyncCheck (Map.delete (ArchLinuxName "ghc-libs") extra) hackage raw False depCheck
+        show result `shouldBe` "Right ()"
+        forM_ modernGHCPackages $ \package ->
+          output `shouldContain` ("haskell-" <> package)
+        forM_ ["rts", "system-cxx-std-lib"] $ \package ->
+          output `shouldNotContain` ("haskell-" <> package)
+
+    forM_ [True, False] $ \provided ->
+      it ("links GHC-provided CSV rows to the compiler and standalone rows to their packages, provided=" <> show provided) $ do
+        let (hackage, _, extra) = syncGHCDBs
+            repository = if provided then extra else Map.delete (ArchLinuxName "ghc-libs") extra
+            compilerPackages = ["hsc2hs", "haddock", "base", "rts", "system-cxx-std-lib"]
+              <> [package | provided, package <- "bundled-library" : modernGHCPackages]
+        result <- runM . runError @MyException . runReader hackage . runReader repository $ Submit.genCSV
+        case result of
+          Left err -> expectationFailure $ show err
+          Right rows -> forM_ rows $ \(package, _, url) -> do
+            let target = if package `elem` compilerPackages then "ghc" else "haskell-" <> package
+            url `shouldBe` "https://archlinux.org/packages/extra/x86_64/" <> target
 
   describe "sync direct dependency failure classification" $ do
     forM_
@@ -772,6 +865,12 @@ runInRange extra name range =
     . runReader extra
     $ inRange (name, range)
 
+ghcExtraDB :: String -> ExtraDB
+ghcExtraDB compiler =
+  let (_, _, extra) = syncGHCDBs
+      desc = extra Map.! ArchLinuxName "ghc"
+   in Map.singleton (ArchLinuxName "ghc") desc {_version = compiler, _rawVersion = compiler <> "-1", _provides = []}
+
 maskedHackageDBs :: (Hackage.HackageDB, RawHackage.HackageDB, PackageName, Version, Version)
 maskedHackageDBs =
   (Hackage.parseDB raw, raw, name, version100, version101)
@@ -882,7 +981,7 @@ unsupportedHackageDBs =
 syncGHCDBs :: (Hackage.HackageDB, RawHackage.HackageDB, ExtraDB)
 syncGHCDBs = (Hackage.parseDB raw, raw, extra)
   where
-    packages = ["hsc2hs", "haddock", "bundled-library", "base", "standalone"]
+    packages = ["hsc2hs", "haddock", "bundled-library", "base", "rts", "system-cxx-std-lib", "standalone"] <> modernGHCPackages
     raw = Map.fromList
       [ ( mkPackageName package,
           RawHackage.PackageData B8.empty $ Map.singleton (parseVersion "1.1") $
@@ -897,7 +996,7 @@ syncGHCDBs = (Hackage.parseDB raw, raw, extra)
         <> [ ( archName,
                desc archName [PkgDependent (toArchLinuxName $ mkPackageName package) (Just "1.0") | package <- bundled]
              )
-             | (provider, bundled) <- [("ghc", ["hsc2hs", "haddock"]), ("ghc-libs", ["bundled-library"])],
+             | (provider, bundled) <- [("ghc", ["hsc2hs", "haddock"]), ("ghc-libs", "bundled-library" : modernGHCPackages)],
                let archName = ArchLinuxName provider
            ]
     desc package provides =
@@ -916,6 +1015,12 @@ syncGHCDBs = (Hackage.parseDB raw, raw, extra)
           _makeDepends = [],
           _checkDepends = []
         }
+
+modernGHCPackages :: [String]
+modernGHCPackages =
+  [ "file-io", "ghc-byteorder", "ghc-experimental", "ghc-internal", "ghc-platform", "ghc-toolchain",
+    "haddock-api", "haddock-library", "os-string", "semaphore-compat", "template-haskell-lift", "template-haskell-quasiquoter"
+  ]
 
 runSyncCheck :: ExtraDB -> Hackage.HackageDB -> RawHackage.HackageDB -> Bool -> Bool -> IO (Either MyException ())
 runSyncCheck extra hackage raw includeGHC depCheck =

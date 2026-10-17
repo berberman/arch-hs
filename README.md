@@ -628,6 +628,10 @@ For dependencies already used by the installed package in the same dependency ca
 
 The planner reads the latest revisions from the local Hackage index and accepts the usual `--extra` and `--hackage` paths. It does not build or install packages, validate non-Haskell system dependencies or ABI compatibility, or determine a build order. GHC and its bundled libraries remain fixed unless `ghc` is explicitly requested. Only GHC plans fetch upstream metadata; ordinary package plans remain local. A GHC plan checks ecosystem metadata compatibility, not compiler bootstrap requirements or Arch-specific changes to the upstream bundle. Refresh the local databases before planning against newer repository or Hackage metadata.
 
+Ordinary plans also keep packages provided by the repository's `ghc` and `ghc-libs` fixed, including compiler tools. Libraries added in newer GHC releases, such as `os-string`, `file-io`, and `haddock-library`, remain independently upgradable when installed as standalone packages with an older compiler. The compiler's `rts` and `system-cxx-std-lib` packages are always treated as part of GHC, even when absent from repository `provides` metadata.
+
+Dependency version checks in the planner, diff, and sync commands also resolve compiler `provides` entries when their package aliases are missing. For `rts` and `system-cxx-std-lib`, known GHC release metadata supplies fallback versions when Arch omits the entries entirely. These fallbacks use the compiler version in the selected repository database and retain dependency range checks; they require neither the host compiler nor a network lookup. Unknown compiler releases require explicit repository version metadata.
+
 ## Sync
 
 For Hackage distribution maintainers, `arch-hs-sync check` compares Haskell package versions in [extra] with Hackage:
@@ -640,6 +644,8 @@ haskell-aeson in [extra] has version 2.2.3.0, but linked aeson in Hackage has ne
 Only non-deprecated Hackage versions newer than the [extra] version are reported. Version checks use Hackage index metadata, so they also report packages whose `.cabal` format is newer than the Cabal library used to build `arch-hs`.
 
 GHC and its bundled libraries and tools, including `hsc2hs`, are excluded by default because they are updated with the compiler rather than independently. This includes packages listed in the repository `provides` metadata for `ghc` and `ghc-libs`. Pass `--show-ghc-libs` to include them.
+
+This also excludes `rts` and `system-cxx-std-lib`, GHC's placeholder package for the system C++ standard library, even when the repository omits their `provides` entries. Other libraries introduced in newer compiler bundles are excluded when the installed GHC packages provide them; standalone packages remain visible. Hackage distribution CSV entries use the same classification to link compiler-provided packages to GHC.
 
 Use `--sort name` for alphabetical Arch package names, `--sort updated` for the newest Arch builds first, or `--sort pkgrel` for the lowest Arch package release numbers first. Add `--reverse` for the opposite order, for example:
 

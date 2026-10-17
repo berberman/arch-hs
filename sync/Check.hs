@@ -13,7 +13,7 @@ import Distribution.ArchHs.DepCheck
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
-import Distribution.ArchHs.Name (isGHCLibs)
+import Distribution.ArchHs.Name (ghcProvidedPackages)
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.RDepCheck
 import Distribution.ArchHs.Types
@@ -50,12 +50,7 @@ check ::
   Sem r ()
 check CheckOptions {..} = do
   extra <- ask @ExtraDB
-  let providedByGHC = Set.fromList
-        [ name
-          | provider <- ["ghc", "ghc-libs"],
-            Just desc <- [Map.lookup (ArchLinuxName provider) extra],
-            PkgDependent name _ <- _provides desc
-        ]
+  let providedByGHC = ghcProvidedPackages extra
   linked <- sortPackages optSort optReverse <$> linkedHaskellPackageDescs
   checked <-
     traverse
@@ -63,7 +58,7 @@ check CheckOptions {..} = do
           let rawArchVersion = _version desc
           case simpleParsec rawArchVersion of
             Just archVersion
-              | optShowGHCLibs || (not (isGHCLibs hackageName) && Set.notMember archName providedByGHC) -> do
+              | optShowGHCLibs || Set.notMember hackageName providedByGHC -> do
                   hackageVersions <- getNewerVersions hackageName archVersion
                   if null hackageVersions
                     then pure ([], [])

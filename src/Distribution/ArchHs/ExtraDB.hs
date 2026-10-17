@@ -25,9 +25,10 @@ import Conduit
 import qualified Data.Conduit.Tar as Tar
 import qualified Data.Conduit.Zlib as Zlib
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (listToMaybe, mapMaybe)
 import Distribution.ArchHs.Exception
 import Distribution.ArchHs.Internal.Prelude
+import Distribution.ArchHs.Local (ghcPlaceholderVersions)
 import Distribution.ArchHs.Name
 import Distribution.ArchHs.PkgDesc
 import Distribution.ArchHs.Types
@@ -149,15 +150,31 @@ loadExtraDB path = Map.fromList <$> runConduitRes (loadExtraDBC path .| sinkList
 isInExtra :: (HasMyName n, Member ExtraEnv r) => n -> Sem r Bool
 isInExtra name = ask @ExtraDB >>= \db -> return $ toArchLinuxName name `Map.member` db
 
--- | Get the version of a package in archlinux extra repo.
+-- | Get the version of a repository package or compiler-provided library.
 -- If the package does not exist, 'PkgNotFound' will be thrown.
 versionInExtra :: (HasMyName n, Members [ExtraEnv, WithMyErr] r) => n -> Sem r ArchLinuxVersion
 versionInExtra name = _version <$> getPkgDesc name
 
--- | Get the pkgdesc a package in archlinux extra repo.
+-- | Get the description of a repository package or compiler-provided library.
 -- If the package does not exist, 'PkgNotFound' will be thrown.
 getPkgDesc :: (HasMyName n, Members [ExtraEnv, WithMyErr] r) => n -> Sem r PkgDesc
-getPkgDesc name =
-  ask @ExtraDB >>= \db -> case db Map.!? toArchLinuxName name of
+getPkgDesc name = do
+  db <- ask @ExtraDB
+  let providers = mapMaybe (\provider -> Map.lookup (ArchLinuxName provider) db) ["ghc", "haskell-ghc", "ghc-libs"]
+      provided = listToMaybe
+        [ promoted {_buildDate = _buildDate provider}
+          | provider <- providers,
+            dependency <- _provides provider,
+            _pdName dependency == toArchLinuxName name,
+            Just promoted <- [promoteDependent dependency]
+        ]
+      placeholder = do
+        provider <- listToMaybe providers
+        compiler <- simpleParsec $ _version provider
+        packages <- Map.lookup compiler ghcPlaceholderVersions
+        version <- Map.lookup (toHackageName name) packages
+        promoted <- promoteDependent $ PkgDependent (toArchLinuxName name) (Just $ prettyShow version)
+        pure promoted {_buildDate = _buildDate provider}
+  case Map.lookup (toArchLinuxName name) db <|> provided <|> placeholder of
     Just x -> pure x
     _ -> throw $ PkgNotFound name

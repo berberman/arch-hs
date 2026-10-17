@@ -5,6 +5,10 @@ The changelog is available [on GitHub][2].
 
 ## Unreleased
 
+- Recognize `rts` and `system-cxx-std-lib` as part of GHC, and honor compiler `provides` metadata consistently in sync checks, Hackage distribution links, and ordinary update planning without excluding standalone versions of newer bundled libraries
+
+- Resolve compiler-provided dependency versions in `arch-hs-plan`, `arch-hs-diff`, and sync dependency checks even when repository aliases are missing, using known GHC placeholder versions without bypassing version bounds
+
 - Add `arch-hs-sync check --sort name|updated|pkgrel` and `--reverse`, using Arch build timestamps (newest first) or numeric package release numbers (lowest first)
 
 - Preserve shell line continuations and spacing in generated PKGBUILDs by keeping Cabal license compatibility CPP outside the template module

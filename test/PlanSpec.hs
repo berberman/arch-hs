@@ -682,6 +682,56 @@ spec = describe "coordinated update planner" $ do
     assertBlocked result "dep: alpha requires base >=2"
     Map.keys (Plan.planVersions result) `shouldBe` [name "alpha"]
 
+  forM_ ["rts", "system-cxx-std-lib"] $ \package -> do
+    forM_ [False, True] $ \solve ->
+      it ("resolves " <> package <> " without repository provides, solve=" <> show solve) $ do
+        let (extra, raw) = toolchainFixture [("alpha", [], [("2.0", lib [package <> " >=1 && <2"])])]
+        result <- requireResult =<< runDB solve [("alpha", Just "2.0")] extra raw
+        assertWorking result [("alpha", "2.0")]
+
+    it ("checks bounds for " <> package <> " without repository provides") $ do
+      let (extra, raw) = toolchainFixture [("alpha", [], [("2.0", lib [package <> " >=2"])])]
+      result <- requireResult =<< runDB True [("alpha", Just "2.0")] extra raw
+      assertBlocked result ("dep: alpha requires " <> package <> " >=2")
+      show (Plan.prettyPlanResult result) `shouldNotContain` "missing from the update set and repository"
+      Map.keys (Plan.planVersions result) `shouldBe` [name "alpha"]
+
+    it ("rejects independent updates of " <> package <> " without repository provides") $ do
+      let (extra, raw) = fixture []
+      result <- runDB True [(package, Just "2.0")] extra raw
+      case result of
+        Right (Left err) -> err `shouldContain` "cannot be updated independently"
+        _ -> expectationFailure "expected a compiler package request to be rejected"
+
+    it ("does not solve dependency failures by independently upgrading " <> package) $ do
+      result <- runPlan True [("alpha", Just "2.0")]
+        [("alpha", [], [("2.0", lib [package <> " >=2"])]), (package, [], [("2.0", [])])]
+      assertBlocked result ("dep: alpha requires " <> package <> " >=2")
+      Map.keys (Plan.planVersions result) `shouldBe` [name "alpha"]
+
+  forM_
+    [ "file-io", "ghc-byteorder", "ghc-experimental", "ghc-internal", "ghc-platform", "ghc-toolchain",
+      "haddock-api", "haddock-library", "os-string", "semaphore-compat", "template-haskell-lift", "template-haskell-quasiquoter", "hsc2hs"
+    ] $ \package -> do
+      it ("rejects independent updates of " <> package <> " only when provided by GHC") $ do
+        let (extra, raw) = toolchainFixture [(package, [], [("2.0", [])])]
+            provided = Map.adjust (\desc -> desc {_provides = [PkgDependent (toArchLinuxName $ name package) (Just "1.0")]}) (ArchLinuxName "ghc") extra
+        rejected <- runDB True [(package, Nothing)] provided raw
+        case rejected of
+          Right (Left err) -> err `shouldContain` "cannot be updated independently"
+          _ -> expectationFailure "expected a provided package request to be rejected"
+        standalone <- requireResult =<< runDB True [(package, Nothing)] extra raw
+        assertWorking standalone [(package, "2.0")]
+
+      it ("keeps compiler-provided " <> package <> " fixed when solving other updates") $ do
+        let (extra, raw) = toolchainFixture [("alpha", [], [("2.0", lib [package <> " >=2"])]), (package, [], [("2.0", [])])]
+            provided = Map.adjust (\desc -> desc {_provides = [PkgDependent (toArchLinuxName $ name package) (Just "1.0")]}) (ArchLinuxName "ghc") extra
+        blocked <- requireResult =<< runDB True [("alpha", Just "2.0")] provided raw
+        assertBlocked blocked ("dep: alpha requires " <> package <> " >=2")
+        Map.keys (Plan.planVersions blocked) `shouldBe` [name "alpha"]
+        standalone <- requireResult =<< runDB True [("alpha", Just "2.0")] extra raw
+        assertWorking standalone [("alpha", "2.0"), (package, "2.0")]
+
   it "can update an unparseable reverse dependent to a verifiable release" $ do
     result <- runPlan True [("alpha", Just "2.0")]
       [ ("alpha", [], [("2.0", lib ["consumer >=1.1"])]),
@@ -971,7 +1021,8 @@ spec = describe "coordinated update planner" $ do
     it "parses upstream snapshots and excludes Windows-only libraries" $ do
       let metadata = B8.pack $ unlines
             [ "ghc-9.6.7:", "  ghc: 9.6.7", "  base: '2.0'", "  ghc-prim: '1.0'",
-              "  template-haskell: '1.0'", "  Win32: '2.0'", "ghcjs-0.2:", "  base: '1.0'"
+              "  template-haskell: '1.0'", "  rts: 1.0.2", "  system-cxx-std-lib: '1.0'",
+              "  Win32: '2.0'", "ghcjs-0.2:", "  base: '1.0'"
             ]
       Toolchain.parseGHCReleases metadata `shouldBe` Right (Map.take 1 toolchainReleases)
 
@@ -1012,6 +1063,11 @@ spec = describe "coordinated update planner" $ do
       result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty False [("ghc", Nothing)] extra raw
       assertWorking result [("ghc", "9.6.7")]
       show (Plan.prettyPlanResult result) `shouldContain` "os-string not in repo -> 2.0"
+
+    it "resolves compiler placeholders absent from repository metadata during GHC updates" $ do
+      result <- runToolchainPlan True [("ghc", Nothing)]
+        [("consumer", [], [("1.0", lib ["rts ==1.0.2", "system-cxx-std-lib ==1.0"])])]
+      assertWorking result [("ghc", "9.6.7")]
 
     it "advances GHC incrementally when the next bundle is incompatible" $ do
       result <- runToolchainPlan True [("ghc", Nothing)]
@@ -1194,11 +1250,11 @@ spec = describe "coordinated update planner" $ do
       show (Plan.prettyPlanResult result) `shouldContain` "libiserv 1.0 -> not bundled"
 
     it "uses the old upstream bundle for baseline libraries missing from repository provides" $ do
-      let baseline = Map.fromList [(name package, version release) | (package, release) <- [("ghc", "9.6.6"), ("base", "1.0"), ("rts", "1.0")]]
-          releases = Map.insert (version "9.6.6") baseline $ Map.adjust (Map.insert (name "rts") (version "2.0")) (version "9.6.7") toolchainReleases
-          (extra, raw) = toolchainFixture [("consumer", [], [("1.0", lib ["rts <2"])])]
+      let baseline = Map.fromList [(name package, version release) | (package, release) <- [("ghc", "9.6.6"), ("base", "1.0"), ("ghc-heap", "1.0")]]
+          releases = Map.insert (version "9.6.6") baseline $ Map.adjust (Map.insert (name "ghc-heap") (version "2.0")) (version "9.6.7") toolchainReleases
+          (extra, raw) = toolchainFixture [("consumer", [], [("1.0", lib ["ghc-heap <2"])])]
       result <- requireResult =<< runDBWithToolchains releases Nothing Map.empty False [("ghc", Nothing)] extra raw
-      assertBlocked result "rdep: haskell-consumer Depends requires rts <2"
+      assertBlocked result "rdep: haskell-consumer Depends requires ghc-heap <2"
       length (Plan.planWarnings result) `shouldBe` 0
 
     it "uses newly bundled library versions instead of standalone repository versions" $ do
@@ -1259,7 +1315,7 @@ spec = describe "coordinated update planner" $ do
 
 toolchainReleases :: Toolchain.GHCReleases
 toolchainReleases = Map.fromList
-  [ (version compiler, Map.fromList [(name package, version release) | (package, release) <- [("ghc", compiler), ("base", base), ("ghc-prim", "1.0"), ("template-haskell", "1.0")]])
+  [ (version compiler, Map.fromList [(name package, version release) | (package, release) <- [("ghc", compiler), ("base", base), ("ghc-prim", "1.0"), ("template-haskell", "1.0"), ("rts", "1.0.2"), ("system-cxx-std-lib", "1.0")]])
     | (compiler, base) <- [("9.6.7", "2.0"), ("9.8.1", "3.0"), ("9.8.2", "4.0")]
   ]
 

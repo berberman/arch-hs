@@ -47,10 +47,13 @@ module Distribution.ArchHs.Name
     toHackageName,
     isHaskellPackage,
     isGHCLibs,
+    ghcProvidedPackages,
   )
 where
 
 import Data.Char (toLower)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.String (IsString, fromString)
 import Distribution.ArchHs.Internal.NamePresetLoader
 import Distribution.ArchHs.Internal.Prelude
@@ -171,3 +174,14 @@ isHaskellPackage (toArchLinuxRep -> rep) = rep `elem` extraListP || "haskell-" `
 -- False
 isGHCLibs :: PackageName -> Bool
 isGHCLibs name = name == "ghc" || name `elem` ghcLibList
+
+ghcProvidedPackages :: ExtraDB -> Set.Set PackageName
+ghcProvidedPackages extra =
+  Set.fromList $
+    mkPackageName "ghc" : ghcLibList
+      <> [ toHackageName name
+           | provider <- ["ghc", "ghc-libs"],
+             Just desc <- [Map.lookup (ArchLinuxName provider) extra],
+             PkgDependent name _ <- _provides desc,
+             isHaskellPackage name
+         ]

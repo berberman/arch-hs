@@ -20,7 +20,7 @@ import Distribution.ArchHs.ExtraDB (versionInExtra)
 import Distribution.ArchHs.Hackage
 import Distribution.ArchHs.Internal.Prelude
 import Distribution.ArchHs.Local (ghcLibList)
-import Distribution.ArchHs.Name (isGHCLibs, isHaskellPackage, toArchLinuxName, toHackageName)
+import Distribution.ArchHs.Name (ghcProvidedPackages, isGHCLibs, isHaskellPackage, toArchLinuxName, toHackageName)
 import Distribution.ArchHs.PP
 import Distribution.ArchHs.RDepCheck
 import Distribution.ArchHs.Types
@@ -62,31 +62,35 @@ planUpdates :: PlanEffects r => GHCReleases -> Bool -> [(PackageName, Maybe Vers
 planUpdates releases solve targets
   | null targets = pure $ Left "At least one target is required."
   | length names /= Set.size (Set.fromList names) = pure $ Left "Each target must be specified only once."
-  | any (\name -> name /= "ghc" && isGHCLibs name) names = pure $ Left "GHC bundled libraries cannot be updated independently; request ghc to update the toolchain."
   | otherwise = do
-      tracePlan "Selecting starting versions..."
-      installed <- Map.fromList <$> forM names (\name -> (name,) <$> currentVersion name)
-      choices <- forM targets $ \(name, requested) -> do
-        newer <- if not solve && requested /= Nothing then pure [] else
-          if name == "ghc"
-            then pure [release | release <- Map.keys releases, stableGHCRelease release, release > installed Map.! name]
-            else getNewerVersions name (installed Map.! name)
-        pure $ case requested of
-          Just version
-            | version < installed Map.! name -> Left $ "Downgrades are not supported: " <> unPackageName name
-            | name == "ghc", Map.notMember version releases -> Left $ "No upstream bundled-library metadata for GHC " <> prettyShow version
-            | otherwise -> Right (name, version : [v | solve, v <- newer, v > version])
-          Nothing -> case newer of
-            [] -> Left $ if name == "ghc" then "No newer stable GHC release is available in upstream metadata." else "No newer preferred version is available for " <> unPackageName name
-            first : rest -> Right (name, first : [v | solve, v <- rest])
-      case sequence choices of
-        Left err -> pure $ Left err
-        Right options -> do
-          initial <- selectToolchain releases (Map.fromList [(name, first) | (name, first : _) <- options]) emptyDependencies
-          let bundled = Set.unions [Map.keysSet packages | release <- fromMaybe [] $ lookup "ghc" options, Just packages <- [Map.lookup release releases]]
-          if any (\name -> name /= "ghc" && (Set.member name bundled || fixedPackage initial name)) names
-            then pure $ Left "Bundled libraries and compiler tools cannot be updated independently of the requested GHC releases."
-            else Right <$> search releases solve installed (Map.fromList options)
+      extra <- ask @ExtraDB
+      let provided = ghcProvidedPackages extra
+      if any (\name -> name /= "ghc" && Set.member name provided) names
+        then pure $ Left "GHC bundled libraries and compiler tools cannot be updated independently; request ghc to update the toolchain."
+        else do
+          tracePlan "Selecting starting versions..."
+          installed <- Map.fromList <$> forM names (\name -> (name,) <$> currentVersion name)
+          choices <- forM targets $ \(name, requested) -> do
+            newer <- if not solve && requested /= Nothing then pure [] else
+              if name == "ghc"
+                then pure [release | release <- Map.keys releases, stableGHCRelease release, release > installed Map.! name]
+                else getNewerVersions name (installed Map.! name)
+            pure $ case requested of
+              Just version
+                | version < installed Map.! name -> Left $ "Downgrades are not supported: " <> unPackageName name
+                | name == "ghc", Map.notMember version releases -> Left $ "No upstream bundled-library metadata for GHC " <> prettyShow version
+                | otherwise -> Right (name, version : [v | solve, v <- newer, v > version])
+              Nothing -> case newer of
+                [] -> Left $ if name == "ghc" then "No newer stable GHC release is available in upstream metadata." else "No newer preferred version is available for " <> unPackageName name
+                first : rest -> Right (name, first : [v | solve, v <- rest])
+          case sequence choices of
+            Left err -> pure $ Left err
+            Right options -> do
+              initial <- selectToolchain releases (Map.fromList [(name, first) | (name, first : _) <- options]) $ emptyDependencies extra
+              let bundled = Set.unions [Map.keysSet packages | release <- fromMaybe [] $ lookup "ghc" options, Just packages <- [Map.lookup release releases]]
+              if any (\name -> name /= "ghc" && (Set.member name bundled || fixedPackage initial name)) names
+                then pure $ Left "Bundled libraries and compiler tools cannot be updated independently of the requested GHC releases."
+                else Right <$> search releases solve installed (Map.fromList options)
   where
     names = fst <$> targets
 
@@ -101,13 +105,14 @@ data DependencyCache = DependencyCache
     cachedDependencyVariants :: Map.Map (PackageName, Version, [Bool]) (Either MyException (VersionedList, VersionedList)),
     cachedExistingDependencies :: Map.Map PackageName ExistingDependencies,
     cachedCandidateChecks :: Map.Map (Version, PackageName, Version, Bool, Map.Map PackageName Version) ([PlanProblem], [PlanProblem]),
-    cachedToolchain :: Maybe Toolchain
+    cachedToolchain :: Maybe Toolchain,
+    cachedGHCProvided :: Set.Set PackageName
   }
 type ExistingDependencies = Map.Map (DepSrc, PackageName) (VersionRange, Maybe Version)
 type ReverseChecks = [(PackageName, [ReverseDep], [SkippedReverseDep])]
 
-emptyDependencies :: DependencyCache
-emptyDependencies = DependencyCache Map.empty Map.empty Map.empty Map.empty Map.empty Nothing
+emptyDependencies :: ExtraDB -> DependencyCache
+emptyDependencies extra = DependencyCache Map.empty Map.empty Map.empty Map.empty Map.empty Nothing (ghcProvidedPackages extra)
 
 selectToolchain :: PlanEffects r => GHCReleases -> Map.Map PackageName Version -> DependencyCache -> Sem r DependencyCache
 selectToolchain releases selected cache = case Map.lookup "ghc" selected of
@@ -137,7 +142,7 @@ selectToolchain releases selected cache = case Map.lookup "ghc" selected of
     pure cache {cachedToolchain = Just $ Toolchain release packages installed tools}
 
 fixedPackage :: DependencyCache -> PackageName -> Bool
-fixedPackage cache name = maybe (isGHCLibs name) (`toolchainContains` name) $ cachedToolchain cache
+fixedPackage cache name = maybe (Set.member name $ cachedGHCProvided cache) (`toolchainContains` name) $ cachedToolchain cache
 
 unknownCompilerTool :: DependencyCache -> PackageName -> Bool
 unknownCompilerTool cache name = maybe False (Set.member name . toolchainTools) $ cachedToolchain cache
@@ -222,7 +227,7 @@ search releases solve installed choices = do
             isHaskellPackage $ _name desc,
             dependency <- _depends desc <> _makeDepends desc <> _checkDepends desc
         ]
-  (requiredRanges, origins, dependencies) <- if updatingGHC then pure (Map.empty, Map.empty, emptyDependencies) else requestedRanges choices emptyDependencies
+  (requiredRanges, origins, dependencies) <- if updatingGHC then pure (Map.empty, Map.empty, emptyDependencies extra) else requestedRanges choices (emptyDependencies extra)
   let initial = SearchCache installed choices dependencies Map.empty reversePackages Map.empty requiredRanges origins Map.empty Map.empty Map.empty
   tracePlan "Propagating dependency constraints..."
   (conflict, directCache) <- if solve && not updatingGHC then propagateRanges False (Map.keysSet choices) initial else pure (Nothing, initial)
@@ -405,7 +410,7 @@ search releases solve installed choices = do
                 cache
               )
             Nothing
-              | not solve || isGHCLibs name -> pure (neighbors, cache)
+              | not solve || fixedPackage (searchDependencies cache) name -> pure (neighbors, cache)
               | otherwise -> do
                   cache' <- discoverVersions name cache
                   pure ([(name, Map.insert name 0 indices) | not $ null $ searchChoices cache' Map.! name] <> neighbors, cache')
@@ -685,7 +690,7 @@ repairBounds releases indices selected problems initial = foldM collect (uncheck
       pure (RepairBound minimumFailures repairs compilerFailures, restored)
 
     domain name cache
-      | isGHCLibs name || unknownCompilerTool (searchDependencies cache) name = pure ([], cache)
+      | Set.member name (cachedGHCProvided $ searchDependencies cache) || unknownCompilerTool (searchDependencies cache) name = pure ([], cache)
       | otherwise = do
           known <- discoverVersions name cache
           let versions = Map.findWithDefault [] name $ searchChoices known
@@ -917,10 +922,10 @@ propagateRanges includeReverse requested initial = go (Map.keysSet $ searchRequi
         if Set.notMember name requested && maybe False (`withinRange` required) current
           then go rest examined withCurrent
           else do
-            known <- if isGHCLibs name then pure withCurrent else discoverVersions name withCurrent
+            known <- if fixedPackage (searchDependencies withCurrent) name then pure withCurrent else discoverVersions name withCurrent
             let available
                   | Set.member name requested = searchChoices known Map.! name
-                  | isGHCLibs name = maybe [] pure current
+                  | fixedPackage (searchDependencies known) name = maybe [] pure current
                   | otherwise = maybe [] pure current <> Map.findWithDefault [] name (searchChoices known)
                 inRange = filter (`withinRange` required) available
             (eligible, known') <- if includeReverse then compatibleReleases name inRange known else pure (inRange, known)
@@ -968,7 +973,7 @@ forceReverseUpdates target eligible current initial =
   foldM force initial $ Set.toList $ Map.findWithDefault Set.empty (toArchLinuxName target) (searchReversePackages initial)
   where
     force cache archName
-      | isGHCLibs (toHackageName archName) = pure cache
+      | fixedPackage (searchDependencies cache) (toHackageName archName) = pure cache
       | otherwise = do
           let owner = toHackageName archName
           installed <- try @MyException $ currentVersion owner
@@ -1222,7 +1227,7 @@ type RevisionView = Either MyException RevisionRanges
 comparePlanRevisions :: PlanEffects r => RawHackageDB -> PlanResult -> Sem r PlanResult
 comparePlanRevisions original plan = do
   extra <- ask @ExtraDB
-  let emptyCache = emptyDependencies {cachedToolchain = planToolchain plan}
+  let emptyCache = (emptyDependencies extra) {cachedToolchain = planToolchain plan}
   (notes, _, _) <- foldM compareOwner ([], emptyCache, emptyCache) (revisionOwners extra plan)
   pure plan {planRevisionNotes = reverse notes}
   where
